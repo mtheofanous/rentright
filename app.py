@@ -63,6 +63,24 @@ def send_email_smtp(to_email: str, subject: str, body: str):
         return True, "sent"
     except Exception as e:
         return False, f"{type(e).__name__}: {e}"
+    
+def get_latest_reference_for_pair(tenant_id: int, prev_landlord_id: int):
+    cur = get_conn().cursor()
+    cur.execute(
+        """
+        SELECT token, status, created_at
+        FROM reference_requests
+        WHERE tenant_id=? AND prev_landlord_id=?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (tenant_id, prev_landlord_id),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    return {"token": row[0], "status": row[1], "created_at": row[2]}
+
 
 
 DB_PATH = "rental_app.db"
@@ -323,16 +341,6 @@ def signup_form():
         st.session_state.signup_done = True
         st.rerun()
 
-
-# def auth_gate():
-#     if "user" not in st.session_state:
-#         st.session_state.user = None
-#     tab1, tab2 = st.tabs(["Log in","Sign up"])
-#     with tab1:
-#         login_form()
-
-#     with tab2:
-#         signup_form()
         
 def auth_gate():
     if "user" not in st.session_state:
@@ -1020,17 +1028,7 @@ def admin_dashboard():
 
     
 def tenant_dashboard():
-    # Helper: show 'pending' if a contract exists but isn't verified yet
-    # def effective_reference_status(raw_status: str | None, token: str) -> str:
-    #     # Keep 'cancelled' as-is
-    #     if raw_status == "cancelled":
-    #         return "cancelled"
-    #     contract = get_contract_by_token(token)
-    #     # If a contract exists and isn't verified, force pending
-    #     if contract and contract.get("status") != "verified":
-    #         return "pending"
-    #     # Otherwise fall back to the raw status (or pending if None)
-    #     return raw_status or "pending"
+ 
 
     # Header with a visible Log out button on the main page
     col_h1, col_h2 = st.columns([4, 1])
@@ -1115,23 +1113,7 @@ def tenant_dashboard():
         st.caption("No future landlords yet.")
 
     st.divider()
-
-    # st.subheader("Future Landlord Contact")
-    # profile = load_tenant_profile(st.session_state.user["id"])
-    # current_email = profile["future_landlord_email"] if profile else ""
-
-    # with st.form("future_landlord_form"):
-    #     future_email = st.text_input("Future landlord email", value=current_email)
-    #     save = st.form_submit_button("Save")
-    # if save:
-    #     if future_email and not is_valid_email(future_email):
-    #         st.error("Please provide a valid email address for the future landlord.")
-    #     else:
-    #         upsert_tenant_profile(st.session_state.user["id"], future_email or None)
-    #         st.success("Saved future landlord email.")
-
-    # st.divider()
-
+    
     # === Previous landlords + reference requests ===
     st.subheader("Previous Landlords & References")
     with st.form("previous_landlord_form"):
@@ -1200,53 +1182,77 @@ def tenant_dashboard():
                             # --- Contract upload / status per request token ---
                             contract = get_contract_by_token(tok)
 
-                            if contract:
-                                st.markdown(f"**Contract status:** {contract_status_badge(contract['status'])}")
-                                st.caption(
-                                    f"Uploaded: {contract['uploaded_at']} • "
-                                    f"Last status update: {contract['status_updated_at'] or '—'}"
-                                    + (f" • by {contract['status_by']}" if contract['status_by'] else "")
-                                )
-                                # Download button
-                                try:
-                                    with open(contract["path"], "rb") as f:
-                                        st.download_button(
-                                            "Download contract",
-                                            data=f.read(),
-                                            file_name=contract["filename"],
-                                            mime=contract["content_type"],
-                                            key=f"dl_{tok}",
-                                        )
-                                except Exception as e:
-                                    st.warning(f"Could not read saved file: {e}")
-
-                                # Replace upload (resets status to Pending)
-                                uploaded = st.file_uploader(
-                                    "Replace contract (PDF or image)",
-                                    type=["pdf", "png", "jpg", "jpeg", "webp"],
-                                    key=f"up_{tok}",
-                                )
-                                if uploaded is not None:
-                                    ok, msg = save_contract_upload(tok, st.session_state.user["id"], uploaded)
-                                    if ok:
-                                        st.success("Contract uploaded (status reset to Pending).")
-                                        st.rerun()
-                                    else:
-                                        st.error(msg)
+                            # NEW guard: when verified/completed, hide any upload UI
+                            if str(final_status).lower() == "completed":
+                                if contract:
+                                    st.markdown(f"**Contract status:** {contract_status_badge(contract['status'])}")
+                                    st.caption(
+                                        f"Uploaded: {contract['uploaded_at']} • "
+                                        f"Last status update: {contract['status_updated_at'] or '—'}"
+                                        + (f" • by {contract['status_by']}" if contract.get('status_by') else "")
+                                    )
+                                    # Allow download only (no replace)
+                                    try:
+                                        with open(contract["path"], "rb") as f:
+                                            st.download_button(
+                                                "Download contract",
+                                                data=f.read(),
+                                                file_name=contract["filename"],
+                                                mime=contract.get("content_type") or contract.get("mime_type"),
+                                                key=f"dl_{tok}",
+                                            )
+                                    except Exception as e:
+                                        st.warning(f"Could not read saved file: {e}")
+                                else:
+                                    st.markdown("**Contract:** Verified reference — no file upload needed.")
+                                # No uploader shown when completed
                             else:
-                                st.markdown("**Contract status:** 🕒 Pending (no file yet)")
-                                uploaded = st.file_uploader(
-                                    "Upload previous contract (PDF or image)",
-                                    type=["pdf", "png", "jpg", "jpeg", "webp"],
-                                    key=f"up_{tok}",
-                                )
-                                if uploaded is not None:
-                                    ok, msg = save_contract_upload(tok, st.session_state.user["id"], uploaded)
-                                    if ok:
-                                        st.success("Contract uploaded (status set to Pending).")
-                                        st.rerun()
-                                    else:
-                                        st.error(msg)
+                                # Not completed yet → show normal upload/replace flow
+                                if contract:
+                                    st.markdown(f"**Contract status:** {contract_status_badge(contract['status'])}")
+                                    st.caption(
+                                        f"Uploaded: {contract['uploaded_at']} • "
+                                        f"Last status update: {contract['status_updated_at'] or '—'}"
+                                        + (f" • by {contract['status_by']}" if contract.get('status_by') else "")
+                                    )
+                                    try:
+                                        with open(contract["path"], "rb") as f:
+                                            st.download_button(
+                                                "Download contract",
+                                                data=f.read(),
+                                                file_name=contract["filename"],
+                                                mime=contract.get("content_type") or contract.get("mime_type"),
+                                                key=f"dl_{tok}",
+                                            )
+                                    except Exception as e:
+                                        st.warning(f"Could not read saved file: {e}")
+
+                                    uploaded = st.file_uploader(
+                                        "Replace contract (PDF or image)",
+                                        type=["pdf", "png", "jpg", "jpeg", "webp"],
+                                        key=f"up_{tok}",
+                                    )
+                                    if uploaded is not None:
+                                        ok, msg = save_contract_upload(tok, st.session_state.user["id"], uploaded)
+                                        if ok:
+                                            st.success("Contract uploaded (status reset to Pending).")
+                                            st.rerun()
+                                        else:
+                                            st.error(msg)
+                                else:
+                                    st.markdown("**Contract status:** 🕒 Pending (no file yet)")
+                                    uploaded = st.file_uploader(
+                                        "Upload previous contract (PDF or image)",
+                                        type=["pdf", "png", "jpg", "jpeg", "webp"],
+                                        key=f"up_{tok}",
+                                    )
+                                    if uploaded is not None:
+                                        ok, msg = save_contract_upload(tok, st.session_state.user["id"], uploaded)
+                                        if ok:
+                                            st.success("Contract uploaded (status set to Pending).")
+                                            st.rerun()
+                                        else:
+                                            st.error(msg)
                             # --- End contract block ---
                     else:
                         st.caption("No reference requests yet.")
@@ -1255,68 +1261,131 @@ def tenant_dashboard():
 
     st.divider()
 
-    # # === All Reference Requests ===
-    
-    # allreqs = list_reference_requests_for_tenant(st.session_state.user["id"]) or []
-    # if allreqs:
-    #     for (rid, tok, lmail, created_at, status, score) in allreqs:
-    #         # Use effective status here too
-    #         final_status = effective_reference_status(status, tok)
 
-    #         cols = st.columns([3, 2, 3, 2])
-    #         cols[0].write(f"To: **{lmail}**")
-    #         cols[1].write(f"Status: **{final_status}**")  # <-- final status here
-    #         cols[2].write(f"Link: {build_reference_link(tok)}")
-    #         cols[3].write(f"Score: {score if score is not None else '-'}")
 
-    #         # Show contract status & upload here as well (use different keys to avoid collisions with the section above)
-    #         contract = get_contract_by_token(tok)
-    #         if contract:
-    #             st.markdown(f"**Contract status:** {contract_status_badge(contract['status'])}")
-    #             st.caption(
-    #                 f"Uploaded: {contract['uploaded_at']} • "
-    #                 f"Last status update: {contract['status_updated_at'] or '—'}"
-    #                 + (f" • by {contract['status_by']}" if contract['status_by'] else "")
-    #             )
-    #             try:
-    #                 with open(contract["path"], "rb") as f:
-    #                     st.download_button(
-    #                         "Download contract",
-    #                         data=f.read(),
-    #                         file_name=contract["filename"],
-    #                         mime=contract["content_type"],
-    #                         key=f"all_dl_{tok}",
+    # # === Previous landlords + reference requests ===
+    # st.subheader("Previous Landlords & References")
+    # with st.form("previous_landlord_form"):
+    #     col1, col2 = st.columns([1, 1])
+    #     with col1:
+    #         pl_email = st.text_input("Email")
+    #         pl_afm = st.text_input("AFM (9 digits)")
+    #     with col2:
+    #         pl_name = st.text_input("Name")
+    #         pl_address = st.text_input("Address")
+    #     add = st.form_submit_button("Add previous landlord")
+    # if add:
+    #     if not (pl_email and is_valid_email(pl_email)):
+    #         st.error("Enter a valid email.")
+    #     elif not is_valid_afm(pl_afm):
+    #         st.error("AFM must be exactly 9 digits.")
+    #     elif not pl_name.strip():
+    #         st.error("Name is required.")
+    #     elif not pl_address.strip():
+    #         st.error("Address is required.")
+    #     else:
+    #         add_previous_landlord(st.session_state.user["id"], pl_email, pl_afm, pl_name, pl_address)
+    #         st.success("Added previous landlord.")
+
+    # rows = list_previous_landlords(st.session_state.user["id"]) or []
+    # st.subheader("All Reference Requests")
+    # if rows:
+    #     for (pid, email, afm, name, address, created_at) in rows:
+    #         with st.expander(f"{name} • {email}"):
+    #             st.write(f"**AFM:** {afm}")
+    #             st.write(f"**Address:** {address}")
+    #             st.caption(f"Added on {created_at}")
+
+    #             c1, c2 = st.columns([1, 2])
+    #             with c1:
+    #                 if st.button("Request reference", key=f"req_{pid}"):
+    #                     rec = create_reference_request(st.session_state.user["id"], pid, email)
+    #                     link = build_reference_link(rec["token"])
+    #                     ok, msg = email_reference_request(
+    #                         st.session_state.user["name"], st.session_state.user["email"], email, link
     #                     )
-    #             except Exception as e:
-    #                 st.warning(f"Could not read saved file: {e}")
+    #                     if ok:
+    #                         st.success("Reference request sent via email.")
+    #                     else:
+    #                         st.warning(f"Email not sent ({msg}). Here's the link to share:")
+    #                         st.code(link)
+    #             with c2:
+    #                 cur = conn.cursor()
+    #                 cur.execute(
+    #                     "SELECT token, status, created_at, score FROM reference_requests WHERE prev_landlord_id=? ORDER BY id DESC",
+    #                     (pid,),
+    #                 )
+    #                 reqs = cur.fetchall()
+    #                 if reqs:
+    #                     for (tok, status, created_at2, score) in reqs:
+    #                         # Use the effective status (gated by contract verification)
+    #                         final_status = effective_reference_status(status, tok)
 
-    #             uploaded = st.file_uploader(
-    #                 "Replace contract (PDF or image)",
-    #                 type=["pdf", "png", "jpg", "jpeg", "webp"],
-    #                 key=f"all_up_{tok}",
-    #             )
-    #             if uploaded is not None:
-    #                 ok, msg = save_contract_upload(tok, st.session_state.user["id"], uploaded)
-    #                 if ok:
-    #                     st.success("Contract uploaded (status reset to Pending).")
-    #                     st.rerun()
+    #                         colA, colB, colC = st.columns([2, 2, 2])
+    #                         colA.write(f"Status: **{final_status}**")  # <-- final status here
+    #                         if score is not None:
+    #                             colB.write(f"Score: **{score}**/10")
+    #                         link = build_reference_link(tok)
+    #                         colC.write(link)
+
+    #                         # --- Contract upload / status per request token ---
+    #                         contract = get_contract_by_token(tok)
+
+    #                         if contract:
+    #                             st.markdown(f"**Contract status:** {contract_status_badge(contract['status'])}")
+    #                             st.caption(
+    #                                 f"Uploaded: {contract['uploaded_at']} • "
+    #                                 f"Last status update: {contract['status_updated_at'] or '—'}"
+    #                                 + (f" • by {contract['status_by']}" if contract['status_by'] else "")
+    #                             )
+    #                             # Download button
+    #                             try:
+    #                                 with open(contract["path"], "rb") as f:
+    #                                     st.download_button(
+    #                                         "Download contract",
+    #                                         data=f.read(),
+    #                                         file_name=contract["filename"],
+    #                                         mime=contract["content_type"],
+    #                                         key=f"dl_{tok}",
+    #                                     )
+    #                             except Exception as e:
+    #                                 st.warning(f"Could not read saved file: {e}")
+
+    #                             # Replace upload (resets status to Pending)
+    #                             uploaded = st.file_uploader(
+    #                                 "Replace contract (PDF or image)",
+    #                                 type=["pdf", "png", "jpg", "jpeg", "webp"],
+    #                                 key=f"up_{tok}",
+    #                             )
+    #                             if uploaded is not None:
+    #                                 ok, msg = save_contract_upload(tok, st.session_state.user["id"], uploaded)
+    #                                 if ok:
+    #                                     st.success("Contract uploaded (status reset to Pending).")
+    #                                     st.rerun()
+    #                                 else:
+    #                                     st.error(msg)
+    #                         else:
+    #                             st.markdown("**Contract status:** 🕒 Pending (no file yet)")
+    #                             uploaded = st.file_uploader(
+    #                                 "Upload previous contract (PDF or image)",
+    #                                 type=["pdf", "png", "jpg", "jpeg", "webp"],
+    #                                 key=f"up_{tok}",
+    #                             )
+    #                             if uploaded is not None:
+    #                                 ok, msg = save_contract_upload(tok, st.session_state.user["id"], uploaded)
+    #                                 if ok:
+    #                                     st.success("Contract uploaded (status set to Pending).")
+    #                                     st.rerun()
+    #                                 else:
+    #                                     st.error(msg)
+    #                         # --- End contract block ---
     #                 else:
-    #                     st.error(msg)
-    #         else:
-    #             uploaded = st.file_uploader(
-    #                 "Upload previous contract (PDF or image)",
-    #                 type=["pdf", "png", "jpg", "jpeg", "webp"],
-    #                 key=f"all_up_{tok}",
-    #             )
-    #             if uploaded is not None:
-    #                 ok, msg = save_contract_upload(tok, st.session_state.user["id"], uploaded)
-    #                 if ok:
-    #                     st.success("Contract uploaded (status set to Pending).")
-    #                     st.rerun()
-    #                 else:
-    #                     st.error(msg)
+    #                     st.caption("No reference requests yet.")
     # else:
-    #     st.caption("No reference requests created yet.")
+    #     st.info("No previous landlords added yet.")
+
+    # st.divider()
+
 
 
 # ---------- Landlord Dashboard (enhanced) ----------
