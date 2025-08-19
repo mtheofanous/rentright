@@ -903,21 +903,6 @@ def admin_dashboard():
 
     tab_pending, tab_completed, tab_cancelled = st.tabs(["Pending", "Completed", "Cancelled"])
 
-    # def render_admin_reqs(reqs, prefix: str):
-    #     if not reqs:
-    #         st.info("No items.")
-    #         return
-    #     for (token, tenant_id, landlord_email, created_at, status, score) in reqs:
-    #         tenant = get_user_by_id(tenant_id)
-    #         tenant_label = tenant["name"] if tenant else f"Tenant #{tenant_id}"
-    #         final_status = effective_reference_status(status, token)
-
-    #         with st.container(border=True):
-    #             cols = st.columns([3, 3, 3, 2])
-    #             cols[0].markdown(f"**Tenant:** {tenant_label} ({tenant['email'] if tenant else '—'})")
-    #             cols[1].markdown(f"**To landlord:** {landlord_email}")
-    #             cols[2].markdown(f"**Created:** {created_at}")
-    #             cols[3].markdown(f"**Status:** {final_status}")
     def render_admin_reqs(reqs, prefix: str):
         if not reqs:
             st.info("No items.")
@@ -980,21 +965,47 @@ def admin_dashboard():
                     st.caption("No contract uploaded yet.")
 
                 # --- Admin actions ---
+                # --- Admin actions (conditional) ---
                 ac1, ac2 = st.columns(2)
-                if ac1.button("✅ Verify contract", key=f"{prefix}_verify_{token}"):
-                    ok, msg = set_contract_status(token, "verified", st.session_state.user["email"])
-                    if ok:
-                        # Try to promote to completed if the landlord already submitted the reference
-                        promote_reference_if_ready(token)
-                        st.success("Contract verified.")
-                        st.rerun()
-                    else:
-                        st.error(msg)
 
-                if ac2.button("🛑 Cancel reference", key=f"{prefix}_cancel_{token}"):
-                    cancel_reference_request(token)
-                    st.warning("Reference cancelled.")
-                    st.rerun()
+                show_verify = (str(final_status).lower() != "completed")
+                show_cancel = (str(final_status).lower() != "cancelled")
+
+                if show_verify:
+                    if ac1.button("✅ Verify contract", key=f"{prefix}_verify_{token}"):
+                        ok, msg = set_contract_status(token, "verified", st.session_state.user["email"])
+                        if ok:
+                            promote_reference_if_ready(token)  # keep your existing promotion
+                            st.success("Contract verified.")
+                            st.rerun()
+                        else:
+                            st.error(msg)
+                else:
+                    ac1.caption("Already completed — no verification needed.")
+
+                if show_cancel:
+                    if ac2.button("🛑 Cancel reference", key=f"{prefix}_cancel_{token}"):
+                        cancel_reference_request(token)
+                        st.warning("Reference cancelled.")
+                        st.rerun()
+                else:
+                    ac2.caption("Already cancelled.")
+
+                # ac1, ac2 = st.columns(2)
+                # if ac1.button("✅ Verify contract", key=f"{prefix}_verify_{token}"):
+                #     ok, msg = set_contract_status(token, "verified", st.session_state.user["email"])
+                #     if ok:
+                #         # Try to promote to completed if the landlord already submitted the reference
+                #         promote_reference_if_ready(token)
+                #         st.success("Contract verified.")
+                #         st.rerun()
+                #     else:
+                #         st.error(msg)
+
+                # if ac2.button("🛑 Cancel reference", key=f"{prefix}_cancel_{token}"):
+                #     cancel_reference_request(token)
+                #     st.warning("Reference cancelled.")
+                #     st.rerun()
 
 
     with tab_pending:
