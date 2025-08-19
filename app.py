@@ -12,6 +12,59 @@ from pathlib import Path
 # ⚠️ set_page_config must be the first Streamlit command
 st.set_page_config(page_title="RentRight", page_icon="🏠", layout="centered")
 
+# --- SMTP helpers integrados con st.secrets y session_state ---
+def load_smtp_defaults():
+    """Prefill desde st.secrets a session_state (una sola vez por sesión)."""
+    ss = st.session_state
+    sec = st.secrets if hasattr(st, "secrets") else {}
+    ss.setdefault("app_base_url", sec.get("APP_BASE_URL", ""))
+
+    ss.setdefault("smtp_host", sec.get("SMTP_HOST", ""))
+    ss.setdefault("smtp_port", int(sec.get("SMTP_PORT", 587)))
+    ss.setdefault("smtp_user", sec.get("SMTP_USER", ""))
+    ss.setdefault("smtp_pass", sec.get("SMTP_PASS", ""))
+    ss.setdefault("smtp_from", sec.get("SMTP_FROM", ss.get("smtp_user", "")))
+    ss.setdefault("smtp_tls", bool(sec.get("SMTP_TLS", True)))
+
+
+def get_smtp_config():
+    """Devuelve la config efectiva (session_state con fallback a secrets)."""
+    sec = st.secrets if hasattr(st, "secrets") else {}
+    host = st.session_state.get("smtp_host") or sec.get("SMTP_HOST", "")
+    port = int(st.session_state.get("smtp_port") or sec.get("SMTP_PORT", 587))
+    user = st.session_state.get("smtp_user") or sec.get("SMTP_USER", "")
+    pwd  = st.session_state.get("smtp_pass") or sec.get("SMTP_PASS", "")
+    from_email = st.session_state.get("smtp_from") or sec.get("SMTP_FROM", user)
+    use_tls = st.session_state.get("smtp_tls")
+    if use_tls is None:
+        use_tls = bool(sec.get("SMTP_TLS", True))
+    return host, port, user, pwd, from_email, bool(use_tls)
+
+
+def send_email_smtp(to_email: str, subject: str, body: str):
+    """Envía correo por SMTP con STARTTLS (587). Usa secretos si existen."""
+    host, port, user, pwd, from_email, use_tls = get_smtp_config()
+
+    if not all([host, port, user, pwd, from_email, to_email]):
+        return False, "Faltan datos SMTP: host/port/user/pass/from o destinatario."
+
+    try:
+        msg = MIMEText(body, "plain")
+        msg["Subject"] = subject
+        msg["From"] = from_email
+        msg["To"] = to_email
+
+        server = smtplib.SMTP(host, int(port), timeout=15)
+        if use_tls:
+            server.starttls()
+        server.login(user, pwd)
+        server.sendmail(from_email, [to_email], msg.as_string())
+        server.quit()
+        return True, "sent"
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
+
+
 DB_PATH = "rental_app.db"
 
 UPLOAD_DIR = Path("uploads") / "contracts"
@@ -152,29 +205,29 @@ def is_valid_afm(s: str) -> bool:
 
 # ---------- Email ----------
 
-def send_email_smtp(to_email: str, subject: str, body: str):
-    smtp_host = st.session_state.get("smtp_host")
-    smtp_port = st.session_state.get("smtp_port", 587)
-    smtp_user = st.session_state.get("smtp_user")
-    smtp_pass = st.session_state.get("smtp_pass")
-    smtp_from = st.session_state.get("smtp_from") or smtp_user
-    use_tls = st.session_state.get("smtp_tls", True)
+# def send_email_smtp(to_email: str, subject: str, body: str):
+#     smtp_host = st.session_state.get("smtp_host")
+#     smtp_port = st.session_state.get("smtp_port", 587)
+#     smtp_user = st.session_state.get("smtp_user")
+#     smtp_pass = st.session_state.get("smtp_pass")
+#     smtp_from = st.session_state.get("smtp_from") or smtp_user
+#     use_tls = st.session_state.get("smtp_tls", True)
 
-    if not all([smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from]):
-        return False, "SMTP settings incomplete"
-    try:
-        msg = MIMEText(body, "plain")
-        msg["Subject"] = subject
-        msg["From"] = smtp_from
-        msg["To"] = to_email
-        with smtplib.SMTP(smtp_host, int(smtp_port), timeout=10) as server:
-            if use_tls:
-                server.starttls()
-            server.login(smtp_user, smtp_pass)
-            server.sendmail(smtp_from, [to_email], msg.as_string())
-        return True, "sent"
-    except Exception as e:
-        return False, str(e)
+#     if not all([smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from]):
+#         return False, "SMTP settings incomplete"
+#     try:
+#         msg = MIMEText(body, "plain")
+#         msg["Subject"] = subject
+#         msg["From"] = smtp_from
+#         msg["To"] = to_email
+#         with smtplib.SMTP(smtp_host, int(smtp_port), timeout=10) as server:
+#             if use_tls:
+#                 server.starttls()
+#             server.login(smtp_user, smtp_pass)
+#             server.sendmail(smtp_from, [to_email], msg.as_string())
+#         return True, "sent"
+#     except Exception as e:
+#         return False, str(e)
 
 # ---------- Auth UI ----------
 
@@ -706,6 +759,49 @@ def admin_dashboard():
             value=st.session_state.get("app_base_url", ""),
             help="e.g., https://yourdomain.com"
         )
+                # --- SMTP quick test ---
+        st.markdown("---")
+        st.caption("Enviar correo de prueba")
+        test_to = st.text_input(
+            "Enviar test a",
+            value=st.session_state.get("smtp_user", ""),
+            key="admin_test_to",
+        )
+        if st.button("Send test email", key="admin_send_test_email"):
+            try:
+                ok, msg = send_email_smtp(
+                    to_email=test_to,
+                    subject="RentRight SMTP Test",
+                    body="Si recibiste este correo, tu SMTP está OK. ✅",
+                )
+            except NameError:
+                # Fallback si no existe send_email_smtp()
+                host = st.session_state.get("smtp_host")
+                port = int(st.session_state.get("smtp_port", 587))
+                user = st.session_state.get("smtp_user")
+                pwd = st.session_state.get("smtp_pass")
+                from_email = st.session_state.get("smtp_from") or user
+                use_tls = st.session_state.get("smtp_tls", True)
+                try:
+                    _msg = MIMEText("Si recibiste este correo, tu SMTP está OK. ✅", "plain")
+                    _msg["Subject"] = "RentRight SMTP Test"
+                    _msg["From"] = from_email
+                    _msg["To"] = test_to
+                    server = smtplib.SMTP(host, port, timeout=15)
+                    if use_tls:
+                        server.starttls()
+                    server.login(user, pwd)
+                    server.sendmail(from_email, [test_to], _msg.as_string())
+                    server.quit()
+                    ok, msg = True, "sent"
+                except Exception as e:
+                    ok, msg = False, f"{type(e).__name__}: {e}"
+
+            if ok:
+                st.success("Correo de prueba enviado.")
+            else:
+                st.error(f"Fallo al enviar: {msg}")
+
     st.markdown("---")
 
     # ---------------- Pending references management ----------------
@@ -1246,9 +1342,6 @@ def main():
         return
 
     st.title("🏠 RentRight")
-    st.caption("Landing page with login/signup, tenant records, and email-based reference requests.")
-
-    # NO SIDEBAR ANYMORE — admin settings moved to Admin Dashboard
 
     if st.session_state.get("user"):
         role = st.session_state.user["role"]
@@ -1264,42 +1357,6 @@ def main():
 
     auth_gate()
 
-# def main():
-#     params = st.query_params
-#     token = params.get("ref")
-#     if token:
-#         reference_portal(token)
-#         return
-
-#     st.title("🏠 RentRight")
-#     st.caption("Landing page with login/signup, tenant records, and email-based reference requests.")
-
-#     with st.sidebar:
-#         st.subheader("Email settings (SMTP)")
-#         st.session_state.smtp_host = st.text_input("SMTP host", value=st.session_state.get("smtp_host", ""))
-#         st.session_state.smtp_port = st.number_input("SMTP port", value=int(st.session_state.get("smtp_port", 587)))
-#         st.session_state.smtp_user = st.text_input("SMTP username", value=st.session_state.get("smtp_user", ""))
-#         st.session_state.smtp_pass = st.text_input("SMTP password", type="password", value=st.session_state.get("smtp_pass", ""))
-#         st.session_state.smtp_from = st.text_input("From email (optional)", value=st.session_state.get("smtp_from", ""))
-#         st.session_state.smtp_tls = st.checkbox("Use TLS", value=st.session_state.get("smtp_tls", True))
-#         st.markdown("---")
-#         st.subheader("App base URL")
-#         st.session_state.app_base_url = st.text_input("Base URL for links", help="e.g., https://yourdomain.com")
-
-#         st.markdown("---")
-#         st.subheader("MVP helper")
-#         st.caption("If you don't have email set up, copy the generated link and open it to fill the form yourself.")
-
-
-#     if st.session_state.get("user"):
-#         role = st.session_state.user["role"]
-#         if role == "tenant":
-#             tenant_dashboard()
-#         else:
-#             landlord_dashboard()
-#         return
-
-#     auth_gate()
 
 if __name__ == "__main__":
     main()
