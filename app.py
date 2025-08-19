@@ -72,8 +72,15 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ---------- Utilities ----------
+@st.cache_resource
 def get_conn():
-    return sqlite3.connect(DB_PATH, check_same_thread=False)
+    # one shared connection per process/session
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
+    # improve concurrent behavior
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA busy_timeout=5000;")  # wait up to 5s if locked
+    return conn
+
 
 @st.cache_resource
 def init_db():
@@ -173,12 +180,14 @@ def add_future_landlord_contact(tenant_id: int, email: str):
     email = (email or "").strip().lower()
     if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
         raise ValueError("Invalid email")
-    cur = get_conn().cursor()
+    conn = get_conn()
+    cur = conn.cursor()
     cur.execute(
         "INSERT OR IGNORE INTO future_landlord_contacts(tenant_id, email, created_at) VALUES (?,?,?)",
         (tenant_id, email, datetime.utcnow().isoformat()),
     )
-    get_conn().commit()
+    conn.commit()
+
 
 def list_future_landlord_contacts(tenant_id: int):
     cur = get_conn().cursor()
@@ -208,13 +217,15 @@ def invite_future_landlord(tenant_id: int, email: str, tenant_name: str, tenant_
     )
     ok, msg = send_email_smtp(email, subject, body)
     if ok:
-        cur = get_conn().cursor()
+        conn = get_conn()
+        cur = conn.cursor()
         cur.execute(
             "UPDATE future_landlord_contacts SET invited = 1, invited_at = ? WHERE tenant_id = ? AND LOWER(email) = LOWER(?)",
             (datetime.utcnow().isoformat(), tenant_id, email),
         )
-        get_conn().commit()
+        conn.commit()
     return ok, msg
+
 
 
 # ---------- Auth helpers ----------
