@@ -148,11 +148,74 @@ def init_db():
             FOREIGN KEY (token) REFERENCES reference_requests(token) ON DELETE CASCADE
         )
     """)
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS future_landlord_contacts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            email TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            invited INTEGER NOT NULL DEFAULT 0,
+            invited_at TEXT,
+            UNIQUE(tenant_id, email),
+            FOREIGN KEY (tenant_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        """
+    )
+
 
     conn.commit()
     return conn
 
 conn = init_db()
+
+def add_future_landlord_contact(tenant_id: int, email: str):
+    email = (email or "").strip().lower()
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        raise ValueError("Invalid email")
+    cur = get_conn().cursor()
+    cur.execute(
+        "INSERT OR IGNORE INTO future_landlord_contacts(tenant_id, email, created_at) VALUES (?,?,?)",
+        (tenant_id, email, datetime.utcnow().isoformat()),
+    )
+    get_conn().commit()
+
+def list_future_landlord_contacts(tenant_id: int):
+    cur = get_conn().cursor()
+    cur.execute(
+        "SELECT id, email, created_at, invited, invited_at FROM future_landlord_contacts WHERE tenant_id = ? ORDER BY id DESC",
+        (tenant_id,),
+    )
+    return cur.fetchall()
+
+def remove_future_landlord_contact(contact_id: int, tenant_id: int):
+    cur = get_conn().cursor()
+    cur.execute(
+        "DELETE FROM future_landlord_contacts WHERE id = ? AND tenant_id = ?",
+        (contact_id, tenant_id),
+    )
+    get_conn().commit()
+
+def invite_future_landlord(tenant_id: int, email: str, tenant_name: str, tenant_email: str):
+    base = st.session_state.get("app_base_url") or (st.secrets.get("APP_BASE_URL") if hasattr(st, "secrets") else "")
+    join_link = base if base else ""
+    subject = f"{tenant_name} quiere conectar contigo en RentRight"
+    body = (
+        "Hola,\n\n"
+        f"{tenant_name} ({tenant_email}) te ha añadido como futuro casero/a en RentRight.\n"
+        + (f"Puedes iniciar sesión o crear cuenta aquí: {join_link}\n\n" if join_link else "")
+        + "Gracias."
+    )
+    ok, msg = send_email_smtp(email, subject, body)
+    if ok:
+        cur = get_conn().cursor()
+        cur.execute(
+            "UPDATE future_landlord_contacts SET invited = 1, invited_at = ? WHERE tenant_id = ? AND LOWER(email) = LOWER(?)",
+            (datetime.utcnow().isoformat(), tenant_id, email),
+        )
+        get_conn().commit()
+    return ok, msg
+
 
 # ---------- Auth helpers ----------
 def hash_password(password: str, salt: str = "static_salt_change_me") -> str:
@@ -202,32 +265,6 @@ def is_valid_email(s: str) -> bool:
 
 def is_valid_afm(s: str) -> bool:
     return bool(re.fullmatch(r"\d{9}", (s or "").strip()))
-
-# ---------- Email ----------
-
-# def send_email_smtp(to_email: str, subject: str, body: str):
-#     smtp_host = st.session_state.get("smtp_host")
-#     smtp_port = st.session_state.get("smtp_port", 587)
-#     smtp_user = st.session_state.get("smtp_user")
-#     smtp_pass = st.session_state.get("smtp_pass")
-#     smtp_from = st.session_state.get("smtp_from") or smtp_user
-#     use_tls = st.session_state.get("smtp_tls", True)
-
-#     if not all([smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from]):
-#         return False, "SMTP settings incomplete"
-#     try:
-#         msg = MIMEText(body, "plain")
-#         msg["Subject"] = subject
-#         msg["From"] = smtp_from
-#         msg["To"] = to_email
-#         with smtplib.SMTP(smtp_host, int(smtp_port), timeout=10) as server:
-#             if use_tls:
-#                 server.starttls()
-#             server.login(smtp_user, smtp_pass)
-#             server.sendmail(smtp_from, [to_email], msg.as_string())
-#         return True, "sent"
-#     except Exception as e:
-#         return False, str(e)
 
 # ---------- Auth UI ----------
 
@@ -629,21 +666,44 @@ def cancel_reference_request(token: str):
     cur.execute("UPDATE reference_requests SET status='cancelled' WHERE token=? AND status='pending'", (token,))
     conn.commit()
 
-
 def list_prospective_tenants(landlord_email: str):
-    """Return tenants who listed landlord_email as their future landlord."""
-    cur = conn.cursor()
+    """Unique tenants who listed this landlord (single field or multi list)."""
+    cur = get_conn().cursor()
     cur.execute(
         """
-        SELECT u.id, u.name, u.email, tp.updated_at
-        FROM tenant_profiles tp
-        JOIN users u ON u.id = tp.tenant_id
-        WHERE LOWER(tp.future_landlord_email) = LOWER(?)
-        ORDER BY tp.updated_at DESC
+        SELECT u.id, u.name, u.email, MAX(src.updated_at) AS last_update
+        FROM (
+            SELECT tp.tenant_id AS tenant_id, tp.updated_at AS updated_at
+            FROM tenant_profiles tp
+            WHERE LOWER(tp.future_landlord_email) = LOWER(?)
+            UNION ALL
+            SELECT flc.tenant_id AS tenant_id, COALESCE(flc.invited_at, flc.created_at) AS updated_at
+            FROM future_landlord_contacts flc
+            WHERE LOWER(flc.email) = LOWER(?)
+        ) src
+        JOIN users u ON u.id = src.tenant_id
+        GROUP BY u.id, u.name, u.email
+        ORDER BY last_update DESC
         """,
-        (landlord_email,),
+        (landlord_email, landlord_email),
     )
     return cur.fetchall()
+
+
+# def list_prospective_tenants(landlord_email: str):
+#     """Return tenants who listed landlord_email as their future landlord."""
+#     cur = conn.cursor()
+#     cur.execute(
+#         """
+#         SELECT u.id, u.name, u.email, tp.updated_at
+#         FROM tenant_profiles tp
+#         JOIN users u ON u.id = tp.tenant_id
+#         WHERE LOWER(tp.future_landlord_email) = LOWER(?)
+#         ORDER BY tp.updated_at DESC
+#         """,
+#         (landlord_email,),
+#     )
+#     return cur.fetchall()
 
 
 def list_latest_references_for_tenant(tenant_id: int):
@@ -952,21 +1012,70 @@ def tenant_dashboard():
         logout_button()
 
     # === Future landlord email ===
-    st.subheader("Future Landlord Contact")
-    profile = load_tenant_profile(st.session_state.user["id"])
-    current_email = profile["future_landlord_email"] if profile else ""
+    st.subheader("Future Landlords")
 
-    with st.form("future_landlord_form"):
-        future_email = st.text_input("Future landlord email", value=current_email)
-        save = st.form_submit_button("Save")
-    if save:
-        if future_email and not is_valid_email(future_email):
-            st.error("Please provide a valid email address for the future landlord.")
+    # Add multiple future landlord emails
+    with st.form("future_landlords_add_form"):
+        new_fl_email = st.text_input("Add a future landlord email")
+        add_fl = st.form_submit_button("Add email")
+    if add_fl:
+        if not new_fl_email or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", new_fl_email):
+            st.error("Please enter a valid email.")
         else:
-            upsert_tenant_profile(st.session_state.user["id"], future_email or None)
-            st.success("Saved future landlord email.")
+            try:
+                add_future_landlord_contact(st.session_state.user["id"], new_fl_email)
+                st.success("Added.")
+            except Exception as e:
+                st.warning(f"Could not add: {e}")
+
+    # List + actions (send connection / remove)
+    fl_rows = list_future_landlord_contacts(st.session_state.user["id"]) or []
+    if fl_rows:
+        for (cid, fl_email, created_at, invited, invited_at) in fl_rows:
+            with st.container(border=True):
+                cols = st.columns([4,2,2,2])
+                cols[0].markdown(f"**{fl_email}**")
+                cols[1].caption(f"Added: {created_at}")
+                if invited:
+                    cols[2].success("Invited")
+                    cols[3].caption(f"At: {invited_at}")
+                else:
+                    if cols[2].button("Send connection", key=f"invite_fl_{cid}"):
+                        ok, msg = invite_future_landlord(
+                            st.session_state.user["id"],
+                            fl_email,
+                            st.session_state.user["name"],
+                            st.session_state.user["email"],
+                        )
+                        if ok:
+                            st.success("Invitation sent.")
+                            st.rerun()
+                        else:
+                            st.error(f"Could not send: {msg}")
+                    if cols[3].button("Remove", key=f"remove_fl_{cid}"):
+                        remove_future_landlord_contact(cid, st.session_state.user["id"])
+                        st.info("Removed.")
+                        st.rerun()
+    else:
+        st.caption("No future landlords yet.")
 
     st.divider()
+
+    # st.subheader("Future Landlord Contact")
+    # profile = load_tenant_profile(st.session_state.user["id"])
+    # current_email = profile["future_landlord_email"] if profile else ""
+
+    # with st.form("future_landlord_form"):
+    #     future_email = st.text_input("Future landlord email", value=current_email)
+    #     save = st.form_submit_button("Save")
+    # if save:
+    #     if future_email and not is_valid_email(future_email):
+    #         st.error("Please provide a valid email address for the future landlord.")
+    #     else:
+    #         upsert_tenant_profile(st.session_state.user["id"], future_email or None)
+    #         st.success("Saved future landlord email.")
+
+    # st.divider()
 
     # === Previous landlords + reference requests ===
     st.subheader("Previous Landlords & References")
