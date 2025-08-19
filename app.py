@@ -741,12 +741,20 @@ def list_latest_references_for_tenant(tenant_id: int):
     return cur.fetchall()
 
 
+# def build_reference_link(token: str) -> str:
+#     base = st.session_state.get("app_base_url")
+#     if base and base.strip():
+#         base = base.strip().rstrip('/')
+#         return f"{base}/?ref={token}"
+#     return f"http://localhost:8501/?ref={token}"
+
 def build_reference_link(token: str) -> str:
-    base = st.session_state.get("app_base_url")
-    if base and base.strip():
-        base = base.strip().rstrip('/')
+    base = st.session_state.get("app_base_url") or (st.secrets.get("APP_BASE_URL") if hasattr(st, "secrets") else "")
+    if base:
+        base = base.strip().rstrip("/")
         return f"{base}/?ref={token}"
-    return f"http://localhost:8501/?ref={token}"
+    # fallback that still works when clicked inside the app
+    return f"?ref={token}"
 
 
 def email_reference_request(tenant_name: str, tenant_email: str, landlord_email: str, link: str):
@@ -1015,6 +1023,18 @@ def tenant_dashboard():
     st.subheader("Future Landlords")
 
     # Add multiple future landlord emails
+    # with st.form("future_landlords_add_form"):
+    #     new_fl_email = st.text_input("Add a future landlord email")
+    #     add_fl = st.form_submit_button("Add email")
+    # if add_fl:
+    #     if not new_fl_email or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", new_fl_email):
+    #         st.error("Please enter a valid email.")
+    #     else:
+    #         try:
+    #             add_future_landlord_contact(st.session_state.user["id"], new_fl_email)
+    #             st.success("Added.")
+    #         except Exception as e:
+    #             st.warning(f"Could not add: {e}")
     with st.form("future_landlords_add_form"):
         new_fl_email = st.text_input("Add a future landlord email")
         add_fl = st.form_submit_button("Add email")
@@ -1023,10 +1043,23 @@ def tenant_dashboard():
             st.error("Please enter a valid email.")
         else:
             try:
+                # 1) Save contact
                 add_future_landlord_contact(st.session_state.user["id"], new_fl_email)
-                st.success("Added.")
+                # 2) Auto-send invite
+                ok, msg = invite_future_landlord(
+                    st.session_state.user["id"],
+                    new_fl_email,
+                    st.session_state.user["name"],
+                    st.session_state.user["email"],
+                )
+                if ok:
+                    st.success("Added and invitation sent.")
+                    st.rerun()  # refresh list to show 'Invited' status
+                else:
+                    st.warning(f"Added, but email not sent: {msg}")
             except Exception as e:
                 st.warning(f"Could not add: {e}")
+
 
     # List + actions (send connection / remove)
     fl_rows = list_future_landlord_contacts(st.session_state.user["id"]) or []
@@ -1445,6 +1478,7 @@ def landlord_dashboard():
 
 # ---------- App ----------
 def main():
+    load_smtp_defaults()
     params = st.query_params
     token = params.get("ref")
     if token:
