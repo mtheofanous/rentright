@@ -1177,7 +1177,7 @@ def tenant_dashboard():
                             if score is not None:
                                 colB.write(f"Score: **{score}**/10")
                             link = build_reference_link(tok)
-                            colC.write(link)
+                            # colC.write(link)
 
                             # --- Contract upload / status per request token ---
                             contract = get_contract_by_token(tok)
