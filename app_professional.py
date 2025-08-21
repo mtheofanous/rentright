@@ -116,7 +116,7 @@ def tr(s: str) -> str:
         "App Base URL": "Βασικό URL Εφαρμογής",
         "Base URL for Links": "Βασικό URL για Συνδέσμους",
         # Misc labels
-        "Email": tr("Email"),
+        "Email": "Email",
         "Password": "Κωδικός",
         "Confirm password": "Επιβεβαίωση κωδικού",
         "Full name": "Πλήρες όνομα",
