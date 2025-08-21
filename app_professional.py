@@ -74,8 +74,8 @@ def tr(s: str) -> str:
         # Contract
         "Contract Status:": "Κατάσταση Συμβολαίου:",
         "Download Contract": "Λήψη Συμβολαίου",
-        "Replace Tenancy Contract (PDF or Image)": "Αντικατάσταση Συμβολαίου Μίσθωσης (PDF ή Εικόνα)",
-        "Upload Tenancy Contract (PDF or Image)": "Μεταφόρτωση Συμβολαίου Μίσθωσης (PDF ή Εικόνα)",
+        "Replace Tenancy Contract (PDF or Image)": "Συμβολαίου Μίσθωσης (PDF ή Εικόνα)",
+        "Upload Tenancy Contract (PDF or Image)": "Ανέβασε Συμβόλαιο Μίσθωσης (PDF ή Εικόνα)",
         "Contract uploaded. Status reset to Pending Review.": "Το συμβόλαιο μεταφορτώθηκε. Η κατάσταση επαναφέρθηκε σε Αναμονή Ελέγχου.",
         "Contract uploaded. Status set to Pending Review.": "Το συμβόλαιο μεταφορτώθηκε. Η κατάσταση ορίστηκε σε Αναμονή Ελέγχου.",
         "Unable to read the saved file:": "Δεν είναι δυνατή η ανάγνωση του αποθηκευμένου αρχείου:",
