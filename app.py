@@ -1434,9 +1434,9 @@ def landlord_dashboard():
                     for (prev_id, prev_name, prev_email, prev_afm, prev_addr, token, status, score, paid_on_time, utilities_unpaid, good_condition, comments, created_at, filled_at) in refs:
                         with st.expander(f"Reference from ({prev_email}) — Status: {status if status else 'not requested'}"):
                             
-                            if token:
-                                st.write(f"Request created: {created_at}")
-                                st.write(f"Last update: {filled_at if filled_at else '—'}")
+                            # if token:
+                            #     st.write(f"Request created: {created_at}")
+                            #     st.write(f"Last update: {filled_at if filled_at else '—'}")
                             
                             if status == "completed":
                                 st.write(f"**Score:** {score}/10")
