@@ -1042,19 +1042,6 @@ def tenant_dashboard():
     # === Future landlord email ===
     st.subheader("Future Landlords")
 
-    # Add multiple future landlord emails
-    # with st.form("future_landlords_add_form"):
-    #     new_fl_email = st.text_input("Add a future landlord email")
-    #     add_fl = st.form_submit_button("Add email")
-    # if add_fl:
-    #     if not new_fl_email or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", new_fl_email):
-    #         st.error("Please enter a valid email.")
-    #     else:
-    #         try:
-    #             add_future_landlord_contact(st.session_state.user["id"], new_fl_email)
-    #             st.success("Added.")
-    #         except Exception as e:
-    #             st.warning(f"Could not add: {e}")
     with st.form("future_landlords_add_form"):
         new_fl_email = st.text_input("Add a future landlord email")
         add_fl = st.form_submit_button("Add email")
@@ -1088,10 +1075,9 @@ def tenant_dashboard():
             with st.container(border=True):
                 cols = st.columns([4,2,2,2])
                 cols[0].markdown(f"**{fl_email}**")
-                cols[1].caption(f"Added: {created_at}")
+             
                 if invited:
                     cols[2].success("Invited")
-                    cols[3].caption(f"At: {invited_at}")
                 else:
                     if cols[2].button("Send connection", key=f"invite_fl_{cid}"):
                         ok, msg = invite_future_landlord(
