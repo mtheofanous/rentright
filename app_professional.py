@@ -53,9 +53,12 @@ def tr(s: str) -> str:
         "Contact added, but the email could not be sent:": "Η επαφή προστέθηκε, αλλά δεν ήταν δυνατή η αποστολή email:",
         "Unable to add contact:": "Αδυναμία προσθήκης επαφής:",
         "Send Invitation": "Αποστολή Πρόσκλησης",
+        "Invited": "Προσκλήθηκε",
         "Invitation sent successfully.": "Η πρόσκληση στάλθηκε με επιτυχία.",
         "Unable to send invitation:": "Αδυναμία αποστολής πρόσκλησης:",
         "Contact removed.": "Η επαφή αφαιρέθηκε.",
+        "Name": "Ονοματεπώνυμο",
+        "Address": "Διεύθυνση",
         "No future landlord contacts yet.": "Δεν υπάρχουν ακόμα επαφές μελλοντικών ιδιοκτητών.",
         # Previous Landlords & References
         "Previous Landlords and References": "Προηγούμενοι Ιδιοκτήτες και Συστάσεις",
@@ -124,6 +127,7 @@ def tr(s: str) -> str:
         "Tenant": "Ενοικιαστής",
         "Landlord": "Ιδιοκτήτης",
         "Admin": "Διαχειριστής",
+        "completed": "Ολοκληρώθηκε"
     }.get(s, s)
 
 
@@ -847,21 +851,6 @@ def list_prospective_tenants(landlord_email: str):
     return cur.fetchall()
 
 
-# def list_prospective_tenants(landlord_email: str):
-#     """Return tenants who listed landlord_email as their future landlord."""
-#     cur = conn.cursor()
-#     cur.execute(
-#         """
-#         SELECT u.id, u.name, u.email, tp.updated_at
-#         FROM tenant_profiles tp
-#         JOIN users u ON u.id = tp.tenant_id
-#         WHERE LOWER(tp.future_landlord_email) = LOWER(?)
-#         ORDER BY tp.updated_at DESC
-#         """,
-#         (landlord_email,),
-#     )
-#     return cur.fetchall()
-
 
 def list_latest_references_for_tenant(tenant_id: int):
     """Return each previous landlord with the latest (most recent) reference request, if any, and its answers."""
@@ -1180,19 +1169,7 @@ def tenant_dashboard():
     # === Future landlord email ===
     st.subheader(tr("Future Landlords (Contacts)"))
 
-    # Add multiple future landlord emails
-    # with st.form("future_landlords_add_form"):
-    #     new_fl_email = st.text_input(tr("Enter a landlord’s email address"))
-    #     add_fl = st.form_submit_button(tr("Add Contact"))
-    # if add_fl:
-    #     if not new_fl_email or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", new_fl_email):
-    #         st.error("Please enter a valid email.")
-    #     else:
-    #         try:
-    #             add_future_landlord_contact(st.session_state.user["id"], new_fl_email)
-    #             st.success("Added.")
-    #         except Exception as e:
-    #             st.warning(f"Unable to add contact: {e}")
+    
     with st.form("future_landlords_add_form"):
         new_fl_email = st.text_input(tr("Enter a landlord’s email address"))
         add_fl = st.form_submit_button(tr("Add Contact"))
@@ -1226,10 +1203,10 @@ def tenant_dashboard():
             with st.container(border=True):
                 cols = st.columns([4,2,2,2])
                 cols[0].markdown(f"**{fl_email}**")
-                cols[1].caption(f"Added: {created_at}")
+               
                 if invited:
-                    cols[2].success("Invited")
-                    cols[3].caption(f"At: {invited_at}")
+                    cols[2].success(tr("Invited"))
+             
                 else:
                     if cols[2].button(tr("Send Invitation"), key=f"invite_fl_{cid}"):
                         ok, msg = invite_future_landlord(
@@ -1260,8 +1237,8 @@ def tenant_dashboard():
             pl_email = st.text_input(tr("Email"))
             pl_afm = st.text_input(tr("Tax ID (9 digits)"))
         with col2:
-            pl_name = st.text_input("Name")
-            pl_address = st.text_input("Address")
+            pl_name = st.text_input(tr("Name"))
+            pl_address = st.text_input(tr("Address"))
         add = st.form_submit_button(tr("Add Previous Landlord"))
     if add:
         if not (pl_email and is_valid_email(pl_email)):
@@ -1283,7 +1260,6 @@ def tenant_dashboard():
             with st.expander(f"{name} • {email}"):
                 st.write(f"**AFM:** {afm}")
                 st.write(f"**Address:** {address}")
-                st.caption(f"Added on {created_at}")
 
                 c1, c2 = st.columns([1, 2])
                 with c1:
@@ -1321,14 +1297,10 @@ def tenant_dashboard():
                             contract = get_contract_by_token(tok)
 
                             # NEW guard: when verified/completed, hide any upload UI
-                            if str(final_status).lower() == "completed":
+                            if str(final_status).lower() == tr("completed"):
                                 if contract:
                                     st.markdown(f"**Contract Status:** {contract_status_badge(contract['status'])}")
-                                    st.caption(
-                                        f"Uploaded: {contract['uploaded_at']} • "
-                                        f"Last status update: {contract['status_updated_at'] or '—'}"
-                                        + (f" • by {contract['status_by']}" if contract.get('status_by') else "")
-                                    )
+
                                     # Allow download only (no replace)
                                     try:
                                         with open(contract["path"], "rb") as f:
@@ -1398,131 +1370,6 @@ def tenant_dashboard():
         st.info("No previous landlords added yet.")
 
     st.divider()
-
-
-
-    # # === Previous landlords + reference requests ===
-    # st.subheader(tr("Previous Landlords and References"))
-    # with st.form("previous_landlord_form"):
-    #     col1, col2 = st.columns([1, 1])
-    #     with col1:
-    #         pl_email = st.text_input(tr("Email"))
-    #         pl_afm = st.text_input(tr("Tax ID (9 digits)"))
-    #     with col2:
-    #         pl_name = st.text_input("Name")
-    #         pl_address = st.text_input("Address")
-    #     add = st.form_submit_button(tr("Add Previous Landlord"))
-    # if add:
-    #     if not (pl_email and is_valid_email(pl_email)):
-    #         st.error("Please enter a valid email address..")
-    #     elif not is_valid_afm(pl_afm):
-    #         st.error("Tax ID must be exactly 9 digits.")
-    #     elif not pl_name.strip():
-    #         st.error("Please enter your full name..")
-    #     elif not pl_address.strip():
-    #         st.error(tr("Please enter the landlord’s address."))
-    #     else:
-    #         add_previous_landlord(st.session_state.user["id"], pl_email, pl_afm, pl_name, pl_address)
-    #         st.success(tr("Previous landlord added successfully."))
-
-    # rows = list_previous_landlords(st.session_state.user["id"]) or []
-    # st.subheader(tr("All Reference Requests"))
-    # if rows:
-    #     for (pid, email, afm, name, address, created_at) in rows:
-    #         with st.expander(f"{name} • {email}"):
-    #             st.write(f"**AFM:** {afm}")
-    #             st.write(f"**Address:** {address}")
-    #             st.caption(f"Added on {created_at}")
-
-    #             c1, c2 = st.columns([1, 2])
-    #             with c1:
-    #                 if st.button(tr("Request Reference"), key=f"req_{pid}"):
-    #                     rec = create_reference_request(st.session_state.user["id"], pid, email)
-    #                     link = build_reference_link(rec["token"])
-    #                     ok, msg = email_reference_request(
-    #                         st.session_state.user["name"], st.session_state.user["email"], email, link
-    #                     )
-    #                     if ok:
-    #                         st.success(tr("Reference request sent successfully by email."))
-    #                     else:
-    #                         st.warning(f"Email delivery failed ({msg}). Please share this link manually:")
-    #                         st.code(link)
-    #             with c2:
-    #                 cur = conn.cursor()
-    #                 cur.execute(
-    #                     "SELECT token, status, created_at, score FROM reference_requests WHERE prev_landlord_id=? ORDER BY id DESC",
-    #                     (pid,),
-    #                 )
-    #                 reqs = cur.fetchall()
-    #                 if reqs:
-    #                     for (tok, status, created_at2, score) in reqs:
-    #                         # Use the effective status (gated by contract verification)
-    #                         final_status = effective_reference_status(status, tok)
-
-    #                         colA, colB, colC = st.columns([2, 2, 2])
-    #                         colA.write(f"Status: **{final_status}**")  # <-- final status here
-    #                         if score is not None:
-    #                             colB.write(f"Score: **{score}**/10")
-    #                         link = build_reference_link(tok)
-    #                         colC.write(link)
-
-    #                         # --- Contract upload / status per request token ---
-    #                         contract = get_contract_by_token(tok)
-
-    #                         if contract:
-    #                             st.markdown(f"**Contract Status:** {contract_status_badge(contract['status'])}")
-    #                             st.caption(
-    #                                 f"Uploaded: {contract['uploaded_at']} • "
-    #                                 f"Last status update: {contract['status_updated_at'] or '—'}"
-    #                                 + (f" • by {contract['status_by']}" if contract['status_by'] else "")
-    #                             )
-    #                             # Download button
-    #                             try:
-    #                                 with open(contract["path"], "rb") as f:
-    #                                     st.download_button(
-    #                                         tr("Download Contract"),
-    #                                         data=f.read(),
-    #                                         file_name=contract["filename"],
-    #                                         mime=contract["content_type"],
-    #                                         key=f"dl_{tok}",
-    #                                     )
-    #                             except Exception as e:
-    #                                 st.warning(f"Unable to read the saved file: {e}")
-
-    #                             # Replace upload (resets status to Pending)
-    #                             uploaded = st.file_uploader(
-    #                                 tr("Replace Tenancy Contract (PDF or Image)"),
-    #                                 type=["pdf", "png", "jpg", "jpeg", "webp"],
-    #                                 key=f"up_{tok}",
-    #                             )
-    #                             if uploaded is not None:
-    #                                 ok, msg = save_contract_upload(tok, st.session_state.user["id"], uploaded)
-    #                                 if ok:
-    #                                     st.success(tr("Contract uploaded. Status reset to Pending Review."))
-    #                                     st.rerun()
-    #                                 else:
-    #                                     st.error(msg)
-    #                         else:
-    #                             st.markdown("**Contract Status:** ⏳ Pending Review (no file yet)")
-    #                             uploaded = st.file_uploader(
-    #                                 tr("Upload Tenancy Contract (PDF or Image)"),
-    #                                 type=["pdf", "png", "jpg", "jpeg", "webp"],
-    #                                 key=f"up_{tok}",
-    #                             )
-    #                             if uploaded is not None:
-    #                                 ok, msg = save_contract_upload(tok, st.session_state.user["id"], uploaded)
-    #                                 if ok:
-    #                                     st.success(tr("Contract uploaded. Status set to Pending Review."))
-    #                                     st.rerun()
-    #                                 else:
-    #                                     st.error(msg)
-    #                         # --- End contract block ---
-    #                 else:
-    #                     st.caption(tr("No reference requests have been created yet."))
-    # else:
-    #     st.info("No previous landlords added yet.")
-
-    # st.divider()
 
 
 
