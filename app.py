@@ -1412,7 +1412,7 @@ def landlord_dashboard():
         for (tid, tname, temail, updated_at) in prospects:
             with st.container(border=True):
                 st.markdown(f"**{tname}** · {temail}")
-                st.caption(f"Profile last updated: {updated_at}")
+                # st.caption(f"Profile last updated: {updated_at}")
                 # Average score across COMPLETED references (latest per previous landlord)
                 refs = list_latest_references_for_tenant(tid) or []
                 scores = []
@@ -1421,6 +1421,9 @@ def landlord_dashboard():
                     score  = r[7]  # 'score'
                     if status == "completed" and score is not None:
                         scores.append(score)
+                if len(scores) == 1:
+                    st.metric("Score", f"{scores:.1f}/10")
+                    
 
                 if len(scores) >= 2:  # only show if more than one reference
                     avg = sum(scores) / len(scores)
