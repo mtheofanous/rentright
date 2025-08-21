@@ -37,7 +37,7 @@ def tr(s: str) -> str:
         # SMTP
         "Missing SMTP details: host, port, username, password, sender, or recipient.": "Λείπουν στοιχεία SMTP: host, port, όνομα χρήστη, κωδικός, αποστολέας ή παραλήπτης.",
         "Send Test Email": "Αποστολή Δοκιμαστικού Email",
-        "Send test to": "Αποστολή δοκιμής σε",
+        tr("Send test to"): "Αποστολή δοκιμής σε",
         "If you received this email, your SMTP configuration is working. ✅": "Αν λάβατε αυτό το email, η ρύθμιση SMTP λειτουργεί. ✅",
         "Test email sent successfully.": "Το δοκιμαστικό email στάλθηκε με επιτυχία.",
         "Failed to send email:": "Αποτυχία αποστολής email:",
@@ -938,7 +938,7 @@ def reference_portal(token: str):
 
     if submit:
         if not confirm:
-            st.error("You must confirm you were the landlord.")
+            st.error(tr("Please confirm you were the landlord."))
             return
         mark_reference_completed(
             token,
@@ -975,13 +975,13 @@ def admin_dashboard():
         )
                 # --- SMTP quick test ---
         st.markdown("---")
-        st.caption("Send Test Email")
+        st.caption(tr("Send Test Email"))
         test_to = st.text_input(
-            "Send test to",
+            tr("Send test to"),
             value=st.session_state.get("smtp_user", ""),
             key="admin_test_to",
         )
-        if st.button("Send test email", key="admin_send_test_email"):
+        if st.button(tr("Send test email"), key="admin_send_test_email"):
             try:
                 ok, msg = send_email_smtp(
                     to_email=test_to,
@@ -1012,9 +1012,9 @@ def admin_dashboard():
                     ok, msg = False, f"{type(e).__name__}: {e}"
 
             if ok:
-                st.success("Test email sent successfully.")
+                st.success(tr("Test email sent successfully."))
             else:
-                st.error(f"Failed to send email: {msg}")
+                st.error(f"{tr("Failed to send email:")} {msg}")
 
     st.markdown("---")
 
@@ -1034,9 +1034,9 @@ def admin_dashboard():
     c1, c2, c3 = st.columns(3)
     c1.metric("Pending (effective)", len(pending_reqs))
     c2.metric("Completed (effective)", len(completed_reqs))
-    c3.metric("Cancelled", len(cancelled_reqs))
+    c3.metric(tr("Cancelled"), len(cancelled_reqs))
 
-    tab_pending, tab_completed, tab_cancelled = st.tabs(["Pending", "Completed", "Cancelled"])
+    tab_pending, tab_completed, tab_cancelled = st.tabs([tr("Pending"), tr("Completed"), tr("Cancelled")])
 
     def render_admin_reqs(reqs, prefix: str):
         if not reqs:
@@ -1097,7 +1097,7 @@ def admin_dashboard():
                     except Exception as e:
                         st.warning(f"Unable to read the saved file: {e}")
                 else:
-                    st.caption("No contract uploaded yet.")
+                    st.caption(tr("No contract uploaded yet."))
 
                 # --- Admin actions ---
                 # --- Admin actions (conditional) ---
@@ -1116,7 +1116,7 @@ def admin_dashboard():
                         else:
                             st.error(msg)
                 else:
-                    ac1.caption("Already completed — no verification needed.")
+                    ac1.caption(tr("Already completed — no verification needed."))
 
                 if show_cancel:
                     if ac2.button(tr("Cancel Reference"), key=f"{prefix}_cancel_{token}"):
@@ -1124,7 +1124,7 @@ def admin_dashboard():
                         st.warning(tr("Reference cancelled."))
                         st.rerun()
                 else:
-                    ac2.caption("Already cancelled.")
+                    ac2.caption(tr("Already cancelled."))
 
                 # ac1, ac2 = st.columns(2)
                 # if ac1.button(tr("✅ Verify Contract"), key=f"{prefix}_verify_{token}"):
@@ -1175,7 +1175,7 @@ def tenant_dashboard():
         add_fl = st.form_submit_button(tr("Add Contact"))
     if add_fl:
         if not new_fl_email or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", new_fl_email):
-            st.error("Please enter a valid email.")
+            st.error(tr("Please enter a valid email address."))
         else:
             try:
                 # 1) Save contact
@@ -1193,7 +1193,7 @@ def tenant_dashboard():
                 else:
                     st.warning(f"Contact added, but the email could not be sent: {msg}")
             except Exception as e:
-                st.warning(f"Unable to add contact: {e}")
+                st.warning(f"{tr("Unable to add contact:")} {e}")
 
 
     # List + actions (send connection / remove)
@@ -1220,7 +1220,7 @@ def tenant_dashboard():
                             st.rerun()
                         else:
                             st.error(f"Unable to send invitation: {msg}")
-                    if cols[3].button("Remove", key=f"remove_fl_{cid}"):
+                    if cols[3].button(tr("Remove"), key=f"remove_fl_{cid}"):
                         remove_future_landlord_contact(cid, st.session_state.user["id"])
                         st.info(tr("Contact removed."))
                         st.rerun()
@@ -1242,11 +1242,11 @@ def tenant_dashboard():
         add = st.form_submit_button(tr("Add Previous Landlord"))
     if add:
         if not (pl_email and is_valid_email(pl_email)):
-            st.error("Please enter a valid email address..")
+            st.error(tr("Please enter a valid email address."))
         elif not is_valid_afm(pl_afm):
-            st.error("Tax ID must be exactly 9 digits.")
+            st.error(tr("Tax ID must be exactly 9 digits."))
         elif not pl_name.strip():
-            st.error("Please enter your full name..")
+            st.error(tr("Please enter your full name."))
         elif not pl_address.strip():
             st.error(tr("Please enter the landlord’s address."))
         else:
@@ -1299,7 +1299,7 @@ def tenant_dashboard():
                             # NEW guard: when verified/completed, hide any upload UI
                             if str(final_status).lower() == tr("completed"):
                                 if contract:
-                                    st.markdown(f"**Contract Status:** {contract_status_badge(contract['status'])}")
+                                    st.markdown(f"**{tr("Contract Status:")}** {contract_status_badge(contract['status'])}")
 
                                     # Allow download only (no replace)
                                     try:
@@ -1314,12 +1314,12 @@ def tenant_dashboard():
                                     except Exception as e:
                                         st.warning(f"Unable to read the saved file: {e}")
                                 else:
-                                    st.markdown("**Contract:** Verified reference — no file upload needed.")
+                                    st.markdown(tr("Contract verified — no file upload needed."))
                                 # No uploader shown when completed
                             else:
                                 # Not completed yet → show normal upload/replace flow
                                 if contract:
-                                    st.markdown(f"**Contract Status:** {contract_status_badge(contract['status'])}")
+                                    st.markdown(f"**{tr("Contract Status:")}** {contract_status_badge(contract['status'])}")
                                     st.caption(
                                         f"Uploaded: {contract['uploaded_at']} • "
                                         f"Last status update: {contract['status_updated_at'] or '—'}"
@@ -1350,7 +1350,7 @@ def tenant_dashboard():
                                         else:
                                             st.error(msg)
                                 else:
-                                    st.markdown("**Contract Status:** ⏳ Pending Review (no file yet)")
+                                    st.markdown(f"**{tr("Contract Status:")}** {tr("⏳ Pending Review")} {tr("(no file yet)")}")
                                     uploaded = st.file_uploader(
                                         tr("Upload Tenancy Contract (PDF or Image)"),
                                         type=["pdf", "png", "jpg", "jpeg", "webp"],
@@ -1367,7 +1367,7 @@ def tenant_dashboard():
                     else:
                         st.caption(tr("No reference requests have been created yet."))
     else:
-        st.info("No previous landlords added yet.")
+        st.info(tr("No previous landlords added yet."))
 
     st.divider()
 
@@ -1440,7 +1440,7 @@ def landlord_dashboard():
     st.divider()
 
     # === Reference requests that were sent to this landlord ===
-    st.subheader("Reference Requests Sent To You")
+    st.subheader(tr("Reference Requests Sent To You"))
 
     # Quick stats
     all_reqs = list_reference_requests_for_landlord(landlord_email)
@@ -1449,15 +1449,15 @@ def landlord_dashboard():
     cancelled_reqs = [r for r in all_reqs if r[3] == "cancelled"]
 
     c1, c2, c3 = st.columns(3)
-    c1.metric("Pending", len(pending_reqs))
-    c2.metric("Completed", len(completed_reqs))
-    c3.metric("Cancelled", len(cancelled_reqs))
+    c1.metric(tr("Pending"), len(pending_reqs))
+    c2.metric(tr("Completed"), len(completed_reqs))
+    c3.metric(tr("Cancelled"), len(cancelled_reqs))
 
-    tab_all, tab_pending, tab_completed, tab_cancelled = st.tabs(["All", "Pending", "Completed", "Cancelled"])
+    tab_all, tab_pending, tab_completed, tab_cancelled = st.tabs([tr("All"), tr("Pending"), tr("Completed"), tr("Cancelled")])
 
     def render_requests(reqs, prefix: str):
         if not reqs:
-            st.info("No requests found.")
+            st.info(tr("No requests found."))
             return
 
         for (token, tenant_id, created_at, status, score) in reqs:
