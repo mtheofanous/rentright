@@ -14,15 +14,6 @@ DB_PATH = str(db_path_obj)
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 import sqlite3
-
-@st.cache_resource
-def get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-import sqlite3
 import re
 import hashlib
 import smtplib
@@ -260,32 +251,112 @@ def get_conn():
     # one shared connection per process/session
     conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
     # improve concurrent behavior
-    get_conn().execute("PRAGMA journal_mode=WAL;")
-    get_conn().execute("PRAGMA busy_timeout=5000;")  # wait up to 5s if locked
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA busy_timeout=5000;")  # wait up to 5s if locked
     return conn
 
 
 @st.cache_resource
 
 def ensure_consent_column(conn):
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     cur.execute("PRAGMA table_info(reference_contracts)")
     cols = [r[1] for r in cur.fetchall()]
     if "consent_status" not in cols:
         cur.execute("ALTER TABLE reference_contracts ADD COLUMN consent_status TEXT NOT NULL DEFAULT 'locked'")
-        get_conn().commit()
+        conn.commit()
 
 
-def init_db(_schema_version: int = 6):
+def init_db(_schema_version: int = 4):
     conn = get_conn()
-    cur = get_conn().cursor()
-    # (tables creation stays as is above)
-    # Ensure consent column exists
-    try:
-        ensure_consent_column(conn)
-    except Exception:
-        pass
-    return True
+    cur = conn.cursor()
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            role TEXT CHECK(role IN ("tenant","landlord","admin")) NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS tenant_profiles (
+            tenant_id INTEGER UNIQUE NOT NULL,
+            future_landlord_email TEXT,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS previous_landlords (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            email TEXT NOT NULL,
+            afm TEXT NOT NULL,
+            name TEXT NOT NULL,
+            address TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS reference_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token TEXT UNIQUE NOT NULL,
+            tenant_id INTEGER NOT NULL,
+            prev_landlord_id INTEGER NOT NULL,
+            landlord_email TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            filled_at TEXT,
+            confirm_landlord INTEGER,
+            score INTEGER,
+            paid_on_time INTEGER,
+            utilities_unpaid INTEGER,
+            good_condition INTEGER,
+            comments TEXT,
+            FOREIGN KEY (tenant_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (prev_landlord_id) REFERENCES previous_landlords(id) ON DELETE CASCADE
+        )
+    """)
+    
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS reference_contracts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token TEXT UNIQUE NOT NULL,
+            tenant_id INTEGER NOT NULL,
+            filename TEXT NOT NULL,
+            content_type TEXT NOT NULL,
+            path TEXT NOT NULL,
+            size_bytes INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','verified','rejected')),
+            status_updated_at TEXT,
+            status_by TEXT,
+            uploaded_at TEXT NOT NULL,
+            FOREIGN KEY (tenant_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (token) REFERENCES reference_requests(token) ON DELETE CASCADE
+        )
+    """)
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS future_landlord_contacts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            email TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            invited INTEGER NOT NULL DEFAULT 0,
+            invited_at TEXT,
+            UNIQUE(tenant_id, email),
+            FOREIGN KEY (tenant_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        """
+    )
+
+
+    conn.commit()
+    return conn
 
 
 # Defensive migration: add consent_status if missing
@@ -300,12 +371,12 @@ def add_future_landlord_contact(tenant_id: int, email: str):
     if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
         raise ValueError("Invalid email")
     conn = get_conn()
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     cur.execute(
         "INSERT OR IGNORE INTO future_landlord_contacts(tenant_id, email, created_at) VALUES (?,?,?)",
         (tenant_id, email, datetime.utcnow().isoformat()),
     )
-    get_conn().commit()
+    conn.commit()
 
 
 def list_future_landlord_contacts(tenant_id: int):
@@ -337,12 +408,12 @@ def invite_future_landlord(tenant_id: int, email: str, tenant_name: str, tenant_
     ok, msg = send_email_smtp(email, subject, body)
     if ok:
         conn = get_conn()
-        cur = get_conn().cursor()
+        cur = conn.cursor()
         cur.execute(
             "UPDATE future_landlord_contacts SET invited = 1, invited_at = ? WHERE tenant_id = ? AND LOWER(email) = LOWER(?)",
             (datetime.utcnow().isoformat(), tenant_id, email),
         )
-        get_conn().commit()
+        conn.commit()
     return ok, msg
 
 
@@ -352,16 +423,16 @@ def hash_password(password: str, salt: str = "static_salt_change_me") -> str:
     return hashlib.sha256((salt + password).encode()).hexdigest()
 
 def create_user(email: str, name: str, password: str, role: str):
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     cur.execute(
         "INSERT INTO users(email, name, password_hash, role, created_at) VALUES (?,?,?,?,?)",
         (email.lower().strip(), name.strip(), hash_password(password), role, datetime.utcnow().isoformat()),
     )
-    get_conn().commit()
+    conn.commit()
 
 
 def get_user_by_email(email: str):
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     cur.execute("SELECT id, email, name, password_hash, role FROM users WHERE email = ?", (email.lower().strip(),))
     row = cur.fetchone()
     if row:
@@ -371,7 +442,7 @@ def get_user_by_email(email: str):
 
 
 def get_user_by_id(uid: int):
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     cur.execute("SELECT id, email, name, role FROM users WHERE id = ?", (uid,))
     row = cur.fetchone()
     if row:
@@ -481,7 +552,7 @@ def safe_filename(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]", "_", base)
 
 def get_contract_by_token(token: str):
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     cur.execute(
         "SELECT filename, content_type, path, size_bytes, uploaded_at, status, status_updated_at, status_by "
         "FROM reference_contracts WHERE token=?",
@@ -530,7 +601,7 @@ def save_contract_upload(token: str, tenant_id: int, uploaded_file) -> tuple[boo
         f.write(uploaded_file.read())
 
     now = datetime.utcnow().isoformat()
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     existing = get_contract_by_token(token)
     if existing:
         cur.execute(
@@ -553,7 +624,7 @@ def save_contract_upload(token: str, tenant_id: int, uploaded_file) -> tuple[boo
             (token, tenant_id, name, getattr(uploaded_file, "type", None) or "application/octet-stream",
              str(path), size, now, now),
         )
-    get_conn().commit()
+    conn.commit()
     return True, "Uploaded."
 
 
@@ -564,12 +635,12 @@ def set_contract_status(token: str, status: str, by_email: str) -> tuple[bool, s
     if not get_contract_by_token(token):
         return False, "No contract uploaded for this request."
 
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     cur.execute(
         "UPDATE reference_contracts SET status=?, status_updated_at=?, status_by=? WHERE token=?",
         (status, datetime.utcnow().isoformat(), by_email, token),
     )
-    get_conn().commit()
+    conn.commit()
 
     # ⬇️ If contract is now verified, try to promote the reference
     if status == "verified":
@@ -589,7 +660,7 @@ def contract_status_badge(status: str) -> str:
 
 
 def load_tenant_profile(tenant_id: int):
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     cur.execute("SELECT future_landlord_email, updated_at FROM tenant_profiles WHERE tenant_id = ?", (tenant_id,))
     row = cur.fetchone()
     if row:
@@ -599,7 +670,7 @@ def load_tenant_profile(tenant_id: int):
 
 def upsert_tenant_profile(tenant_id: int, future_landlord_email: str | None):
     now = datetime.utcnow().isoformat()
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     exists = load_tenant_profile(tenant_id)
     if exists:
         cur.execute(
@@ -611,20 +682,20 @@ def upsert_tenant_profile(tenant_id: int, future_landlord_email: str | None):
             "INSERT INTO tenant_profiles(tenant_id, future_landlord_email, updated_at) VALUES (?,?,?)",
             (tenant_id, future_landlord_email.strip() if future_landlord_email else None, now),
         )
-    get_conn().commit()
+    conn.commit()
 
 
 def add_previous_landlord(tenant_id: int, email: str, afm: str, name: str, address: str):
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     cur.execute(
         "INSERT INTO previous_landlords(tenant_id, email, afm, name, address, created_at) VALUES (?,?,?,?,?,?)",
         (tenant_id, email.strip(), afm.strip(), name.strip(), address.strip(), datetime.utcnow().isoformat()),
     )
-    get_conn().commit()
+    conn.commit()
 
 
 def list_previous_landlords(tenant_id: int):
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     cur.execute(
         "SELECT id, email, afm, name, address, created_at FROM previous_landlords WHERE tenant_id = ? ORDER BY id DESC",
         (tenant_id,),
@@ -633,9 +704,9 @@ def list_previous_landlords(tenant_id: int):
 
 
 def delete_previous_landlord(entry_id: int, tenant_id: int):
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     cur.execute("DELETE FROM previous_landlords WHERE id = ? AND tenant_id = ?", (entry_id, tenant_id))
-    get_conn().commit()
+    conn.commit()
 
 # ---------- References helpers ----------
 
@@ -645,17 +716,17 @@ def generate_token() -> str:
 
 def create_reference_request(tenant_id: int, prev_landlord_id: int, landlord_email: str) -> dict:
     token = generate_token()
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     cur.execute(
         "INSERT INTO reference_requests(token, tenant_id, prev_landlord_id, landlord_email, created_at, status) VALUES (?,?,?,?,?,?)",
         (token, tenant_id, prev_landlord_id, landlord_email, datetime.utcnow().isoformat(), 'pending'),
     )
-    get_conn().commit()
+    conn.commit()
     return {"token": token}
 
 
 def get_reference_request_by_token(token: str):
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     cur.execute(
         "SELECT id, token, tenant_id, prev_landlord_id, landlord_email, created_at, status, filled_at, confirm_landlord, score, paid_on_time, utilities_unpaid, good_condition, comments FROM reference_requests WHERE token = ?",
         (token,),
@@ -705,9 +776,9 @@ def promote_reference_if_ready(token: str) -> bool:
     if not details.get("confirm_landlord"):
         return False
 
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     cur.execute("UPDATE reference_requests SET status='completed' WHERE token=?", (token,))
-    get_conn().commit()
+    conn.commit()
     return True
 
 
@@ -719,7 +790,7 @@ def mark_reference_completed(token: str, confirm_landlord: bool, score: int,
     is_verified = bool(contract and contract.get("status") == "verified")
     new_status = "completed" if is_verified else "pending"
 
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     cur.execute(
         """
         UPDATE reference_requests
@@ -738,11 +809,11 @@ def mark_reference_completed(token: str, confirm_landlord: bool, score: int,
             token,
         ),
     )
-    get_conn().commit()
+    conn.commit()
 
 def list_reference_requests_global(status: str | None = None):
     """List reference requests across all users. If status is given, filter by it."""
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     if status:
         cur.execute(
             "SELECT token, tenant_id, landlord_email, created_at, status, score "
@@ -758,7 +829,7 @@ def list_reference_requests_global(status: str | None = None):
 
 
 def list_reference_requests_for_tenant(tenant_id: int):
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     cur.execute(
         """
         SELECT rr.id, rr.token, rr.landlord_email, rr.created_at, rr.status, rr.score
@@ -772,7 +843,7 @@ def list_reference_requests_for_tenant(tenant_id: int):
 
 
 def list_reference_requests_for_landlord(landlord_email: str, status: str | None = None):
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     if status:
         cur.execute(
             "SELECT token, tenant_id, created_at, status, score FROM reference_requests WHERE landlord_email = ? AND status = ? ORDER BY id DESC",
@@ -787,9 +858,9 @@ def list_reference_requests_for_landlord(landlord_email: str, status: str | None
 
 
 def cancel_reference_request(token: str):
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     cur.execute("UPDATE reference_requests SET status='cancelled' WHERE token=? AND status='pending'", (token,))
-    get_conn().commit()
+    conn.commit()
 
 def list_prospective_tenants(landlord_email: str):
     """Unique tenants who listed this landlord (single field or multi list)."""
@@ -818,7 +889,7 @@ def list_prospective_tenants(landlord_email: str):
 
 def list_latest_references_for_tenant(tenant_id: int):
     """Return each previous landlord with the latest (most recent) reference request, if any, and its answers."""
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     cur.execute(
         """
         SELECT pl.id AS prev_id,
@@ -1016,7 +1087,7 @@ def admin_dashboard():
             details = get_reference_request_by_token(token)
             pl_name = pl_afm = pl_email = pl_addr = "—"
             if details and details.get("prev_landlord_id"):
-                cur = get_conn().cursor()
+                cur = conn.cursor()
                 cur.execute(
                     "SELECT name, afm, email, address FROM previous_landlords WHERE id=?",
                     (details["prev_landlord_id"],),
@@ -1239,7 +1310,7 @@ def tenant_dashboard():
                             st.warning(f"Email delivery failed ({msg}). Please share this link manually:")
                             st.code(link)
                 with c2:
-                    cur = get_conn().cursor()
+                    cur = conn.cursor()
                     cur.execute(
                         "SELECT token, status, created_at, score FROM reference_requests WHERE prev_landlord_id=? ORDER BY id DESC",
                         (pid,),
@@ -1556,7 +1627,7 @@ def load_contract_plaintext(token: str) -> bytes | None:
     contract = get_contract_by_token(token)
     if not contract:
         return None
-    cur = get_conn().cursor()
+    cur = conn.cursor()
     row = cur.execute("SELECT consent_status FROM reference_contracts WHERE token=?", (token,)).fetchone()
     consent = (row[0] if row else "locked")
     if consent != "consented":
