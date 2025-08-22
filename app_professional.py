@@ -1696,17 +1696,22 @@ if __name__ == "__main__":
 
 
 def load_contract_plaintext(token: str) -> bytes | None:
-    """Return decrypted contract bytes if consented; else None."""
-    contract = get_reference_request_by_token(token) and get_contract_by_token(token)
+    """Return decrypted contract bytes if landlord has consented."""
     contract = get_contract_by_token(token)
     if not contract:
         return None
-    # Enforce landlord consent before allowing decryption
+
+    # Check consent status
     cur = conn.cursor()
-    row = cur.execute("SELECT consent_status FROM reference_contracts WHERE token=?", (token,)).fetchone()
+    row = cur.execute(
+        "SELECT consent_status FROM reference_contracts WHERE token=?",
+        (token,),
+    ).fetchone()
     consent = (row[0] if row else "locked")
     if consent != "consented":
         return None
+
+    # Try to read & decrypt
     try:
         with open(contract["path"], "rb") as f:
             cipher = f.read()
@@ -1714,3 +1719,4 @@ def load_contract_plaintext(token: str) -> bytes | None:
         return decrypt_bytes(cipher)
     except Exception:
         return None
+
