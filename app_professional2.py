@@ -8,7 +8,6 @@ from datetime import datetime
 from uuid import uuid4
 import os
 from pathlib import Path
-from utils_vault import encrypt_bytes, decrypt_bytes, sha256_bytes
 
 # ⚠️ set_page_config must be the first Streamlit command
 st.set_page_config(page_title="RentRight", page_icon="🏠", layout="centered")
@@ -38,7 +37,7 @@ def tr(s: str) -> str:
         # SMTP
         "Missing SMTP details: host, port, username, password, sender, or recipient.": "Λείπουν στοιχεία SMTP: host, port, όνομα χρήστη, κωδικός, αποστολέας ή παραλήπτης.",
         "Send Test Email": "Αποστολή Δοκιμαστικού Email",
-        tr('Send test to'): "Αποστολή δοκιμής σε",
+        tr("Send test to"): "Αποστολή δοκιμής σε",
         "If you received this email, your SMTP configuration is working. ✅": "Αν λάβατε αυτό το email, η ρύθμιση SMTP λειτουργεί. ✅",
         "Test email sent successfully.": "Το δοκιμαστικό email στάλθηκε με επιτυχία.",
         "Failed to send email:": "Αποτυχία αποστολής email:",
@@ -244,14 +243,6 @@ def get_conn():
 
 
 @st.cache_resource
-def ensure_contracts_consent_column(conn):
-    cur = conn.cursor()
-    cur.execute("PRAGMA table_info(reference_contracts)")
-    cols = [r[1] for r in cur.fetchall()]
-    if "consent_status" not in cols:
-        cur.execute("ALTER TABLE reference_contracts ADD COLUMN consent_status TEXT NOT NULL DEFAULT 'locked'")
-        conn.commit()
-
 def init_db():
     conn = get_conn()
     cur = conn.cursor()
@@ -449,45 +440,45 @@ def is_valid_afm(s: str) -> bool:
 # ---------- Auth UI ----------
 
 def login_form():
-    st.subheader(tr('Sign In'))
+    st.subheader(tr("Sign In"))
     with st.form("login_form"):
-        email = st.text_input(tr('Email'))
-        password = st.text_input(tr('Password'), type="password")
-        submitted = st.form_submit_button(tr('Sign In'))
+        email = st.text_input(tr("Email"))
+        password = st.text_input(tr("Password"), type="password")
+        submitted = st.form_submit_button(tr("Sign In"))
         
     if submitted:
         user = get_user_by_email(email)
         if not user or user["password_hash"] != hash_password(password):
-            st.error(tr('Incorrect email or password. Please try again.'))
+            st.error(tr("Incorrect email or password. Please try again."))
             return
         st.session_state.user = {k: user[k] for k in ["id","email","name","role"]}
         st.success(f"Welcome, {user['name']}!")
 
 
 def signup_form():
-    st.subheader(tr('Create Account'))
+    st.subheader(tr("Create Account"))
     with st.form("signup_form"):
-        name = st.text_input(tr('Full name'))
-        email = st.text_input(tr('Email'))
-        role = st.selectbox(tr('Role'), ["tenant","landlord"], format_func=lambda x: x.capitalize())
-        password = st.text_input(tr('Password'), type="password")
-        password2 = st.text_input(tr('Confirm password'), type="password")
-        submitted = st.form_submit_button(tr('Create Account'))
+        name = st.text_input(tr("Full name"))
+        email = st.text_input(tr("Email"))
+        role = st.selectbox(tr("Role"), ["tenant","landlord"], format_func=lambda x: x.capitalize())
+        password = st.text_input(tr("Password"), type="password")
+        password2 = st.text_input(tr("Confirm password"), type="password")
+        submitted = st.form_submit_button(tr("Create Account"))
     if submitted:
         if not name.strip():
-            st.error(tr('Please enter your full name.'))
+            st.error(tr("Please enter your full name."))
             return
         if not is_valid_email(email):
-            st.error(tr('Please enter a valid email address.'))
+            st.error(tr("Please enter a valid email address."))
             return
         if password != password2:
-            st.error(tr('Passwords do not match. Please try again.'))
+            st.error(tr("Passwords do not match. Please try again."))
             return
         if get_user_by_email(email):
-            st.error(tr('This email is already registered.'))
+            st.error(tr("This email is already registered."))
             return
         create_user(email, name, password, role)
-        st.success(tr('Your account has been created. Please sign in to continue.'))
+        st.success(tr("Your account has been created. Please sign in to continue."))
         # 🔁 redirect back to landing/login
         st.session_state.signup_done = True
         st.rerun()
@@ -499,14 +490,14 @@ def auth_gate():
 
     # If user just signed up, show a one-time success + only the Login form
     if st.session_state.get("signup_done"):
-        st.success(tr('Your account has been created — please sign in.'))
+        st.success(tr("Your account has been created — please sign in."))
         login_form()
         # reset so it doesn't persist across reruns
         st.session_state.signup_done = False
         return
 
     # Default: both tabs
-    tab1, tab2 = st.tabs([tr('Sign In'),tr('Create Account')])
+    tab1, tab2 = st.tabs([tr("Sign In"),tr("Create Account")])
     with tab1:
         login_form()
     with tab2:
@@ -515,14 +506,13 @@ def auth_gate():
 
 
 def logout_button():
-    if st.button(tr('Sign Out')):
+    if st.button(tr("Sign Out")):
         st.session_state.user = None
         st.rerun()
 
 # ---------- Tenant data helpers ----------
 import os
 from pathlib import Path
-from utils_vault import encrypt_bytes, decrypt_bytes, sha256_bytes
 
 UPLOAD_DIR = Path("uploads") / "contracts"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -544,7 +534,6 @@ def get_contract_by_token(token: str):
         return dict(zip(keys, row))
     return None
 
-
 def save_contract_upload(token: str, tenant_id: int, uploaded_file) -> tuple[bool, str]:
     req = get_reference_request_by_token(token)
     if not req:
@@ -558,30 +547,23 @@ def save_contract_upload(token: str, tenant_id: int, uploaded_file) -> tuple[boo
     if ext not in allowed_exts:
         return False, "Only PDF, PNG, JPG, JPEG, or WEBP files are allowed."
 
-    # Read bytes
+    # Size (max 15 MB)
     try:
-        raw = uploaded_file.getbuffer()
-        data = bytes(raw)
-        size = len(data)
+        size = len(uploaded_file.getbuffer())
     except Exception:
+        # fallback
         data = uploaded_file.read()
         size = len(data)
-
+        uploaded_file = type("Tmp", (), {"read": lambda self=data: self, "type": "application/octet-stream"})()
     if size > 15 * 1024 * 1024:
         return False, "File too large (max 15 MB)."
 
-    # Encrypt before storing (Data Vault)
-    from utils_vault import encrypt_bytes, sha256_bytes
-    ciphertext = encrypt_bytes(data)
-    digest = sha256_bytes(data)
-
-    # Save encrypted blob under uploads/contracts/<token>/<filename>.bin
+    # Save file under uploads/contracts/<token>/<filename>
     folder = UPLOAD_DIR / token
     folder.mkdir(parents=True, exist_ok=True)
-    bin_name = name + ".bin"
-    path = folder / bin_name
+    path = folder / name
     with open(path, "wb") as f:
-        f.write(ciphertext)
+        f.write(uploaded_file.read())
 
     now = datetime.utcnow().isoformat()
     cur = conn.cursor()
@@ -591,8 +573,7 @@ def save_contract_upload(token: str, tenant_id: int, uploaded_file) -> tuple[boo
             """
             UPDATE reference_contracts
                SET filename=?, content_type=?, path=?, size_bytes=?,
-                   uploaded_at=?, status='pending', status_updated_at=?, status_by=NULL,
-                   consent_status='locked'
+                   uploaded_at=?, status='pending', status_updated_at=?, status_by=NULL
              WHERE token=?
             """,
             (name, getattr(uploaded_file, "type", None) or "application/octet-stream",
@@ -602,16 +583,14 @@ def save_contract_upload(token: str, tenant_id: int, uploaded_file) -> tuple[boo
         cur.execute(
             """
             INSERT INTO reference_contracts(token, tenant_id, filename, content_type, path, size_bytes,
-                                            status, status_updated_at, status_by, uploaded_at, consent_status)
-            VALUES (?,?,?,?,?,?, 'pending', ?, NULL, ?, 'locked')
+                                            status, status_updated_at, status_by, uploaded_at)
+            VALUES (?,?,?,?,?,?, 'pending', ?, NULL, ?)
             """,
             (token, tenant_id, name, getattr(uploaded_file, "type", None) or "application/octet-stream",
              str(path), size, now, now),
         )
     conn.commit()
     return True, "Uploaded."
-
-
 
 
 def set_contract_status(token: str, status: str, by_email: str) -> tuple[bool, str]:
@@ -621,13 +600,7 @@ def set_contract_status(token: str, status: str, by_email: str) -> tuple[bool, s
     if not get_contract_by_token(token):
         return False, "No contract uploaded for this request."
 
-    # Require landlord consent before any verification
     cur = conn.cursor()
-    row = cur.execute("SELECT consent_status FROM reference_contracts WHERE token=?", (token,)).fetchone()
-    consent = (row[0] if row else "locked")
-    if consent != "consented" and status == "verified":
-        return False, "Cannot verify: landlord consent is required."
-
     cur.execute(
         "UPDATE reference_contracts SET status=?, status_updated_at=?, status_by=? WHERE token=?",
         (status, datetime.utcnow().isoformat(), by_email, token),
@@ -641,14 +614,15 @@ def set_contract_status(token: str, status: str, by_email: str) -> tuple[bool, s
     return True, "Status updated."
 
 
-
 def contract_status_badge(status: str) -> str:
     s = (status or "pending").lower()
     if s == "verified":
-        return tr('✅ Verified Contract')
+        return tr("✅ Verified Contract")
     if s == "rejected":
-        return tr('❌ Rejected Contract')
-    return tr('⏳ Pending Review')
+        return tr("❌ Rejected Contract")
+    return tr("⏳ Pending Review")
+
+
 
 def load_tenant_profile(tenant_id: int):
     cur = conn.cursor()
@@ -773,7 +747,6 @@ def promote_reference_if_ready(token: str) -> bool:
     return True
 
 
-
 def mark_reference_completed(token: str, confirm_landlord: bool, score: int,
                              paid_on_time: bool, utilities_unpaid: bool,
                              good_condition: bool, comments: str | None):
@@ -801,11 +774,6 @@ def mark_reference_completed(token: str, confirm_landlord: bool, score: int,
             token,
         ),
     )
-
-    # If a contract exists for this token and is still locked, flip to 'consented' upon landlord's confirmation
-    if confirm_landlord and contract:
-        cur.execute("UPDATE reference_contracts SET consent_status='consented' WHERE token=? AND consent_status='locked'", (token,))
-
     conn.commit()
 
 def list_reference_requests_global(status: str | None = None):
@@ -948,29 +916,29 @@ def email_reference_request(tenant_name: str, tenant_email: str, landlord_email:
 # ---------- Landlord Reference Portal (public) ----------
 
 def reference_portal(token: str):
-    st.title(tr('🏠 RentRight — Landlord Reference Portal'))
+    st.title(tr("🏠 RentRight — Landlord Reference Portal"))
     data = get_reference_request_by_token(token)
     if not data:
-        st.error(tr('Invalid or expired reference token.'))
+        st.error(tr("Invalid or expired reference token."))
         return
 
     if data["status"] == "completed":
-        st.success(tr('This reference has already been submitted. Thank you!'))
+        st.success(tr("This reference has already been submitted. Thank you!"))
         st.stop()
 
     st.info(f"Reference for Tenant ID #{data['tenant_id']} — sent to {data['landlord_email']}")
     with st.form("reference_form"):
-        confirm = st.checkbox(tr('I confirm I was the landlord for this tenant.'))
-        score = st.slider(tr('Overall tenant score'), min_value=1, max_value=10, value=8)
-        paid_on_time = st.radio(tr('Did the tenant pay on time?'), ["Yes","No"], horizontal=True)
-        utilities_unpaid = st.radio(tr('Did the tenant leave utilities unpaid?'), ["No","Yes"], horizontal=True)
-        good_condition = st.radio(tr('Did the tenant leave the apartment in good condition?'), ["Yes","No"], horizontal=True)
-        comments = st.text_area(tr('Optional comments'))
-        submit = st.form_submit_button(tr('Submit Reference'))
+        confirm = st.checkbox(tr("I confirm I was the landlord for this tenant."))
+        score = st.slider(tr("Overall tenant score"), min_value=1, max_value=10, value=8)
+        paid_on_time = st.radio(tr("Did the tenant pay on time?"), ["Yes","No"], horizontal=True)
+        utilities_unpaid = st.radio(tr("Did the tenant leave utilities unpaid?"), ["No","Yes"], horizontal=True)
+        good_condition = st.radio(tr("Did the tenant leave the apartment in good condition?"), ["Yes","No"], horizontal=True)
+        comments = st.text_area(tr("Optional comments"))
+        submit = st.form_submit_button(tr("Submit Reference"))
 
     if submit:
         if not confirm:
-            st.error(tr('Please confirm you were the landlord.'))
+            st.error(tr("Please confirm you were the landlord."))
             return
         mark_reference_completed(
             token,
@@ -984,57 +952,13 @@ def reference_portal(token: str):
         st.success("Reference submitted successfully. Thank you!")
 
 
-
-def cleanup_old_contracts(days_locked: int = 30, days_rejected: int = 30):
-    """Delete encrypted blobs for expired locked/rejected contracts and mark as DELETED in place (path left dangling)."""
-    import os
-    from datetime import datetime, timedelta
-    cur = conn.cursor()
-    cutoff_locked   = (datetime.utcnow() - timedelta(days=days_locked)).isoformat()
-    cutoff_rejected = (datetime.utcnow() - timedelta(days=days_rejected)).isoformat()
-
-    # Locked & old
-    rows = cur.execute("""
-        SELECT token, path, uploaded_at FROM reference_contracts
-        WHERE consent_status='locked' AND uploaded_at < ?
-    """, (cutoff_locked,)).fetchall()
-    for token, path, up_at in rows:
-        try:
-            if path and os.path.exists(path):
-                os.remove(path)
-        except Exception:
-            pass
-        # Mark as deleted by clearing path
-        cur.execute("UPDATE reference_contracts SET path='', status='rejected' WHERE token=?", (token,))
-
-    # Rejected & old
-    rows = cur.execute("""
-        SELECT token, path, uploaded_at FROM reference_contracts
-        WHERE status='rejected' AND uploaded_at < ?
-    """, (cutoff_rejected,)).fetchall()
-    for token, path, up_at in rows:
-        try:
-            if path and os.path.exists(path):
-                os.remove(path)
-        except Exception:
-            pass
-        cur.execute("UPDATE reference_contracts SET path='' WHERE token=?", (token,))
-
-    conn.commit()
-
-
 def admin_dashboard():
-    # periodic cleanup on admin view
-    try:
-        cleanup_old_contracts()
-    except Exception:
-        pass
-    st.header(tr('Administrator Dashboard'))
+    st.header(tr("Administrator Dashboard"))
     st.caption(f"Logged in as {st.session_state.user['email']}")
 
     # ---------------- Settings moved from sidebar ----------------
-    with st.expander(tr('Email & App Settings')):
-        st.subheader(tr('Email Settings (SMTP)'))
+    with st.expander(tr("Email & App Settings")):
+        st.subheader(tr("Email Settings (SMTP)"))
         st.session_state.smtp_host = st.text_input("SMTP host", value=st.session_state.get("smtp_host", ""))
         st.session_state.smtp_port = st.number_input("SMTP port", value=int(st.session_state.get("smtp_port", 587)))
         st.session_state.smtp_user = st.text_input("SMTP username", value=st.session_state.get("smtp_user", ""))
@@ -1043,21 +967,21 @@ def admin_dashboard():
         st.session_state.smtp_tls = st.checkbox("Use TLS", value=st.session_state.get("smtp_tls", True))
 
         st.markdown("---")
-        st.subheader(tr('App Base URL'))
+        st.subheader(tr("App Base URL"))
         st.session_state.app_base_url = st.text_input(
-            tr('Base URL for Links'),
+            tr("Base URL for Links"),
             value=st.session_state.get("app_base_url", ""),
             help="e.g., https://yourdomain.com"
         )
                 # --- SMTP quick test ---
         st.markdown("---")
-        st.caption(tr('Send Test Email'))
+        st.caption(tr("Send Test Email"))
         test_to = st.text_input(
-            tr('Send test to'),
+            tr("Send test to"),
             value=st.session_state.get("smtp_user", ""),
             key="admin_test_to",
         )
-        if st.button(tr('Send test email'), key="admin_send_test_email"):
+        if st.button(tr("Send test email"), key="admin_send_test_email"):
             try:
                 ok, msg = send_email_smtp(
                     to_email=test_to,
@@ -1088,14 +1012,14 @@ def admin_dashboard():
                     ok, msg = False, f"{type(e).__name__}: {e}"
 
             if ok:
-                st.success(tr('Test email sent successfully.'))
+                st.success(tr("Test email sent successfully."))
             else:
-                st.error(f"{tr('Failed to send email:')} {msg}")
+                st.error(f"{tr("Failed to send email:")} {msg}")
 
     st.markdown("---")
 
     # ---------------- Pending references management ----------------
-    st.subheader(tr('Pending References (All Tenants)'))
+    st.subheader(tr("Pending References (All Tenants)"))
 
     # Pull everything, then compute effective status using contract state
     all_reqs = list_reference_requests_global()
@@ -1110,13 +1034,13 @@ def admin_dashboard():
     c1, c2, c3 = st.columns(3)
     c1.metric("Pending (effective)", len(pending_reqs))
     c2.metric("Completed (effective)", len(completed_reqs))
-    c3.metric(tr('Cancelled'), len(cancelled_reqs))
+    c3.metric(tr("Cancelled"), len(cancelled_reqs))
 
-    tab_pending, tab_completed, tab_cancelled = st.tabs([tr('Pending'), tr('Completed'), tr('Cancelled')])
+    tab_pending, tab_completed, tab_cancelled = st.tabs([tr("Pending"), tr("Completed"), tr("Cancelled")])
 
     def render_admin_reqs(reqs, prefix: str):
         if not reqs:
-            st.info(tr('No requests available.'))
+            st.info(tr("No requests available."))
             return
 
         for (token, tenant_id, landlord_email, created_at, status, score) in reqs:
@@ -1150,37 +1074,30 @@ def admin_dashboard():
 
 
                 link = build_reference_link(token)
-                st.text_input(tr('Reference Link'), value=link, key=f"{prefix}_link_{token}", disabled=True)
+                st.text_input(tr("Reference Link"), value=link, key=f"{prefix}_link_{token}", disabled=True)
 
                 # --- Contract section ---
                 contract = get_contract_by_token(token)
                 if contract:
-                    consent_row = conn.cursor().execute("SELECT consent_status FROM reference_contracts WHERE token=?", (token,)).fetchone()
-                    consent_badge = f"Consent: {consent_row[0] if consent_row else 'locked'}"
-                    st.markdown(f"**Contract:** {contract['filename']} · {contract_status_badge(contract['status'])} · {consent_badge}")
+                    st.markdown(f"**Contract:** {contract['filename']} · {contract_status_badge(contract['status'])}")
                     st.caption(
                         f"Uploaded: {contract['uploaded_at']} • "
                         f"Last status update: {contract['status_updated_at'] or '—'}"
                         + (f" • by {contract['status_by']}" if contract['status_by'] else "")
                     )
                     try:
-                        data_plain = load_contract_plaintext(token)
-                        if data_plain is None:
-                            st.warning("Contract is locked (awaiting landlord consent) or unavailable.")
-                        else:
+                        with open(contract["path"], "rb") as f:
                             st.download_button(
-                                tr('Download Contract'),
-                                data=data_plain,
-                                file_name=contract['filename'],
-                                mime=contract['content_type'],
+                                tr("Download Contract"),
+                                data=f.read(),
+                                file_name=contract["filename"],
+                                mime=contract["content_type"],
                                 key=f"{prefix}_dl_{token}",
                             )
                     except Exception as e:
                         st.warning(f"Unable to read the saved file: {e}")
                 else:
-                    st.caption(tr('No contract uploaded yet.'))
-
-
+                    st.caption(tr("No contract uploaded yet."))
 
                 # --- Admin actions ---
                 # --- Admin actions (conditional) ---
@@ -1190,39 +1107,39 @@ def admin_dashboard():
                 show_cancel = (str(final_status).lower() != "cancelled")
 
                 if show_verify:
-                    if ac1.button(tr('✅ Verify Contract'), key=f"{prefix}_verify_{token}"):
+                    if ac1.button(tr("✅ Verify Contract"), key=f"{prefix}_verify_{token}"):
                         ok, msg = set_contract_status(token, "verified", st.session_state.user["email"])
                         if ok:
                             promote_reference_if_ready(token)  # keep your existing promotion
-                            st.success(tr('Contract verified successfully.'))
+                            st.success(tr("Contract verified successfully."))
                             st.rerun()
                         else:
                             st.error(msg)
                 else:
-                    ac1.caption(tr('Already completed — no verification needed.'))
+                    ac1.caption(tr("Already completed — no verification needed."))
 
                 if show_cancel:
-                    if ac2.button(tr('Cancel Reference'), key=f"{prefix}_cancel_{token}"):
+                    if ac2.button(tr("Cancel Reference"), key=f"{prefix}_cancel_{token}"):
                         cancel_reference_request(token)
-                        st.warning(tr('Reference cancelled.'))
+                        st.warning(tr("Reference cancelled."))
                         st.rerun()
                 else:
-                    ac2.caption(tr('Already cancelled.'))
+                    ac2.caption(tr("Already cancelled."))
 
                 # ac1, ac2 = st.columns(2)
-                # if ac1.button(tr('✅ Verify Contract'), key=f"{prefix}_verify_{token}"):
+                # if ac1.button(tr("✅ Verify Contract"), key=f"{prefix}_verify_{token}"):
                 #     ok, msg = set_contract_status(token, "verified", st.session_state.user["email"])
                 #     if ok:
                 #         # Try to promote to completed if the landlord already submitted the reference
                 #         promote_reference_if_ready(token)
-                #         st.success(tr('Contract verified successfully.'))
+                #         st.success(tr("Contract verified successfully."))
                 #         st.rerun()
                 #     else:
                 #         st.error(msg)
 
-                # if ac2.button(tr('Cancel Reference'), key=f"{prefix}_cancel_{token}"):
+                # if ac2.button(tr("Cancel Reference"), key=f"{prefix}_cancel_{token}"):
                 #     cancel_reference_request(token)
-                #     st.warning(tr('Reference cancelled.'))
+                #     st.warning(tr("Reference cancelled."))
                 #     st.rerun()
 
 
@@ -1243,22 +1160,22 @@ def tenant_dashboard():
     # Header with a visible Sign Out button on the main page
     col_h1, col_h2 = st.columns([4, 1])
     with col_h1:
-        st.header(tr('Tenant Dashboard'))
+        st.header(tr("Tenant Dashboard"))
     with col_h2:
         st.write("")
         st.write("")
         logout_button()
 
     # === Future landlord email ===
-    st.subheader(tr('Future Landlords (Contacts)'))
+    st.subheader(tr("Future Landlords (Contacts)"))
 
     
     with st.form("future_landlords_add_form"):
-        new_fl_email = st.text_input(tr('Enter a landlord’s email address'))
-        add_fl = st.form_submit_button(tr('Add Contact'))
+        new_fl_email = st.text_input(tr("Enter a landlord’s email address"))
+        add_fl = st.form_submit_button(tr("Add Contact"))
     if add_fl:
         if not new_fl_email or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", new_fl_email):
-            st.error(tr('Please enter a valid email address.'))
+            st.error(tr("Please enter a valid email address."))
         else:
             try:
                 # 1) Save contact
@@ -1271,12 +1188,12 @@ def tenant_dashboard():
                     st.session_state.user["email"],
                 )
                 if ok:
-                    st.success(tr('Contact added and invitation sent successfully.'))
+                    st.success(tr("Contact added and invitation sent successfully."))
                     st.rerun()  # refresh list to show 'Invited' status
                 else:
                     st.warning(f"Contact added, but the email could not be sent: {msg}")
             except Exception as e:
-                st.warning(f"{tr('Unable to add contact:')} {e}")
+                st.warning(f"{tr("Unable to add contact:")} {e}")
 
 
     # List + actions (send connection / remove)
@@ -1288,10 +1205,10 @@ def tenant_dashboard():
                 cols[0].markdown(f"**{fl_email}**")
                
                 if invited:
-                    cols[2].success(tr('Invited'))
+                    cols[2].success(tr("Invited"))
              
                 else:
-                    if cols[2].button(tr('Send Invitation'), key=f"invite_fl_{cid}"):
+                    if cols[2].button(tr("Send Invitation"), key=f"invite_fl_{cid}"):
                         ok, msg = invite_future_landlord(
                             st.session_state.user["id"],
                             fl_email,
@@ -1299,45 +1216,45 @@ def tenant_dashboard():
                             st.session_state.user["email"],
                         )
                         if ok:
-                            st.success(tr('Invitation sent successfully.'))
+                            st.success(tr("Invitation sent successfully."))
                             st.rerun()
                         else:
                             st.error(f"Unable to send invitation: {msg}")
-                    if cols[3].button(tr('Remove'), key=f"remove_fl_{cid}"):
+                    if cols[3].button(tr("Remove"), key=f"remove_fl_{cid}"):
                         remove_future_landlord_contact(cid, st.session_state.user["id"])
-                        st.info(tr('Contact removed.'))
+                        st.info(tr("Contact removed."))
                         st.rerun()
     else:
-        st.caption(tr('No future landlord contacts yet.'))
+        st.caption(tr("No future landlord contacts yet."))
 
     st.divider()
     
     # === Previous landlords + reference requests ===
-    st.subheader(tr('Previous Landlords and References'))
+    st.subheader(tr("Previous Landlords and References"))
     with st.form("previous_landlord_form"):
         col1, col2 = st.columns([1, 1])
         with col1:
-            pl_email = st.text_input(tr('Email'))
-            pl_afm = st.text_input(tr('Tax ID (9 digits)'))
+            pl_email = st.text_input(tr("Email"))
+            pl_afm = st.text_input(tr("Tax ID (9 digits)"))
         with col2:
-            pl_name = st.text_input(tr('Name'))
-            pl_address = st.text_input(tr('Address'))
-        add = st.form_submit_button(tr('Add Previous Landlord'))
+            pl_name = st.text_input(tr("Name"))
+            pl_address = st.text_input(tr("Address"))
+        add = st.form_submit_button(tr("Add Previous Landlord"))
     if add:
         if not (pl_email and is_valid_email(pl_email)):
-            st.error(tr('Please enter a valid email address.'))
+            st.error(tr("Please enter a valid email address."))
         elif not is_valid_afm(pl_afm):
-            st.error(tr('Tax ID must be exactly 9 digits.'))
+            st.error(tr("Tax ID must be exactly 9 digits."))
         elif not pl_name.strip():
-            st.error(tr('Please enter your full name.'))
+            st.error(tr("Please enter your full name."))
         elif not pl_address.strip():
-            st.error(tr('Please enter the landlord’s address.'))
+            st.error(tr("Please enter the landlord’s address."))
         else:
             add_previous_landlord(st.session_state.user["id"], pl_email, pl_afm, pl_name, pl_address)
-            st.success(tr('Previous landlord added successfully.'))
+            st.success(tr("Previous landlord added successfully."))
 
     rows = list_previous_landlords(st.session_state.user["id"]) or []
-    st.subheader(tr('All Reference Requests'))
+    st.subheader(tr("All Reference Requests"))
     if rows:
         for (pid, email, afm, name, address, created_at) in rows:
             with st.expander(f"{name} • {email}"):
@@ -1346,14 +1263,14 @@ def tenant_dashboard():
 
                 c1, c2 = st.columns([1, 2])
                 with c1:
-                    if st.button(tr('Request Reference'), key=f"req_{pid}"):
+                    if st.button(tr("Request Reference"), key=f"req_{pid}"):
                         rec = create_reference_request(st.session_state.user["id"], pid, email)
                         link = build_reference_link(rec["token"])
                         ok, msg = email_reference_request(
                             st.session_state.user["name"], st.session_state.user["email"], email, link
                         )
                         if ok:
-                            st.success(tr('Reference request sent successfully by email.'))
+                            st.success(tr("Reference request sent successfully by email."))
                         else:
                             st.warning(f"Email delivery failed ({msg}). Please share this link manually:")
                             st.code(link)
@@ -1379,87 +1296,78 @@ def tenant_dashboard():
                             # --- Contract upload / status per request token ---
                             contract = get_contract_by_token(tok)
 
-                            
                             # NEW guard: when verified/completed, hide any upload UI
-                            if str(final_status).lower() == "completed":
+                            if str(final_status).lower() == tr("completed"):
                                 if contract:
-                                    st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract['status'])}")
+                                    st.markdown(f"**{tr("Contract Status:")}** {contract_status_badge(contract['status'])}")
+
                                     # Allow download only (no replace)
                                     try:
-                                        data_plain = load_contract_plaintext(tok)
-                                        if data_plain is None:
-                                            st.warning("Contract is locked (awaiting landlord consent) or unavailable.")
-                                        else:
+                                        with open(contract["path"], "rb") as f:
                                             st.download_button(
-                                                tr('Download Contract'),
-                                                data=data_plain,
-                                                file_name=contract['filename'],
-                                                mime=contract.get('content_type') or contract.get('mime_type'),
+                                                tr("Download Contract"),
+                                                data=f.read(),
+                                                file_name=contract["filename"],
+                                                mime=contract.get("content_type") or contract.get("mime_type"),
                                                 key=f"dl_{tok}",
                                             )
                                     except Exception as e:
                                         st.warning(f"Unable to read the saved file: {e}")
                                 else:
-                                    st.markdown(tr('Contract verified — no file upload needed.'))
+                                    st.markdown(tr("Contract verified — no file upload needed."))
                                 # No uploader shown when completed
                             else:
                                 # Not completed yet → show normal upload/replace flow
                                 if contract:
-                                    consent_row2 = conn.cursor().execute("SELECT consent_status FROM reference_contracts WHERE token=?", (tok,)).fetchone()
-                                    consent_badge2 = f"Consent: {consent_row2[0] if consent_row2 else 'locked'}"
-                                    st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract['status'])} · {consent_badge2}")
+                                    st.markdown(f"**{tr("Contract Status:")}** {contract_status_badge(contract['status'])}")
                                     st.caption(
                                         f"Uploaded: {contract['uploaded_at']} • "
                                         f"Last status update: {contract['status_updated_at'] or '—'}"
                                         + (f" • by {contract['status_by']}" if contract.get('status_by') else "")
                                     )
                                     try:
-                                        data_plain = load_contract_plaintext(tok)
-                                        if data_plain is None:
-                                            st.warning("Contract is locked (awaiting landlord consent) or unavailable.")
-                                        else:
+                                        with open(contract["path"], "rb") as f:
                                             st.download_button(
-                                                tr('Download Contract'),
-                                                data=data_plain,
-                                                file_name=contract['filename'],
-                                                mime=contract.get('content_type') or contract.get('mime_type'),
+                                                tr("Download Contract"),
+                                                data=f.read(),
+                                                file_name=contract["filename"],
+                                                mime=contract.get("content_type") or contract.get("mime_type"),
                                                 key=f"dl_{tok}",
                                             )
                                     except Exception as e:
                                         st.warning(f"Unable to read the saved file: {e}")
 
                                     uploaded = st.file_uploader(
-                                        tr('Replace Tenancy Contract (PDF or Image)'),
+                                        tr("Replace Tenancy Contract (PDF or Image)"),
                                         type=["pdf", "png", "jpg", "jpeg", "webp"],
                                         key=f"up_{tok}",
                                     )
                                     if uploaded is not None:
                                         ok, msg = save_contract_upload(tok, st.session_state.user["id"], uploaded)
                                         if ok:
-                                            st.success(tr('Contract uploaded. Status reset to Pending Review.'))
+                                            st.success(tr("Contract uploaded. Status reset to Pending Review."))
                                             st.rerun()
                                         else:
                                             st.error(msg)
                                 else:
-                                    st.markdown(f"**{tr('Contract Status:')}** {tr('⏳ Pending Review')} {tr('(no file yet)')}")
+                                    st.markdown(f"**{tr("Contract Status:")}** {tr("⏳ Pending Review")} {tr("(no file yet)")}")
                                     uploaded = st.file_uploader(
-                                        tr('Upload Tenancy Contract (PDF or Image)'),
+                                        tr("Upload Tenancy Contract (PDF or Image)"),
                                         type=["pdf", "png", "jpg", "jpeg", "webp"],
                                         key=f"up_{tok}",
                                     )
                                     if uploaded is not None:
                                         ok, msg = save_contract_upload(tok, st.session_state.user["id"], uploaded)
                                         if ok:
-                                            st.success(tr('Contract uploaded. Status set to Pending Review.'))
+                                            st.success(tr("Contract uploaded. Status set to Pending Review."))
                                             st.rerun()
                                         else:
                                             st.error(msg)
                             # --- End contract block ---
-
                     else:
-                        st.caption(tr('No reference requests have been created yet.'))
+                        st.caption(tr("No reference requests have been created yet."))
     else:
-        st.info(tr('No previous landlords added yet.'))
+        st.info(tr("No previous landlords added yet."))
 
     st.divider()
 
@@ -1471,7 +1379,7 @@ def landlord_dashboard():
     
     col_h1, col_h2 = st.columns([4, 1])
     with col_h1:
-        st.header(tr('Landlord Dashboard'))
+        st.header(tr("Landlord Dashboard"))
     with col_h2:
         st.write("")
         st.write("")
@@ -1481,10 +1389,10 @@ def landlord_dashboard():
     st.caption(f"Logged in as {landlord_email}")
 
     # === Prospective tenants who listed this landlord ===
-    st.subheader(tr('Prospective Tenants (Listed You as Future Landlord)'))
+    st.subheader(tr("Prospective Tenants (Listed You as Future Landlord)"))
     prospects = list_prospective_tenants(landlord_email)
     if not prospects:
-        st.info(tr('No tenants have listed you as a future landlord yet.'))
+        st.info(tr("No tenants have listed you as a future landlord yet."))
     else:
         for (tid, tname, temail, updated_at) in prospects:
             with st.container(border=True):
@@ -1532,7 +1440,7 @@ def landlord_dashboard():
     st.divider()
 
     # === Reference requests that were sent to this landlord ===
-    st.subheader(tr('Reference Requests Sent To You'))
+    st.subheader(tr("Reference Requests Sent To You"))
 
     # Quick stats
     all_reqs = list_reference_requests_for_landlord(landlord_email)
@@ -1541,15 +1449,15 @@ def landlord_dashboard():
     cancelled_reqs = [r for r in all_reqs if r[3] == "cancelled"]
 
     c1, c2, c3 = st.columns(3)
-    c1.metric(tr('Pending'), len(pending_reqs))
-    c2.metric(tr('Completed'), len(completed_reqs))
-    c3.metric(tr('Cancelled'), len(cancelled_reqs))
+    c1.metric(tr("Pending"), len(pending_reqs))
+    c2.metric(tr("Completed"), len(completed_reqs))
+    c3.metric(tr("Cancelled"), len(cancelled_reqs))
 
-    tab_all, tab_pending, tab_completed, tab_cancelled = st.tabs([tr('All'), tr('Pending'), tr('Completed'), tr('Cancelled')])
+    tab_all, tab_pending, tab_completed, tab_cancelled = st.tabs([tr("All"), tr("Pending"), tr("Completed"), tr("Cancelled")])
 
     def render_requests(reqs, prefix: str):
         if not reqs:
-            st.info(tr('No requests found.'))
+            st.info(tr("No requests found."))
             return
 
         for (token, tenant_id, created_at, status, score) in reqs:
@@ -1563,46 +1471,46 @@ def landlord_dashboard():
                 cols[3].markdown(f"**Score:** {score if score is not None else '—'}")
 
                 link = build_reference_link(token)
-                st.text_input(tr('Reference Link'), value=link, key=f"{prefix}_link_{token}", disabled=True)
+                st.text_input(tr("Reference Link"), value=link, key=f"{prefix}_link_{token}", disabled=True)
 
                 if status == "pending":
                     # ❌ no key here
-                    with st.expander(tr('Respond Now')):
+                    with st.expander(tr("Respond Now")):
                         # forms use a positional key/name, not key=...
                         with st.form(f"{prefix}_landlord_response_{token}"):
                             confirm = st.checkbox(
-                                tr('I confirm I was the landlord for this tenant.'),
+                                tr("I confirm I was the landlord for this tenant."),
                                 key=f"{prefix}_confirm_{token}"
                             )
                             s = st.slider(
-                                tr('Overall tenant score'), 1, 10, 8,
+                                tr("Overall tenant score"), 1, 10, 8,
                                 key=f"{prefix}_score_{token}"
                             )
                             paid_on_time = st.radio(
-                                tr('Did the tenant pay on time?'), ["Yes","No"],
+                                tr("Did the tenant pay on time?"), ["Yes","No"],
                                 horizontal=True, key=f"{prefix}_paid_{token}"
                             )
                             utilities_unpaid = st.radio(
-                                tr('Did the tenant leave utilities unpaid?'), ["No","Yes"],
+                                tr("Did the tenant leave utilities unpaid?"), ["No","Yes"],
                                 horizontal=True, key=f"{prefix}_utilities_{token}"
                             )
                             good_condition = st.radio(
-                                tr('Did the tenant leave the apartment in good condition?'), ["Yes","No"],
+                                tr("Did the tenant leave the apartment in good condition?"), ["Yes","No"],
                                 horizontal=True, key=f"{prefix}_condition_{token}"
                             )
                             comments = st.text_area(
-                                tr('Optional comments'),
+                                tr("Optional comments"),
                                 key=f"{prefix}_comments_{token}"
                             )
 
                             col_a, col_b = st.columns([1,1])
                             # ❌ form_submit_button has no key=
-                            submit = col_a.form_submit_button(tr('Submit Reference'))
-                            cancel_btn = col_b.form_submit_button(tr('Not My Tenant / Cancel'))
+                            submit = col_a.form_submit_button(tr("Submit Reference"))
+                            cancel_btn = col_b.form_submit_button(tr("Not My Tenant / Cancel"))
 
                         if submit:
                             if not confirm:
-                                st.error(tr('Please confirm you were the landlord.'))
+                                st.error(tr("Please confirm you were the landlord."))
                             else:
                                 mark_reference_completed(
                                     token,
@@ -1613,17 +1521,17 @@ def landlord_dashboard():
                                     good_condition=(good_condition == "Yes"),
                                     comments=comments,
                                 )
-                                st.success(tr('Reference submitted successfully.'))
+                                st.success(tr("Reference submitted successfully."))
                                 st.rerun()
 
                         if cancel_btn:
                             cancel_reference_request(token)
-                            st.warning(tr('Request cancelled.'))
+                            st.warning(tr("Request cancelled."))
                             st.rerun()
 
                 elif status == "completed":
                     # ❌ no key here
-                    with st.expander(tr('View Submitted Reference')):
+                    with st.expander(tr("View Submitted Reference")):
                         details = get_reference_request_by_token(token)
                         if details:
                             st.write(f"Confirmed landlord: {'Yes' if details['confirm_landlord'] else 'No'}")
@@ -1676,23 +1584,3 @@ def main():
 if __name__ == "__main__":
     main()
 
-
-def load_contract_plaintext(token: str) -> bytes | None:
-    """Return decrypted contract bytes if consented; else None."""
-    contract = get_reference_request_by_token(token) and get_contract_by_token(token)
-    contract = get_contract_by_token(token)
-    if not contract:
-        return None
-    # Enforce landlord consent before allowing decryption
-    cur = conn.cursor()
-    row = cur.execute("SELECT consent_status FROM reference_contracts WHERE token=?", (token,)).fetchone()
-    consent = (row[0] if row else "locked")
-    if consent != "consented":
-        return None
-    try:
-        with open(contract["path"], "rb") as f:
-            cipher = f.read()
-        from utils_vault import decrypt_bytes
-        return decrypt_bytes(cipher)
-    except Exception:
-        return None
