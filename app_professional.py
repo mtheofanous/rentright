@@ -15,11 +15,41 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 import sqlite3
 
-@st.cache_resource
+import sqlite3
+
+@st.cache_resource(show_spinner=False)
 def get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
-    conn.row_factory = sqlite3.Row
-    return conn
+    # Resolve DB path safely
+    try:
+        db_path_val = st.secrets.get("DB_PATH", "data/app.db")
+    except Exception:
+        db_path_val = "data/app.db"
+    db_path_obj = Path(str(db_path_val)).expanduser()
+
+    # Avoid absolute unwritable paths on Streamlit Cloud; force relative if needed
+    if db_path_obj.is_absolute():
+        # Fallback to relative data/ if absolute path is suspicious
+        try:
+            # Make a relative path under current working dir, preserving filename
+            db_path_obj = Path("data") / db_path_obj.name
+        except Exception:
+            db_path_obj = Path("data/app.db")
+
+    # Ensure parent folder exists
+    try:
+        db_path_obj.parent.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        st.error(f"Cannot create DB folder '{db_path_obj.parent}': {type(e).__name__}: {e}")
+        raise
+
+    # Connect with short timeout so UI never hangs
+    try:
+        conn = sqlite3.connect(str(db_path_obj), check_same_thread=False, timeout=3)
+        conn.row_factory = sqlite3.Row
+        return conn
+    except Exception as e:
+        st.error(f"DB connect failed: {type(e).__name__}: {e}")
+        raise
 
 
 import sqlite3
