@@ -1634,8 +1634,8 @@ def landlord_dashboard():
                 cols[2].markdown(f"**Created:** {created_at}")
                 cols[3].markdown(f"**Score:** {score if score is not None else '—'}")
 
-                link = build_reference_link(token)
-                st.text_input(tr('Reference Link'), value=link, key=f"{prefix}_link_{token}", disabled=True)
+                # link = build_reference_link(token)
+                # st.text_input(tr('Reference Link'), value=link, key=f"{prefix}_link_{token}", disabled=True)
 
                 if status == "pending":
                     # ❌ no key here
