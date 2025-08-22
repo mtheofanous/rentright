@@ -38,7 +38,7 @@ def tr(s: str) -> str:
         # SMTP
         "Missing SMTP details: host, port, username, password, sender, or recipient.": "Λείπουν στοιχεία SMTP: host, port, όνομα χρήστη, κωδικός, αποστολέας ή παραλήπτης.",
         "Send Test Email": "Αποστολή Δοκιμαστικού Email",
-        tr('Send test to'): "Αποστολή δοκιμής σε",
+        "Send test to": "Αποστολή δοκιμής σε",
         "If you received this email, your SMTP configuration is working. ✅": "Αν λάβατε αυτό το email, η ρύθμιση SMTP λειτουργεί. ✅",
         "Test email sent successfully.": "Το δοκιμαστικό email στάλθηκε με επιτυχία.",
         "Failed to send email:": "Αποτυχία αποστολής email:",
@@ -224,23 +224,36 @@ def get_latest_reference_for_pair(tenant_id: int, prev_landlord_id: int):
         return None
     return {"token": row[0], "status": row[1], "created_at": row[2]}
 
+# === Storage locations (Streamlit Cloud: /mount/data is writable & persistent) ===
+from pathlib import Path
+import os
 
+DATA_ROOT = Path(os.environ.get("STREAMLIT_DATA_ROOT", "/mount/data")) / "rentright"
+DATA_ROOT.mkdir(parents=True, exist_ok=True)
 
-DB_PATH = st.secrets.get("DB_PATH", "rental_app.db")
+DB_PATH = str(Path(os.environ.get("DB_PATH", DATA_ROOT / "rental_app.db")))
+Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
 
-UPLOAD_DIR = Path("uploads") / "contracts"
+UPLOAD_DIR = DATA_ROOT / "uploads" / "contracts"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+
+# DB_PATH = st.secrets.get("DB_PATH", "rental_app.db")
+
+# UPLOAD_DIR = Path("uploads") / "contracts"
+# UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ---------- Utilities ----------
 @st.cache_resource
+
 def get_conn():
-    # one shared connection per process/session
     conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
-    # improve concurrent behavior
     conn.execute("PRAGMA journal_mode=WAL;")
-    conn.execute("PRAGMA busy_timeout=5000;")  # wait up to 5s if locked
+    conn.execute("PRAGMA busy_timeout=5000;")
+    conn.execute("PRAGMA foreign_keys=ON;")
     return conn
+
 
 
 @st.cache_resource
