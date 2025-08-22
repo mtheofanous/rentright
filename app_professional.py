@@ -38,7 +38,7 @@ def tr(s: str) -> str:
         # SMTP
         "Missing SMTP details: host, port, username, password, sender, or recipient.": "Λείπουν στοιχεία SMTP: host, port, όνομα χρήστη, κωδικός, αποστολέας ή παραλήπτης.",
         "Send Test Email": "Αποστολή Δοκιμαστικού Email",
-        tr('Send test to'): "Αποστολή δοκιμής σε",
+        "Send test to": "Αποστολή δοκιμής σε",
         "If you received this email, your SMTP configuration is working. ✅": "Αν λάβατε αυτό το email, η ρύθμιση SMTP λειτουργεί. ✅",
         "Test email sent successfully.": "Το δοκιμαστικό email στάλθηκε με επιτυχία.",
         "Failed to send email:": "Αποτυχία αποστολής email:",
@@ -320,6 +320,7 @@ def init_db():
             status_updated_at TEXT,
             status_by TEXT,
             uploaded_at TEXT NOT NULL,
+            consent_status TEXT NOT NULL DEFAULT 'locked', 
             FOREIGN KEY (tenant_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (token) REFERENCES reference_requests(token) ON DELETE CASCADE
         )
@@ -700,7 +701,26 @@ def delete_previous_landlord(entry_id: int, tenant_id: int):
     conn.commit()
 
 # ---------- References helpers ----------
-
+def load_contract_plaintext(token: str) -> bytes | None:
+    """Return decrypted contract bytes if consented; else None."""
+    contract = get_reference_request_by_token(token) and get_contract_by_token(token)
+    contract = get_contract_by_token(token)
+    if not contract:
+        return None
+    # Enforce landlord consent before allowing decryption
+    cur = conn.cursor()
+    row = cur.execute("SELECT consent_status FROM reference_contracts WHERE token=?", (token,)).fetchone()
+    consent = (row[0] if row else "locked")
+    if consent != "consented":
+        return None
+    try:
+        with open(contract["path"], "rb") as f:
+            cipher = f.read()
+        from utils_vault import decrypt_bytes
+        return decrypt_bytes(cipher)
+    except Exception:
+        return None
+    
 def generate_token() -> str:
     return uuid4().hex
 
@@ -1499,13 +1519,12 @@ def landlord_dashboard():
                     if status == "completed" and score is not None:
                         scores.append(score)
                 if len(scores) == 1:
-                    st.metric("Score", f"{scores:.1f}/10")
-                    
-
-                if len(scores) >= 2:  # only show if more than one reference
+                    st.metric("Score", f"{scores[0]:.1f}/10")
+                elif len(scores) >= 2:
                     avg = sum(scores) / len(scores)
                     st.metric("Average score", f"{avg:.1f}/10")
                     st.caption(f"Based on {len(scores)} completed references.")
+
 
                 # Show latest reference status per previous landlord for this tenant
                 refs = list_latest_references_for_tenant(tid)
@@ -1677,22 +1696,4 @@ if __name__ == "__main__":
     main()
 
 
-def load_contract_plaintext(token: str) -> bytes | None:
-    """Return decrypted contract bytes if consented; else None."""
-    contract = get_reference_request_by_token(token) and get_contract_by_token(token)
-    contract = get_contract_by_token(token)
-    if not contract:
-        return None
-    # Enforce landlord consent before allowing decryption
-    cur = conn.cursor()
-    row = cur.execute("SELECT consent_status FROM reference_contracts WHERE token=?", (token,)).fetchone()
-    consent = (row[0] if row else "locked")
-    if consent != "consented":
-        return None
-    try:
-        with open(contract["path"], "rb") as f:
-            cipher = f.read()
-        from utils_vault import decrypt_bytes
-        return decrypt_bytes(cipher)
-    except Exception:
-        return None
+
