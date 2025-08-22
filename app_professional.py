@@ -1334,7 +1334,7 @@ def tenant_dashboard():
     if fl_rows:
         for (cid, fl_email, created_at, invited, invited_at) in fl_rows:
             with st.container(border=True):
-                cols = st.columns([4,2,2,2])
+                cols = st.columns([4,2,3,2])
                 cols[0].markdown(f"**{fl_email}**")
                
                 if invited:
