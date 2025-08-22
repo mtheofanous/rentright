@@ -151,13 +151,13 @@ def render_topbar_language():
     with c2:
         choice = st.selectbox(
             "🌐 Language",
-            ["🇬🇧", "🇬🇷"],
+            ["ENG", "GR"],
             key="lang_flag",
             index=0 if st.session_state.get("lang","English")=="English" else 1,
             label_visibility="collapsed",
         )
         # Map flag back to language
-        st.session_state["lang"] = "English" if choice == "🇬🇧" else "Ελληνικά"
+        st.session_state["lang"] = "English" if choice == "ENG" else "Ελληνικά"
 render_topbar_language()
 # === End top-right language switcher (flags only) ===
 
