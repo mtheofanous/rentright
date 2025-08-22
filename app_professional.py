@@ -147,7 +147,7 @@ def tr(s: str) -> str:
 
 # === Top-right language switcher (flags only) ===
 def render_topbar_language():
-    c1, c2 = st.columns([9, 1])
+    c1, c2 = st.columns([9, 2])
     with c2:
         choice = st.selectbox(
             "🌐 Language",
@@ -279,13 +279,7 @@ def get_conn():
     conn.execute("PRAGMA synchronous=NORMAL;")
     conn.execute("PRAGMA busy_timeout=5000;")  # wait up to 5s if locked
     return conn
-# def get_conn():
-#     # one shared connection per process/session
-#     conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
-#     # improve concurrent behavior
-#     conn.execute("PRAGMA journal_mode=WAL;")
-#     conn.execute("PRAGMA busy_timeout=5000;")  # wait up to 5s if locked
-#     return conn
+
 
 
 @st.cache_resource
@@ -1281,23 +1275,6 @@ def admin_dashboard():
                         st.rerun()
                 else:
                     ac2.caption(tr('Already cancelled.'))
-
-                # ac1, ac2 = st.columns(2)
-                # if ac1.button(tr('✅ Verify Contract'), key=f"{prefix}_verify_{token}"):
-                #     ok, msg = set_contract_status(token, "verified", st.session_state.user["email"])
-                #     if ok:
-                #         # Try to promote to completed if the landlord already submitted the reference
-                #         promote_reference_if_ready(token)
-                #         st.success(tr('Contract verified successfully.'))
-                #         st.rerun()
-                #     else:
-                #         st.error(msg)
-
-                # if ac2.button(tr('Cancel Reference'), key=f"{prefix}_cancel_{token}"):
-                #     cancel_reference_request(token)
-                #     st.warning(tr('Reference cancelled.'))
-                #     st.rerun()
-
 
     with tab_pending:
         render_admin_reqs(pending_reqs, "admin_pending")
