@@ -8,6 +8,8 @@ from datetime import datetime
 from uuid import uuid4
 import os
 from pathlib import Path
+import tempfile
+
 from utils_vault import encrypt_bytes, decrypt_bytes, sha256_bytes
 
 # ⚠️ set_page_config must be the first Streamlit command
@@ -233,22 +235,57 @@ def get_latest_reference_for_pair(tenant_id: int, prev_landlord_id: int):
     return {"token": row[0], "status": row[1], "created_at": row[2]}
 
 
+# ---- 1. Define writable base ----
+WRITABLE_BASE = Path(
+    os.environ.get("STREAMLIT_DATA_DIR")
+    or "/mount/data" if Path("/mount/data").exists()
+    else tempfile.gettempdir()
+)
+WRITABLE_BASE.mkdir(parents=True, exist_ok=True)
 
-DB_PATH = "rental_app.db"
-
-UPLOAD_DIR = Path("uploads") / "contracts"
+# ---- 2. Define paths for DB + uploads ----
+DB_PATH = WRITABLE_BASE / "app.db"
+UPLOAD_DIR = WRITABLE_BASE / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+# (Optional sanity check)
+try:
+    (WRITABLE_BASE / ".write_test").write_text("ok", encoding="utf-8")
+    (WRITABLE_BASE / ".write_test").unlink(missing_ok=True)
+except Exception as e:
+    st.error(f"Base directory not writable: {WRITABLE_BASE}\n{e}")
+
+
+# DB_PATH = "rental_app.db"
+
+# UPLOAD_DIR = Path("uploads") / "contracts"
+# UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ---------- Utilities ----------
 @st.cache_resource
 def get_conn():
-    # one shared connection per process/session
+    # one shared connection per process/session (cache this with st.cache_resource if you like)
     conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
-    # improve concurrent behavior
-    conn.execute("PRAGMA journal_mode=WAL;")
+
+    # Try WAL, but gracefully fall back if the FS doesn't support it
+    try:
+        conn.execute("PRAGMA journal_mode=WAL;")
+    except sqlite3.OperationalError:
+        # Fallback for network/readonly-ish mounts
+        conn.execute("PRAGMA journal_mode=DELETE;")
+
+    # Reasonable defaults for stability
+    conn.execute("PRAGMA synchronous=NORMAL;")
     conn.execute("PRAGMA busy_timeout=5000;")  # wait up to 5s if locked
     return conn
+# def get_conn():
+#     # one shared connection per process/session
+#     conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
+#     # improve concurrent behavior
+#     conn.execute("PRAGMA journal_mode=WAL;")
+#     conn.execute("PRAGMA busy_timeout=5000;")  # wait up to 5s if locked
+#     return conn
 
 
 @st.cache_resource
@@ -529,12 +566,20 @@ def logout_button():
         st.rerun()
 
 # ---------- Tenant data helpers ----------
-import os
-from pathlib import Path
-from utils_vault import encrypt_bytes, decrypt_bytes, sha256_bytes
 
-UPLOAD_DIR = Path("uploads") / "contracts"
+# UPLOAD_DIR = Path("uploads") / "contracts"
+
+
+# Pick a writable base directory
+if Path("/mount/data").exists():
+    WRITABLE_BASE = Path("/mount/data")
+else:
+    WRITABLE_BASE = Path(tempfile.gettempdir())
+
+# Define uploads/contracts inside that base
+UPLOAD_DIR = WRITABLE_BASE / "uploads" / "contracts"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
 
 def safe_filename(name: str) -> str:
     base = os.path.basename(name or "contract")
