@@ -226,7 +226,7 @@ def get_latest_reference_for_pair(tenant_id: int, prev_landlord_id: int):
 
 
 
-DB_PATH = "rental_app.db"
+DB_PATH = st.secrets.get("DB_PATH", "rental_app.db")
 
 UPLOAD_DIR = Path("uploads") / "contracts"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -251,8 +251,17 @@ def ensure_contracts_consent_column(conn):
     if "consent_status" not in cols:
         cur.execute("ALTER TABLE reference_contracts ADD COLUMN consent_status TEXT NOT NULL DEFAULT 'locked'")
         conn.commit()
+        
+def ensure_consent_column(conn):
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(reference_contracts)")
+    cols = [r[1] for r in cur.fetchall()]
+    if "consent_status" not in cols:
+        cur.execute("ALTER TABLE reference_contracts ADD COLUMN consent_status TEXT NOT NULL DEFAULT 'locked'")
+        conn.commit()
 
-def init_db():
+
+def init_db(_schema_version: int = 2):
     conn = get_conn()
     cur = conn.cursor()
 
@@ -344,6 +353,11 @@ def init_db():
     return conn
 
 conn = init_db()
+
+try:
+    ensure_consent_column(conn)
+except Exception:
+    pass
 
 def add_future_landlord_contact(tenant_id: int, email: str):
     email = (email or "").strip().lower()
@@ -546,6 +560,10 @@ def get_contract_by_token(token: str):
 
 
 def save_contract_upload(token: str, tenant_id: int, uploaded_file) -> tuple[bool, str]:
+    try:
+        ensure_consent_column(conn)
+    except Exception:
+        pass
     req = get_reference_request_by_token(token)
     if not req:
         return False, "Reference request not found."
