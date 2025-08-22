@@ -1,6 +1,7 @@
 import streamlit as st
 from pathlib import Path
 import os
+import sqlite3
 
 # Load paths from secrets with safe defaults
 DB_PATH = st.secrets.get('DB_PATH', 'data/app.db')
@@ -13,9 +14,7 @@ if db_path_obj.parent and str(db_path_obj.parent) not in ('', '.'):
 DB_PATH = str(db_path_obj)
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-import sqlite3
 
-import sqlite3
 
 @st.cache_resource(show_spinner=False)
 def get_conn() -> sqlite3.Connection:
