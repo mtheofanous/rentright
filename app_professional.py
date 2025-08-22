@@ -16,11 +16,7 @@ st.set_page_config(page_title="RentRight", page_icon="🏠", layout="centered")
 if "lang" not in st.session_state:
     st.session_state["lang"] = "English"  # default
 
-def tr(s: str) -> str:
-    """Translate English UI text to Greek when needed."""
-    if st.session_state.get("lang") != "Ελληνικά":
-        return s
-    return {
+TRANSLATIONS_EL = {
         # Auth & common
         "Sign In": "Σύνδεση",
         "Create Account": "Δημιουργία Λογαριασμού",
@@ -129,8 +125,20 @@ def tr(s: str) -> str:
         "Landlord": "Ιδιοκτήτης",
         "Admin": "Διαχειριστής",
         "completed": "Ολοκληρώθηκε"
-    }.get(s, s)
+    }
 
+def tr(s: str) -> str:
+    """Translate string s to Greek if the UI language is Greek; otherwise return s."""
+    # 2) READ session_state safely. Do not create or modify it here.
+    try:
+        lang = st.session_state.get("lang", "English")
+    except Exception:
+        # In case this is executed before Streamlit fully initializes
+        lang = "English"
+
+    if isinstance(s, str) and lang.startswith("Ελλην"):
+        return TRANSLATIONS_EL.get(s, s)
+    return s
 
 # === End language utilities ===
 
