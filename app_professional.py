@@ -1311,6 +1311,11 @@ def tenant_dashboard():
 
     # === Future landlord email ===
     st.subheader(tr('Future Landlords (Contacts)'))
+    
+    # Gate email by requiring upload first
+    if "pending_upload_token" not in st.session_state:
+        st.session_state.pending_upload_token = {}  # maps prev_landlord_id -> token awaiting upload
+
 
     
     with st.form("future_landlords_add_form"):
@@ -1408,16 +1413,68 @@ def tenant_dashboard():
                 with c1:
                     if st.button(tr('Request Reference'), key=f"req_{pid}"):
                         rec = create_reference_request(st.session_state.user["id"], pid, email)
-                        link = build_reference_link(rec["token"])
-                        ok, msg = email_reference_request(
-                            st.session_state.user["name"], st.session_state.user["email"], email, link
-                        )
-                        if ok:
-                            st.success(tr('Reference request sent successfully by email.'))
-                        else:
-                            st.warning(f"Email delivery failed ({msg}). Please share this link manually:")
-                            st.code(link)
+                        st.session_state.pending_upload_token[pid] = rec["token"]
+                        st.info(tr('Please upload the tenancy contract first. The email will be sent after a successful upload.'))
+                        st.rerun()
+
+                # with c1:
+                #     if st.button(tr('Request Reference'), key=f"req_{pid}"):
+                #         rec = create_reference_request(st.session_state.user["id"], pid, email)
+                #         link = build_reference_link(rec["token"])
+                #         ok, msg = email_reference_request(
+                #             st.session_state.user["name"], st.session_state.user["email"], email, link
+                #         )
+                #         if ok:
+                #             st.success(tr('Reference request sent successfully by email.'))
+                #         else:
+                #             st.warning(f"Email delivery failed ({msg}). Please share this link manually:")
+                #             st.code(link)
                 with c2:
+                    # --- If there's a newly created request that needs upload first ---
+                    pend_tok = st.session_state.pending_upload_token.get(pid)
+                    if pend_tok:
+                        # If user already uploaded via the regular list below, detect and send email right away
+                        existing_contract = get_contract_by_token(pend_tok)
+
+                        if not existing_contract or not existing_contract.get("path"):
+                            st.markdown(f"**{tr('Contract Status:')}** {tr('(no file yet)')}")
+                            pre_uploaded = st.file_uploader(
+                                tr('Upload Tenancy Contract (PDF or Image)'),
+                                type=["pdf", "png", "jpg", "jpeg", "webp"],
+                                key=f"preup_{pend_tok}",
+                            )
+                            if pre_uploaded is not None:
+                                ok_u, msg_u = save_contract_upload(pend_tok, st.session_state.user["id"], pre_uploaded)
+                                if ok_u:
+                                    # Now that the contract is uploaded, send the email
+                                    link = build_reference_link(pend_tok)
+                                    ok_e, msg_e = email_reference_request(
+                                        st.session_state.user["name"], st.session_state.user["email"], email, link
+                                    )
+                                    if ok_e:
+                                        st.success(tr('Reference request sent successfully by email.'))
+                                    else:
+                                        st.warning(f"Email delivery failed ({msg_e}). {tr('Please share this link manually:')}")
+                                        st.code(link)
+                                    # Clear the pending state for this landlord and refresh
+                                    del st.session_state.pending_upload_token[pid]
+                                    st.rerun()
+                                else:
+                                    st.error(msg_u)
+                        else:
+                            # Contract already exists (maybe uploaded from the regular list); send email now
+                            link = build_reference_link(pend_tok)
+                            ok_e, msg_e = email_reference_request(
+                                st.session_state.user["name"], st.session_state.user["email"], email, link
+                            )
+                            if ok_e:
+                                st.success(tr('Reference request sent successfully by email.'))
+                            else:
+                                st.warning(f"Email delivery failed ({msg_e}). {tr('Please share this link manually:')}")
+                                st.code(link)
+                            del st.session_state.pending_upload_token[pid]
+                            st.rerun()
+
                     cur = conn.cursor()
                     cur.execute(
                         "SELECT token, status, created_at, score FROM reference_requests WHERE prev_landlord_id=? ORDER BY id DESC",
