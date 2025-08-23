@@ -1495,7 +1495,7 @@ def tenant_dashboard():
 
                     else:
                         # No file yet → uploader only, no "Request Reference" button
-                        st.markdown(f"**{tr('Contract Status:')}** {tr('⏳ Pending Review')} {tr('(no file yet)')}")
+                        # st.markdown(f"**{tr('Contract Status:')}** {tr('⏳ Pending Review')} {tr('(no file yet)')}")
                         uploaded = st.file_uploader(
                             tr('Upload Tenancy Contract (PDF or Image)'),
                             type=["pdf", "png", "jpg", "jpeg", "webp"],
