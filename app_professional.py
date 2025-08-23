@@ -1442,7 +1442,6 @@ def tenant_dashboard():
                 c_left, c_right = st.columns([1, 2])
 
                 with c_left:
-                    # st.markdown(f"**{tr('Current Request Status')}:** {final_status}")
 
                     if contract:
                         # Show current contract info + download + replace-uploader
@@ -1452,11 +1451,7 @@ def tenant_dashboard():
                         ).fetchone()
                         consent_badge2 = f"Consent: {consent_row2[0] if consent_row2 else 'locked'}"
                         st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract['status'])} · {consent_badge2}")
-                        # st.caption(
-                        #     f"{tr('Uploaded')}: {contract['uploaded_at']} • "
-                        #     f"{tr('Last status update')}: {contract['status_updated_at'] or '—'}"
-                        #     + (f" • {tr('by')} {contract.get('status_by')}" if contract.get('status_by') else "")
-                        # )
+
                         try:
                             data_plain = load_contract_plaintext(tok)
                             if data_plain is None:
@@ -1472,19 +1467,19 @@ def tenant_dashboard():
                         except Exception as e:
                             st.warning(f"{tr('Unable to read the saved file')}: {e}")
 
-                        # Allow replacing the file
-                        uploaded = st.file_uploader(
-                            tr('Replace Tenancy Contract (PDF or Image)'),
-                            type=["pdf", "png", "jpg", "jpeg", "webp"],
-                            key=f"up_{tok}",
-                        )
-                        if uploaded is not None:
-                            ok, msg = save_contract_upload(tok, st.session_state.user["id"], uploaded)
-                            if ok:
-                                st.success(tr('Contract uploaded. Status reset to Pending Review.'))
-                                st.rerun()
-                            else:
-                                st.error(msg)
+                        # # Allow replacing the file
+                        # uploaded = st.file_uploader(
+                        #     tr('Replace Tenancy Contract (PDF or Image)'),
+                        #     type=["pdf", "png", "jpg", "jpeg", "webp"],
+                        #     key=f"up_{tok}",
+                        # )
+                        # if uploaded is not None:
+                        #     ok, msg = save_contract_upload(tok, st.session_state.user["id"], uploaded)
+                        #     if ok:
+                        #         st.success(tr('Contract uploaded. Status reset to Pending Review.'))
+                        #         st.rerun()
+                        #     else:
+                        #         st.error(msg)
 
                         # Since a file exists, NOW show the "Request Reference" button
                         if st.button(tr('Request Reference'), key=f"req_{pid}"):
