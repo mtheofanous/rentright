@@ -1510,15 +1510,15 @@ def tenant_dashboard():
                                 st.error(msg)
 
                 with c_right:
-                    st.markdown(f"**{tr('Request History')}**")
+                    # st.markdown(f"**{tr('Request History')}**")
                     if reqs:
                         for (tok_i, status_i, created_at_i, score_i) in reqs:
                             final_i = effective_reference_status(status_i, tok_i)
-                            colA, colB, colC = st.columns([2, 2, 2])
-                            colA.write(f"{tr('Status')}: **{final_i}**")
-                            if score_i is not None:
-                                colB.write(f"{tr('Score')}: **{score_i}**/10")
-                            link_i = build_reference_link(tok_i)
+                            # colA, colB, colC = st.columns([2, 2, 2])
+                            # # colA.write(f"{tr('Status')}: **{final_i}**")
+                            # if score_i is not None:
+                            #     colB.write(f"{tr('Score')}: **{score_i}**/10")
+                            # link_i = build_reference_link(tok_i)
 
                             # Per-request contract block
                             contract_i = get_contract_by_token(tok_i)
@@ -1526,6 +1526,10 @@ def tenant_dashboard():
 
                             if final_i_lower in ("completed", "cancelled"):
                                 if final_i_lower == "completed":
+                                    colA, colB, colC = st.columns([2, 2, 2])
+                                    if score_i is not None:
+                                        colB.write(f"{tr('Score')}: **{score_i}**/10")
+                                    
                                     if contract_i:
                                         st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract_i['status'])}")
                                         try:
