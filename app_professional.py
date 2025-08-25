@@ -1596,41 +1596,37 @@ def tenant_dashboard():
 
                                 with col_yes:
                                     if st.button(tr('Yes, cancel it'), key=f"confirm_cancel_yes_{pid}"):
-                                        # 1) Mark request cancelled → disables landlord portal link
-                                        conn.execute(
-                                            "UPDATE reference_requests SET status=?, filled_at=CURRENT_TIMESTAMP WHERE token=?",
-                                            ("cancelled", tok),
-                                        )
-                                        conn.commit()
-
-                                        # 2) HARD DELETE the uploaded contract (file + DB row)
-                                        delete_contract_hard(tok)
-
-                                        # 3) DELETE landlord responses tied to this request
-                                        delete_landlord_responses(tok)
-
-                                        # 4) Email landlord about cancellation & deletions
-                                        row = conn.execute("SELECT filled_at FROM reference_requests WHERE token=?", (tok,)).fetchone()
+                                        # (A) Email landlord first (so we still have the data to mention)
+                                        row = conn.execute("SELECT CURRENT_TIMESTAMP").fetchone()
                                         cancelled_at = row[0] if row else None
-
                                         ok_mail, msg_mail = email_reference_cancellation_smtp(
                                             tenant_name=st.session_state.user["name"],
                                             tenant_email=st.session_state.user["email"],
-                                            landlord_email=email,          # from your loop vars
-                                            landlord_name=name,            # from your loop vars
-                                            landlord_address=address,      # from your loop vars
+                                            landlord_email=email,
+                                            landlord_name=name,
+                                            landlord_address=address,
                                             token=tok,
                                             cancelled_at=cancelled_at,
                                         )
 
-                                        st.session_state.pop(confirm_key, None)
+                                        # (B) Hard-delete their responses + contract + request row
+                                        delete_landlord_responses(tok)   # your helper from earlier
+                                        delete_contract_hard(tok)        # your hard-delete helper
+                                        conn.execute("DELETE FROM reference_requests WHERE token=?", (tok,))
+                                        conn.commit()
 
+                                        # (C) Clean up UI state and prevent auto-draft recreation on this landlord
+                                        st.session_state.pop(confirm_key, None)
+                                        st.session_state[f'suppress_autodraft_{pid}'] = True
+
+                                        # (D) Feedback
                                         if ok_mail:
                                             st.success(tr('Request cancelled — landlord notified, contract and responses permanently deleted.'))
                                         else:
                                             st.warning(tr('Request cancelled and data deleted, but email notification failed: ') + str(msg_mail))
 
                                         st.rerun()
+
 
 
                                     # if st.button(tr('Yes, cancel it'), key=f"confirm_cancel_yes_{pid}"):
