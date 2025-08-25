@@ -139,7 +139,7 @@ TRANSLATIONS_EL = {
         "Landlord": "Ιδιοκτήτης",
         "Admin": "Διαχειριστής",
         "completed": "Ολοκληρώθηκε",
-        'Start New Reference Request': 'Aιτήμα Σύστασης'
+        'Start New Reference Request': 'Αίτημα Σύστασης',
     }
 
 def tr(s: str) -> str:
