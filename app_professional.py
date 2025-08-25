@@ -1493,16 +1493,49 @@ def tenant_dashboard():
                                     st.code(link)
 
                         # Only allow cancelling while still pending or pending review
+                        # Only allow cancelling while still pending or pending review
                         if final_norm in ("pending", "pending review", "pending_review"):
-                            if st.button(tr('Cancel Request'), key=f"cancel_{pid}"):
-                                cur3 = conn.cursor()
-                                cur3.execute(
-                                    "UPDATE reference_requests SET status=?, filled_at=CURRENT_TIMESTAMP WHERE token=?",
-                                    ("cancelled", tok),
-                                )
-                                conn.commit()
-                                st.success(tr('Request cancelled.'))
-                                st.rerun()
+                            confirm_key = f"confirm_cancel_{tok}"  # per-request flag
+
+                            # Step 1: show the Cancel button
+                            if not st.session_state.get(confirm_key, False):
+                                if st.button(tr('Cancel Request'), key=f"cancel_{pid}"):
+                                    st.session_state[confirm_key] = True
+                                    st.rerun()
+
+                            # Step 2: show confirmation UI
+                            else:
+                                st.warning(tr('Are you sure you want to cancel this reference request?'))
+                                col_yes, col_no = st.columns([1, 1])
+
+                                with col_yes:
+                                    if st.button(tr('Yes, cancel it'), key=f"confirm_cancel_yes_{pid}"):
+                                        cur3 = conn.cursor()
+                                        cur3.execute(
+                                            "UPDATE reference_requests SET status=?, filled_at=CURRENT_TIMESTAMP WHERE token=?",
+                                            ("cancelled", tok),
+                                        )
+                                        conn.commit()
+                                        st.session_state.pop(confirm_key, None)
+                                        st.success(tr('Request cancelled.'))
+                                        st.rerun()
+
+                                with col_no:
+                                    if st.button(tr('No, keep it'), key=f"confirm_cancel_no_{pid}"):
+                                        st.session_state.pop(confirm_key, None)
+                                        st.info(tr('Request kept.'))
+                                        st.rerun()
+
+                        # if final_norm in ("pending", "pending review", "pending_review"):
+                        #     if st.button(tr('Cancel Request'), key=f"cancel_{pid}"):
+                        #         cur3 = conn.cursor()
+                        #         cur3.execute(
+                        #             "UPDATE reference_requests SET status=?, filled_at=CURRENT_TIMESTAMP WHERE token=?",
+                        #             ("cancelled", tok),
+                        #         )
+                        #         conn.commit()
+                        #         st.success(tr('Request cancelled.'))
+                        #         st.rerun()
 
                     else:
                         # No file yet → uploader only, no "Request Reference" button
