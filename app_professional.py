@@ -51,6 +51,12 @@ TRANSLATIONS_EL = {
         "Contact added and invitation sent successfully.": "Η επαφή προστέθηκε και η πρόσκληση στάλθηκε με επιτυχία.",
         "Contact added, but the email could not be sent:": "Η επαφή προστέθηκε, αλλά δεν ήταν δυνατή η αποστολή email:",
         "Unable to add contact:": "Αδυναμία προσθήκης επαφής:",
+        "Delete Previous Landlord": "Διαγραφή Προηγούμενου Ιδιοκτήτη",
+        "Are you sure you want to delete this previous landlord and all related data?": "Θέλεις σίγουρα να διαγράψεις αυτόν τον προηγούμενο ιδιοκτήτη και όλα τα σχετικά δεδομένα;",
+        "Yes, delete": "Ναι, διαγραφή",
+        "No, keep it": "Όχι, διατήρησέ το",
+        "Previous landlord deleted permanently.": "Ο προηγούμενος ιδιοκτήτης διαγράφηκε οριστικά.",
+        "Unable to delete": "Αδυναμία διαγραφής",
         "Send Invitation": "Αποστολή Πρόσκλησης",
         "Invited": "Προσκλήθηκε",
         "Invitation sent successfully.": "Η πρόσκληση στάλθηκε με επιτυχία.",
@@ -320,14 +326,9 @@ def run_migrations(conn):
     
 def delete_previous_landlord_completely(tenant_id: int, prev_landlord_id: int):
     """
-    Fully remove a previous landlord and ALL related data for this tenant:
-    - deletes any reference_requests for this prev_landlord_id
-    - deletes each request's contract blobs from disk
-    - deletes any landlord-submitted responses
-    - finally deletes the previous_landlords row
+    Fully remove a previous landlord and ALL related data for this tenant.
     """
     cur = conn.cursor()
-    # Get all tokens for this landlord+tenant
     cur.execute(
         "SELECT token FROM reference_requests WHERE tenant_id=? AND prev_landlord_id=?",
         (tenant_id, prev_landlord_id),
@@ -335,18 +336,12 @@ def delete_previous_landlord_completely(tenant_id: int, prev_landlord_id: int):
     tokens = [r[0] for r in cur.fetchall()]
 
     for tok in tokens:
-        # purge linked data for this token
-        try:
-            delete_landlord_responses(tok)
-        except Exception:
-            pass
-        try:
-            delete_contract_hard(tok)
-        except Exception:
-            pass
+        try: delete_landlord_responses(tok)
+        except Exception: pass
+        try: delete_contract_hard(tok)
+        except Exception: pass
         cur.execute("DELETE FROM reference_requests WHERE token=?", (tok,))
 
-    # Now remove the previous landlord row
     delete_previous_landlord(prev_landlord_id, tenant_id)
     conn.commit()
 
@@ -1586,21 +1581,26 @@ def tenant_dashboard():
 
                 # If still no active request (e.g., cancelled & suppressed), stop here and show a Start button
                 if not active_req:
+                    # Side-by-side buttons: Start + Delete
                     c_left, c_right = st.columns([1, 2])
+
                     with c_left:
                         st.caption(tr('No active reference request.'))
 
-                        b1, b2 = st.columns([1, 1])
-                        if b1.button(tr('Start New Reference Request'), key=f"start_{pid}"):
+                        col_start, col_delete, _spacer = st.columns([1, 1, 3])
+
+                        # Start button
+                        if col_start.button(tr('Start New Reference Request'), key=f"start_{pid}"):
                             rec = create_reference_request(st.session_state.user["id"], pid, email)
                             st.session_state.pop(suppress_key, None)
                             st.rerun()
 
-                        # Destructive action: 2-step confirm
+                        # Delete flow (2-step confirm)
                         del_confirm_key = f"confirm_delete_prev_{pid}"
                         if st.session_state.get(del_confirm_key, False):
                             st.warning(tr('Are you sure you want to delete this previous landlord and all related data?'))
                             col_yes, col_no = st.columns([1, 1])
+
                             if col_yes.button(tr('Yes, delete'), key=f"yes_del_prev_{pid}"):
                                 try:
                                     delete_previous_landlord_completely(st.session_state.user["id"], pid)
@@ -1610,16 +1610,18 @@ def tenant_dashboard():
                                 finally:
                                     st.session_state.pop(del_confirm_key, None)
                                 st.rerun()
+
                             if col_no.button(tr('No, keep it'), key=f"no_del_prev_{pid}"):
                                 st.session_state.pop(del_confirm_key, None)
                                 st.rerun()
                         else:
-                            if b2.button(tr('Delete Previous Landlord'), key=f"del_prev_{pid}"):
+                            if col_delete.button(tr('Delete Previous Landlord'), key=f"del_prev_{pid}"):
                                 st.session_state[del_confirm_key] = True
                                 st.rerun()
 
-                    # You can still render history in c_right if you want, then move on
+                    # You can still render history in c_right if you want
                     continue
+
 
                 # if not active_req:
                 #     c_left, c_right = st.columns([1, 2])  # keep your layout consistent
