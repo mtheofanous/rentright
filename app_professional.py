@@ -1506,9 +1506,12 @@ def tenant_dashboard():
                     return None
 
                 # Ensure there is one active draft request to attach uploads to
+                # Ensure there is one active draft request to attach uploads to
                 active_req = pick_active_request(reqs)
-                if not active_req:
-                    # No active req → create a draft one (no email yet)
+                suppress_key = f'suppress_autodraft_{pid}'
+
+                if not active_req and not st.session_state.get(suppress_key, False):
+                    # Only auto-create if not suppressed
                     rec = create_reference_request(st.session_state.user["id"], pid, email)
                     tok = rec["token"]
                     # Re-query to include the fresh draft in the list/view
@@ -1517,8 +1520,33 @@ def tenant_dashboard():
                         (pid,),
                     )
                     reqs = cur.fetchall()
-                    # Set active_req to the newly created
                     active_req = next(((t, s, c, sc) for (t, s, c, sc) in reqs if t == tok), None)
+
+                # If still no active request (e.g., cancelled & suppressed), stop here and show a Start button
+                if not active_req:
+                    c_left, c_right = st.columns([1, 2])  # keep your layout consistent
+                    with c_left:
+                        st.caption(tr('No active reference request.'))
+                        if st.button(tr('Start New Reference Request'), key=f"start_{pid}"):
+                            rec = create_reference_request(st.session_state.user["id"], pid, email)
+                            st.session_state.pop(suppress_key, None)  # allow normal flow again
+                            st.rerun()
+                    # You can still render history in c_right if you want, then move on
+                    continue  # ← skip the rest of this landlord block since there's no active request
+
+                # active_req = pick_active_request(reqs)
+                # if not active_req:
+                #     # No active req → create a draft one (no email yet)
+                #     rec = create_reference_request(st.session_state.user["id"], pid, email)
+                #     tok = rec["token"]
+                #     # Re-query to include the fresh draft in the list/view
+                #     cur.execute(
+                #         "SELECT token, status, created_at, score FROM reference_requests WHERE prev_landlord_id=? ORDER BY id DESC",
+                #         (pid,),
+                #     )
+                #     reqs = cur.fetchall()
+                #     # Set active_req to the newly created
+                #     active_req = next(((t, s, c, sc) for (t, s, c, sc) in reqs if t == tok), None)
 
                 # Now we have an active request token we can use for uploads
                 tok, status, created_at2, score = active_req
