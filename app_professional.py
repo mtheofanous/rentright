@@ -67,6 +67,7 @@ TRANSLATIONS_EL = {
         "No future landlord contacts yet.": "Δεν υπάρχουν ακόμα επαφές μελλοντικών ιδιοκτητών.",
         # Previous Landlords & References
         "Previous Landlords and References": "Προηγούμενοι Ιδιοκτήτες και Συστάσεις",
+        "Reference submitted successfully. Thank you!":"Η αναφορά υποβλήθηκε με επιτυχία. Ευχαριστούμε!",
         "Tax ID (9 digits)": "ΑΦΜ (9 ψηφία)",
         "Add Previous Landlord": "Προσθήκη Προηγούμενου Ιδιοκτήτη",
         "Are you sure you want to cancel this reference request?": "Είσαι σίγουρος ότι θέλεις να ακυρώσεις αυτό το αίτημα;",
@@ -1171,13 +1172,55 @@ def email_reference_request(tenant_name: str, tenant_email: str, landlord_email:
 
 # ---------- Landlord Reference Portal (public) ----------
 
+# def reference_portal(token: str):
+#     st.title(tr('🏠 RentRight — Landlord Reference Portal'))
+#     data = get_reference_request_by_token(token)
+#     if not data:
+#         st.error(tr('Invalid or expired reference token.'))
+#         return
+
+#     if data["status"] == "completed":
+#         st.success(tr('This reference has already been submitted. Thank you!'))
+#         st.stop()
+
+#     st.info(f"Reference for Tenant ID #{data['tenant_id']} — sent to {data['landlord_email']}")
+#     with st.form("reference_form"):
+#         confirm = st.checkbox(tr('I confirm I was the landlord for this tenant.'))
+#         score = st.slider(tr('Overall tenant score'), min_value=1, max_value=10, value=8)
+#         paid_on_time = st.radio(tr('Did the tenant pay on time?'), ["Yes","No"], horizontal=True)
+#         utilities_unpaid = st.radio(tr('Did the tenant leave utilities unpaid?'), ["No","Yes"], horizontal=True)
+#         good_condition = st.radio(tr('Did the tenant leave the apartment in good condition?'), ["Yes","No"], horizontal=True)
+#         comments = st.text_area(tr('Optional comments'))
+#         submit = st.form_submit_button(tr('Submit Reference'))
+
+#     if submit:
+#         if not confirm:
+#             st.error(tr('Please confirm you were the landlord.'))
+#             return
+#         mark_reference_completed(
+#             token,
+#             confirm_landlord=True,
+#             score=int(score),
+#             paid_on_time=(paid_on_time == "Yes"),
+#             utilities_unpaid=(utilities_unpaid == "Yes"),
+#             good_condition=(good_condition == "Yes"),
+#             comments=comments,
+#         )
+#         st.success("Reference submitted successfully. Thank you!")
+
 def reference_portal(token: str):
+    # ✅ If redirected after submit, show ONLY the success message and stop
+    if (st.query_params.get("done") == "1"):
+        st.success(tr("Reference submitted successfully. Thank you!"))
+        return
+
     st.title(tr('🏠 RentRight — Landlord Reference Portal'))
     data = get_reference_request_by_token(token)
     if not data:
         st.error(tr('Invalid or expired reference token.'))
         return
 
+    # If you still want to block re-submissions once DB is completed:
     if data["status"] == "completed":
         st.success(tr('This reference has already been submitted. Thank you!'))
         st.stop()
@@ -1196,6 +1239,7 @@ def reference_portal(token: str):
         if not confirm:
             st.error(tr('Please confirm you were the landlord.'))
             return
+
         mark_reference_completed(
             token,
             confirm_landlord=True,
@@ -1205,7 +1249,17 @@ def reference_portal(token: str):
             good_condition=(good_condition == "Yes"),
             comments=comments,
         )
-        st.success("Reference submitted successfully. Thank you!")
+
+        # 🔁 Redirect to same link with ?done=1 so only the success message shows
+        try:
+            # Newer Streamlit supports direct assignment
+            st.query_params["ref"] = token
+            st.query_params["done"] = "1"
+        except Exception:
+            # Fallback for older versions
+            st.experimental_set_query_params(ref=token, done="1")
+        st.rerun()
+
 
 
 
