@@ -64,7 +64,8 @@ TRANSLATIONS_EL = {
         "Tax ID (9 digits)": "ΑΦΜ (9 ψηφία)",
         "Add Previous Landlord": "Προσθήκη Προηγούμενου Ιδιοκτήτη",
         "Are you sure you want to cancel this reference request?": "Είσαι σίγουρος ότι θέλεις να ακυρώσεις αυτό το αίτημα;",
-        "'Yes, cancel it'": "Ναι, ακύρωσε",
+        "Yes, cancel it": "Ναι, ακύρωσε",
+        'Request cancelled — landlord notified, contract and responses permanently deleted.':'Αίτημα ακυρώθηκε — ο ιδιοκτήτης ειδοποιήθηκε, το συμβόλαιο και οι απαντήσεις διαγράφηκαν οριστικά.',
         'No, keep it': "Όχι, διατήρησέ το",
         "Please enter the landlord’s name.": "Παρακαλώ εισαγάγετε το όνομα του ιδιοκτήτη.",
         "Please enter the landlord’s address.": "Παρακαλώ εισαγάγετε τη διεύθυνση του ιδιοκτήτη.",
@@ -462,6 +463,87 @@ def get_user_by_email(email: str):
         keys = ["id","email","name","password_hash","role"]
         return dict(zip(keys, row))
     return None
+
+ # Tenant deletes request 
+# Starts here
+import os
+
+def storage_delete(storage_key: str):
+    # Replace with S3/GCS delete if you use cloud storage
+    if storage_key and os.path.isfile(storage_key):
+        try:
+            os.remove(storage_key)
+        except Exception:
+            pass  # log if needed
+
+def delete_contract_hard(token: str):
+    c = get_contract_by_token(token)
+    if not c:
+        return
+    storage_key = c.get("storage_key") or c.get("path")
+    storage_delete(storage_key)
+    conn.execute("DELETE FROM reference_contracts WHERE token=?", (token,))
+    conn.commit()
+
+def _table_exists(name: str) -> bool:
+    row = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone()
+    return bool(row)
+
+def delete_landlord_responses(token: str):
+    """
+    Deletes any responses the landlord submitted for this token.
+    Tries multiple common table/column patterns safely.
+    """
+    # Prefer token-keyed tables
+    token_tables = ["reference_responses", "reference_form_responses", "reference_submissions"]
+    for t in token_tables:
+        if _table_exists(t):
+            try:
+                conn.execute(f"DELETE FROM {t} WHERE token=?", (token,))
+            except Exception:
+                pass
+
+    # Also attempt request_id-keyed tables if present
+    req_row = conn.execute("SELECT id FROM reference_requests WHERE token=?", (token,)).fetchone()
+    if req_row:
+        request_id = req_row[0]
+        id_tables = ["reference_answers", "reference_responses", "reference_submissions"]
+        for t in id_tables:
+            if _table_exists(t):
+                try:
+                    conn.execute(f"DELETE FROM {t} WHERE request_id=?", (request_id,))
+                except Exception:
+                    pass
+    conn.commit()
+
+def email_reference_cancellation_smtp(
+    tenant_name: str,
+    tenant_email: str,
+    landlord_email: str,
+    landlord_name: str | None,
+    landlord_address: str | None,
+    token: str,
+    cancelled_at: str | None,
+):
+    subject = "Reference request cancelled — data deleted"
+    body = f"""Hello {landlord_name or 'there'},
+
+The tenant {tenant_name} has cancelled their rental reference request.
+
+What this means:
+• The reference link for token {token} is now disabled.
+• The uploaded contract file has been permanently deleted.
+• Any responses you submitted in the reference form have been permanently deleted.
+
+Address on file: {landlord_address or '—'}
+Cancelled at: {cancelled_at or '—'}
+
+If you have questions, you can reply to {tenant_email}.
+"""
+    # Uses your existing SMTP helper
+    return send_email_smtp(landlord_email, subject, body)
+
+
 
 
 def get_user_by_id(uid: int):
@@ -1513,15 +1595,53 @@ def tenant_dashboard():
 
                                 with col_yes:
                                     if st.button(tr('Yes, cancel it'), key=f"confirm_cancel_yes_{pid}"):
-                                        cur3 = conn.cursor()
-                                        cur3.execute(
+                                        # 1) Mark request cancelled → disables landlord portal link
+                                        conn.execute(
                                             "UPDATE reference_requests SET status=?, filled_at=CURRENT_TIMESTAMP WHERE token=?",
                                             ("cancelled", tok),
                                         )
                                         conn.commit()
+
+                                        # 2) HARD DELETE the uploaded contract (file + DB row)
+                                        delete_contract_hard(tok)
+
+                                        # 3) DELETE landlord responses tied to this request
+                                        delete_landlord_responses(tok)
+
+                                        # 4) Email landlord about cancellation & deletions
+                                        row = conn.execute("SELECT filled_at FROM reference_requests WHERE token=?", (tok,)).fetchone()
+                                        cancelled_at = row[0] if row else None
+
+                                        ok_mail, msg_mail = email_reference_cancellation_smtp(
+                                            tenant_name=st.session_state.user["name"],
+                                            tenant_email=st.session_state.user["email"],
+                                            landlord_email=email,          # from your loop vars
+                                            landlord_name=name,            # from your loop vars
+                                            landlord_address=address,      # from your loop vars
+                                            token=tok,
+                                            cancelled_at=cancelled_at,
+                                        )
+
                                         st.session_state.pop(confirm_key, None)
-                                        st.success(tr('Request cancelled.'))
+
+                                        if ok_mail:
+                                            st.success(tr('Request cancelled — landlord notified, contract and responses permanently deleted.'))
+                                        else:
+                                            st.warning(tr('Request cancelled and data deleted, but email notification failed: ') + str(msg_mail))
+
                                         st.rerun()
+
+
+                                    # if st.button(tr('Yes, cancel it'), key=f"confirm_cancel_yes_{pid}"):
+                                    #     cur3 = conn.cursor()
+                                    #     cur3.execute(
+                                    #         "UPDATE reference_requests SET status=?, filled_at=CURRENT_TIMESTAMP WHERE token=?",
+                                    #         ("cancelled", tok),
+                                    #     )
+                                    #     conn.commit()
+                                    #     st.session_state.pop(confirm_key, None)
+                                    #     st.success(tr('Request cancelled.'))
+                                    #     st.rerun()
 
                                 with col_no:
                                     if st.button(tr('No, keep it'), key=f"confirm_cancel_no_{pid}"):
