@@ -1188,7 +1188,10 @@ def reference_portal(token: str):
         utilities_unpaid = st.radio(tr('Did the tenant leave utilities unpaid?'), ["No","Yes"], horizontal=True)
         good_condition = st.radio(tr('Did the tenant leave the apartment in good condition?'), ["Yes","No"], horizontal=True)
         comments = st.text_area(tr('Optional comments'))
-        submit = st.form_submit_button(tr('Submit Reference'))
+
+        col_a, col_b = st.columns([1, 1])
+        submit = col_a.form_submit_button(tr('Submit Reference'))
+        cancel_btn = col_b.form_submit_button(tr('Not My Tenant / Cancel'))
 
     if submit:
         if not confirm:
@@ -1205,13 +1208,55 @@ def reference_portal(token: str):
             comments=comments,
         )
 
-        # ➜ Redirect to a dedicated "thank you" page
+        # redirect to a thank-you page
         try:
-            st.query_params.clear()              # drop token from URL for privacy
+            st.query_params.clear()
             st.query_params["page"] = "submitted"
         except Exception:
             st.experimental_set_query_params(page="submitted")
         st.rerun()
+
+    if cancel_btn:
+        # landlord says “not my tenant” → just cancel the request
+        cancel_reference_request(token)
+        try:
+            st.query_params.clear()
+            st.query_params["page"] = "cancelled"
+        except Exception:
+            st.experimental_set_query_params(page="cancelled")
+        st.rerun()
+
+    # with st.form("reference_form"):
+    #     confirm = st.checkbox(tr('I confirm I was the landlord for this tenant.'))
+    #     score = st.slider(tr('Overall tenant score'), min_value=1, max_value=10, value=8)
+    #     paid_on_time = st.radio(tr('Did the tenant pay on time?'), ["Yes","No"], horizontal=True)
+    #     utilities_unpaid = st.radio(tr('Did the tenant leave utilities unpaid?'), ["No","Yes"], horizontal=True)
+    #     good_condition = st.radio(tr('Did the tenant leave the apartment in good condition?'), ["Yes","No"], horizontal=True)
+    #     comments = st.text_area(tr('Optional comments'))
+    #     submit = st.form_submit_button(tr('Submit Reference'))
+
+    # if submit:
+    #     if not confirm:
+    #         st.error(tr('Please confirm you were the landlord.'))
+    #         return
+
+    #     mark_reference_completed(
+    #         token,
+    #         confirm_landlord=True,
+    #         score=int(score),
+    #         paid_on_time=(paid_on_time == "Yes"),
+    #         utilities_unpaid=(utilities_unpaid == "Yes"),
+    #         good_condition=(good_condition == "Yes"),
+    #         comments=comments,
+    #     )
+
+    #     # ➜ Redirect to a dedicated "thank you" page
+    #     try:
+    #         st.query_params.clear()              # drop token from URL for privacy
+    #         st.query_params["page"] = "submitted"
+    #     except Exception:
+    #         st.experimental_set_query_params(page="submitted")
+    #     st.rerun()
 
 
 
@@ -2068,62 +2113,130 @@ def landlord_dashboard():
                 cols[1].markdown(f"**Status:** {status}")
                 cols[2].markdown(f"**Created:** {created_at}")
                 cols[3].markdown(f"**Score:** {score if score is not None else '—'}")
-
+                
                 if status == "pending":
-                    # ❌ no key here
-                    with st.expander(tr('Respond Now')):
-                        # forms use a positional key/name, not key=...
-                        with st.form(f"{prefix}_landlord_response_{token}"):
-                            confirm = st.checkbox(
-                                tr('I confirm I was the landlord for this tenant.'),
-                                key=f"{prefix}_confirm_{token}"
-                            )
-                            s = st.slider(
-                                tr('Overall tenant score'), 1, 10, 8,
-                                key=f"{prefix}_score_{token}"
-                            )
-                            paid_on_time = st.radio(
-                                tr('Did the tenant pay on time?'), ["Yes","No"],
-                                horizontal=True, key=f"{prefix}_paid_{token}"
-                            )
-                            utilities_unpaid = st.radio(
-                                tr('Did the tenant leave utilities unpaid?'), ["No","Yes"],
-                                horizontal=True, key=f"{prefix}_utilities_{token}"
-                            )
-                            good_condition = st.radio(
-                                tr('Did the tenant leave the apartment in good condition?'), ["Yes","No"],
-                                horizontal=True, key=f"{prefix}_condition_{token}"
-                            )
-                            comments = st.text_area(
-                                tr('Optional comments'),
-                                key=f"{prefix}_comments_{token}"
-                            )
+                    details = get_reference_request_by_token(token)
 
-                            col_a, col_b = st.columns([1,1])
-                            # ❌ form_submit_button has no key=
-                            submit = col_a.form_submit_button(tr('Submit Reference'))
-                            cancel_btn = col_b.form_submit_button(tr('Not My Tenant / Cancel'))
-
-                        if submit:
-                            if not confirm:
-                                st.error(tr('Please confirm you were the landlord.'))
-                            else:
-                                mark_reference_completed(
-                                    token,
-                                    confirm_landlord=True,
-                                    score=int(s),
-                                    paid_on_time=(paid_on_time == "Yes"),
-                                    utilities_unpaid=(utilities_unpaid == "Yes"),
-                                    good_condition=(good_condition == "Yes"),
-                                    comments=comments,
+                    # If landlord already submitted, show a read-only summary instead of the form
+                    if details and details.get("confirm_landlord"):
+                        with st.expander(tr('Respond Now'), expanded=True):
+                            st.info(tr("Thanks — your response is saved. The request will complete once the tenant’s contract is verified by an admin."))
+                            st.write(f"**{tr('Overall tenant score')}:** {details.get('score')}/10")
+                            st.write(f"**{tr('Did the tenant pay on time?')}:** {'Yes' if details.get('paid_on_time') else 'No'}")
+                            st.write(f"**{tr('Did the tenant leave utilities unpaid?')}:** {'Yes' if details.get('utilities_unpaid') else 'No'}")
+                            st.write(f"**{tr('Did the tenant leave the apartment in good condition?')}:** {'Yes' if details.get('good_condition') else 'No'}")
+                            if details.get('comments'):
+                                st.write("**" + tr('Optional comments') + ":**")
+                                st.write(details['comments'])
+                    else:
+                        with st.expander(tr('Respond Now')):
+                            with st.form(f"{prefix}_landlord_response_{token}"):
+                                confirm = st.checkbox(
+                                    tr('I confirm I was the landlord for this tenant.'),
+                                    key=f"{prefix}_confirm_{token}"
                                 )
-                                st.success(tr('Reference submitted successfully.'))
+                                s = st.slider(
+                                    tr('Overall tenant score'), 1, 10, 8,
+                                    key=f"{prefix}_score_{token}"
+                                )
+                                paid_on_time = st.radio(
+                                    tr('Did the tenant pay on time?'), ["Yes","No"],
+                                    horizontal=True, key=f"{prefix}_paid_{token}"
+                                )
+                                utilities_unpaid = st.radio(
+                                    tr('Did the tenant leave utilities unpaid?'), ["No","Yes"],
+                                    horizontal=True, key=f"{prefix}_utilities_{token}"
+                                )
+                                good_condition = st.radio(
+                                    tr('Did the tenant leave the apartment in good condition?'), ["Yes","No"],
+                                    horizontal=True, key=f"{prefix}_condition_{token}"
+                                )
+                                comments = st.text_area(
+                                    tr('Optional comments'),
+                                    key=f"{prefix}_comments_{token}"
+                                )
+
+                                col_a, col_b = st.columns([1,1])
+                                submit = col_a.form_submit_button(tr('Submit Reference'))
+                                cancel_btn = col_b.form_submit_button(tr('Not My Tenant / Cancel'))
+
+                            if submit:
+                                if not confirm:
+                                    st.error(tr('Please confirm you were the landlord.'))
+                                else:
+                                    mark_reference_completed(
+                                        token,
+                                        confirm_landlord=True,
+                                        score=int(s),
+                                        paid_on_time=(paid_on_time == "Yes"),
+                                        utilities_unpaid=(utilities_unpaid == "Yes"),
+                                        good_condition=(good_condition == "Yes"),
+                                        comments=comments,
+                                    )
+                                    st.success(tr('Reference submitted successfully.'))
+                                    st.rerun()
+
+                            if cancel_btn:
+                                cancel_reference_request(token)
+                                st.warning(tr('Request cancelled.'))
                                 st.rerun()
 
-                        if cancel_btn:
-                            cancel_reference_request(token)
-                            st.warning(tr('Request cancelled.'))
-                            st.rerun()
+
+                # if status == "pending":
+                #     # ❌ no key here
+                #     with st.expander(tr('Respond Now')):
+                #         # forms use a positional key/name, not key=...
+                #         with st.form(f"{prefix}_landlord_response_{token}"):
+                #             confirm = st.checkbox(
+                #                 tr('I confirm I was the landlord for this tenant.'),
+                #                 key=f"{prefix}_confirm_{token}"
+                #             )
+                #             s = st.slider(
+                #                 tr('Overall tenant score'), 1, 10, 8,
+                #                 key=f"{prefix}_score_{token}"
+                #             )
+                #             paid_on_time = st.radio(
+                #                 tr('Did the tenant pay on time?'), ["Yes","No"],
+                #                 horizontal=True, key=f"{prefix}_paid_{token}"
+                #             )
+                #             utilities_unpaid = st.radio(
+                #                 tr('Did the tenant leave utilities unpaid?'), ["No","Yes"],
+                #                 horizontal=True, key=f"{prefix}_utilities_{token}"
+                #             )
+                #             good_condition = st.radio(
+                #                 tr('Did the tenant leave the apartment in good condition?'), ["Yes","No"],
+                #                 horizontal=True, key=f"{prefix}_condition_{token}"
+                #             )
+                #             comments = st.text_area(
+                #                 tr('Optional comments'),
+                #                 key=f"{prefix}_comments_{token}"
+                #             )
+
+                #             col_a, col_b = st.columns([1,1])
+                #             # ❌ form_submit_button has no key=
+                #             submit = col_a.form_submit_button(tr('Submit Reference'))
+                #             cancel_btn = col_b.form_submit_button(tr('Not My Tenant / Cancel'))
+
+                #         if submit:
+                #             if not confirm:
+                #                 st.error(tr('Please confirm you were the landlord.'))
+                #             else:
+                #                 mark_reference_completed(
+                #                     token,
+                #                     confirm_landlord=True,
+                #                     score=int(s),
+                #                     paid_on_time=(paid_on_time == "Yes"),
+                #                     utilities_unpaid=(utilities_unpaid == "Yes"),
+                #                     good_condition=(good_condition == "Yes"),
+                #                     comments=comments,
+                #                 )
+                #                 st.success(tr('Reference submitted successfully.'))
+                #                 st.rerun()
+
+                #         if cancel_btn:
+                #             cancel_reference_request(token)
+                #             st.warning(tr('Request cancelled.'))
+                #             st.rerun()
 
                 elif status == "completed":
                     # ❌ no key here
@@ -2154,6 +2267,10 @@ def reference_submitted_page():
     # Show ONLY the success text and stop
     st.success(tr("Reference submitted successfully. Thank you!"))
     st.stop()
+    
+def reference_cancelled_page():
+    st.warning(tr("Request cancelled."))
+    st.stop()
 
 
 # ---------- App ----------
@@ -2164,6 +2281,10 @@ def main():
     if params.get("page") == "submitted":
         reference_submitted_page()
         return
+    if params.get("page") == "cancelled":
+        reference_cancelled_page()
+        return
+
     token = params.get("ref")
     if token:
         reference_portal(token)
