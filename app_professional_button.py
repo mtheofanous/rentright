@@ -339,7 +339,6 @@ def init_db():
             prev_landlord_id INTEGER NOT NULL,
             landlord_email TEXT NOT NULL,
             created_at TEXT NOT NULL,
-            emailed_at TEXT,
             status TEXT NOT NULL DEFAULT 'pending',
             filled_at TEXT,
             confirm_landlord INTEGER,
@@ -469,6 +468,21 @@ def get_user_by_email(email: str):
  # Tenant deletes request 
 # Starts here
 import os
+
+# --- added by patch: ensure emailed_at exists on reference_requests
+def ensure_emailed_at_column(conn):
+    try:
+        cur = conn.cursor()
+        cur.execute("PRAGMA table_info(reference_requests)")
+        cols = [r[1] for r in cur.fetchall()]
+        if "emailed_at" not in cols:
+            cur.execute("ALTER TABLE reference_requests ADD COLUMN emailed_at TEXT")
+            conn.commit()
+    except Exception as _e:
+        # Safe to ignore: table may not exist yet in dev, or already migrated
+        pass
+
+
 
 def storage_delete(storage_key: str):
     # Replace with S3/GCS delete if you use cloud storage
@@ -864,7 +878,7 @@ def create_reference_request(tenant_id: int, prev_landlord_id: int, landlord_ema
     token = generate_token()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO reference_requests(token, tenant_id, prev_landlord_id, landlord_email, created_at, status) VALUES (?,?,?,?,?,?)",
+        "INSERT INTO reference_requests(token, tenant_id, prev_landlord_id, landlord_email, created_at, status, emailed_at) VALUES (?, ?, ?, ?, ?, 'draft', NULL)",
         (token, tenant_id, prev_landlord_id, landlord_email, datetime.utcnow().isoformat(), 'pending'),
     )
     conn.commit()
@@ -1085,13 +1099,22 @@ def list_latest_references_for_tenant(tenant_id: int):
 
 
 # def build_reference_link(token: str) -> str:
-#     base = st.session_state.get("app_base_url")
-#     if base and base.strip():
-#         base = base.strip().rstrip('/')
-#         return f"{base}/?ref={token}"
-#     return f"http://localhost:8501/?ref={token}"
-
-def build_reference_link(token: str) -> str:
+    import os
+    try:
+        base = os.environ.get("APP_BASE_URL", None)
+        if not base:
+            # Try Streamlit secrets if available
+            try:
+                base = st.secrets.get("app_base_url", None)  # type: ignore[attr-defined]
+            except Exception:
+                base = None
+        if base:
+            return f"{base.rstrip('/')}/reference/{token}"
+        return f"/reference/{token}"
+    except Exception:
+        # Fallback minimal
+        return f"/reference/{token}"
+ef build_reference_link(token: str) -> str:
     base = st.session_state.get("app_base_url") or (st.secrets.get("APP_BASE_URL") if hasattr(st, "secrets") else "")
     if base:
         base = base.strip().rstrip("/")
@@ -1583,9 +1606,7 @@ def tenant_dashboard():
         
 
                         if contract and can_request:
-                            if st.button(tr('Request Reference'), key=f"req_{pid}"):
-                                link = build_reference_link(tok)
-                                ok, msg = email_reference_request(
+                            if st.button(tr('Request Reference'), key=f"req_{pid}"):                                ok, msg = email_reference_request(
                                     st.session_state.user["name"], st.session_state.user["email"], email, link
                                 )
                                 if ok:
@@ -1668,9 +1689,15 @@ def tenant_dashboard():
                         if uploaded is not None:
                             ok, msg = save_contract_upload(tok, st.session_state.user["id"], uploaded)
                             if ok:
-                                # ✅ After saving, immediately email the landlord (first time only)
-                                link = build_reference_link(tok)
-                                ok_mail, msg_mail = email_reference_request(
+                st.success(tr('Contract uploaded. Status set to Pending Review.'))
+        st.rerun()
+        else:
+            st.warning(f"{tr('Contract uploaded, but email delivery failed')} ({msg_mail}). "
+                       f"{tr('You can share this link manually or try again')}:")
+            st.code(link)
+            # keep emailed_at = NULL so the Request button stays visible
+            st.rerun()
+                                # ✅ After saving, immediately email the landlord (first time only)                                ok_mail, msg_mail = email_reference_request(
                                     st.session_state.user["name"],
                                     st.session_state.user["email"],
                                     email,
@@ -1683,7 +1710,7 @@ def tenant_dashboard():
                                         ("pending", tok),
                                     )
                                     conn.commit()
-                                    st.success(tr('Contract uploaded and email sent to the landlord.'))
+                                    st.success(tr('Contract uploaded. Status set to Pending Review.'))
                                     st.rerun()
                                 else:
                                     # Keep as Pending Review so the tenant can retry sending
