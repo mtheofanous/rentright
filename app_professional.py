@@ -72,6 +72,7 @@ TRANSLATIONS_EL = {
         "Please share this link manually:": "Παρακαλώ κοινοποιήστε αυτόν τον σύνδεσμο χειροκίνητα:",
         # Contract
         "Contract Status:": "Κατάσταση Συμβολαίου:",
+        "Contract is locked awaiting landlord consent.":"Το συμβόλαιο παραμένει κλειδωμένο, αναμένεται συναίνεση ιδιοκτήτη",
         "Download Contract": "Λήψη Συμβολαίου",
         "Replace Tenancy Contract (PDF or Image)": "Συμβολαίου Μίσθωσης (PDF ή Εικόνα)",
         "Upload Tenancy Contract (PDF or Image)": "Ανέβασε Συμβόλαιο Μίσθωσης (PDF ή Εικόνα)",
@@ -1243,7 +1244,7 @@ def admin_dashboard():
                     try:
                         data_plain = load_contract_plaintext(token)
                         if data_plain is None:
-                            st.warning("Contract is locked (awaiting landlord consent) or unavailable.")
+                            st.warning(tr("Contract is locked awaiting landlord consent."))
                         else:
                             st.download_button(
                                 tr('Download Contract'),
@@ -1450,12 +1451,12 @@ def tenant_dashboard():
                             (tok,)
                         ).fetchone()
                         consent_badge2 = f"Consent: {consent_row2[0] if consent_row2 else 'locked'}"
-                        st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract['status'])} · {consent_badge2}")
+                        # st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract['status'])} · {consent_badge2}")
 
                         try:
                             data_plain = load_contract_plaintext(tok)
                             if data_plain is None:
-                                st.warning(tr('Contract is locked (awaiting landlord consent) or unavailable.'))
+                                st.warning(tr('Contract is locked awaiting landlord consent.'))
                             else:
                                 st.download_button(
                                     tr('Download Contract'),
@@ -1467,19 +1468,6 @@ def tenant_dashboard():
                         except Exception as e:
                             st.warning(f"{tr('Unable to read the saved file')}: {e}")
 
-                        # # Allow replacing the file
-                        # uploaded = st.file_uploader(
-                        #     tr('Replace Tenancy Contract (PDF or Image)'),
-                        #     type=["pdf", "png", "jpg", "jpeg", "webp"],
-                        #     key=f"up_{tok}",
-                        # )
-                        # if uploaded is not None:
-                        #     ok, msg = save_contract_upload(tok, st.session_state.user["id"], uploaded)
-                        #     if ok:
-                        #         st.success(tr('Contract uploaded. Status reset to Pending Review.'))
-                        #         st.rerun()
-                        #     else:
-                        #         st.error(msg)
 
                         # Since a file exists, NOW show the "Request Reference" button
                         if st.button(tr('Request Reference'), key=f"req_{pid}"):
@@ -1535,7 +1523,7 @@ def tenant_dashboard():
                                         try:
                                             data_plain_i = load_contract_plaintext(tok_i)
                                             if data_plain_i is None:
-                                                st.warning(tr('Contract is locked (awaiting landlord consent) or unavailable.'))
+                                                st.warning(tr('Contract is locked awaiting landlord consent'))
                                             else:
                                                 st.download_button(
                                                     tr('Download Contract'),
