@@ -74,6 +74,7 @@ TRANSLATIONS_EL = {
         'Cancel Request': "Ακύρωση αιτήματος",
         'Request cancelled — landlord notified, contract and responses permanently deleted.':'Αίτημα ακυρώθηκε — ο ιδιοκτήτης ειδοποιήθηκε, το συμβόλαιο και οι απαντήσεις διαγράφηκαν οριστικά.',
         'No, keep it': "Όχι, διατήρησέ το",
+        'Start New Reference Request': 'Αίτημα Σύστασης',
         "Please enter the landlord’s name.": "Παρακαλώ εισαγάγετε το όνομα του ιδιοκτήτη.",
         "Please enter the landlord’s address.": "Παρακαλώ εισαγάγετε τη διεύθυνση του ιδιοκτήτη.",
         "Previous landlord added successfully.": "Ο προηγούμενος ιδιοκτήτης προστέθηκε με επιτυχία.",
@@ -139,7 +140,7 @@ TRANSLATIONS_EL = {
         "Landlord": "Ιδιοκτήτης",
         "Admin": "Διαχειριστής",
         "completed": "Ολοκληρώθηκε",
-        'Start New Reference Request': 'Αίτημα Σύστασης',
+        
     }
 
 def tr(s: str) -> str:
@@ -1610,124 +1611,6 @@ def tenant_dashboard():
                     # Skip the rest of this landlord block
                     continue
 
-                # def pick_active_request(reqs_list):
-                #     for (tok, status, created_at2, score) in reqs_list:
-                #         final_status = effective_reference_status(status, tok)
-                #         if str(final_status).lower() not in ("completed", "cancelled"):
-                #             return (tok, status, created_at2, score)
-                #     return None
-
-                # # Ensure there is one active draft request to attach uploads to
-                # active_req = pick_active_request(reqs)
-                # suppress_key = f'suppress_autodraft_{pid}'
-
-                # if not active_req and not st.session_state.get(suppress_key, False):
-                #     # Only auto-create if not suppressed
-                #     rec = create_reference_request(st.session_state.user["id"], pid, email)
-                #     tok = rec["token"]
-                #     # Re-query to include the fresh draft in the list/view
-                #     cur.execute(
-                #         "SELECT token, status, created_at, score FROM reference_requests WHERE prev_landlord_id=? ORDER BY id DESC",
-                #         (pid,),
-                #     )
-                #     reqs = cur.fetchall()
-                #     active_req = next(((t, s, c, sc) for (t, s, c, sc) in reqs if t == tok), None)
-
-                # # If still no active request (e.g., cancelled & suppressed), stop here and show a Start button
-                # # If still no active request (e.g., cancelled & suppressed), stop here and show Start + Delete
-                # if not active_req:
-                #     st.caption(tr('No active reference request.'))
-
-                #     # Two buttons side-by-side
-                #     col_start, col_delete = st.columns([1, 1])
-
-                #     # Start button
-                #     if col_start.button(tr('Start New Reference Request'), key=f"start_{pid}"):
-                #         rec = create_reference_request(st.session_state.user["id"], pid, email)
-                #         st.session_state.pop(suppress_key, None)
-                #         st.rerun()
-
-                #     # Delete flow (2-step confirm)
-                #     del_confirm_key = f"confirm_delete_prev_{pid}"
-
-                #     if st.session_state.get(del_confirm_key, False):
-                #         st.warning(tr('Are you sure you want to delete this previous landlord and all related data?'))
-
-                #         col_yes, col_no = st.columns([1, 1])
-                #         if col_yes.button(tr('Yes, delete'), key=f"yes_del_prev_{pid}"):
-                #             try:
-                #                 delete_previous_landlord_completely(st.session_state.user["id"], pid)
-                #                 st.success(tr('Previous landlord deleted permanently.'))
-                #             except Exception as e:
-                #                 st.error(f"{tr('Unable to delete')}: {e}")
-                #             finally:
-                #                 st.session_state.pop(del_confirm_key, None)
-                #             st.rerun()
-
-                #         if col_no.button(tr('No, keep it'), key=f"no_del_prev_{pid}"):
-                #             st.session_state.pop(del_confirm_key, None)
-                #             st.rerun()
-                #     else:
-                #         if col_delete.button(tr('Delete Previous Landlord'), key=f"del_prev_{pid}"):
-                #             st.session_state[del_confirm_key] = True
-                #             st.rerun()
-
-                #     # Don't render the rest of this landlord block
-                #     continue
-
-                # if not active_req:
-                #     # Side-by-side buttons: Start + Delete
-                #     c_left, c_right = st.columns([1, 2])
-
-                #     with c_left:
-                #         st.caption(tr('No active reference request.'))
-
-                #         col_start, col_delete, _spacer = st.columns([1, 1, 3])
-
-                #         # Start button
-                #         if col_start.button(tr('Start New Reference Request'), key=f"start_{pid}"):
-                #             rec = create_reference_request(st.session_state.user["id"], pid, email)
-                #             st.session_state.pop(suppress_key, None)
-                #             st.rerun()
-
-                #         # Delete flow (2-step confirm)
-                #         del_confirm_key = f"confirm_delete_prev_{pid}"
-                #         if st.session_state.get(del_confirm_key, False):
-                #             st.warning(tr('Are you sure you want to delete this previous landlord and all related data?'))
-                #             col_yes, col_no = st.columns([1, 1])
-
-                #             if col_yes.button(tr('Yes, delete'), key=f"yes_del_prev_{pid}"):
-                #                 try:
-                #                     delete_previous_landlord_completely(st.session_state.user["id"], pid)
-                #                     st.success(tr('Previous landlord deleted permanently.'))
-                #                 except Exception as e:
-                #                     st.error(f"{tr('Unable to delete')}: {e}")
-                #                 finally:
-                #                     st.session_state.pop(del_confirm_key, None)
-                #                 st.rerun()
-
-                #             if col_no.button(tr('No, keep it'), key=f"no_del_prev_{pid}"):
-                #                 st.session_state.pop(del_confirm_key, None)
-                #                 st.rerun()
-                #         else:
-                #             if col_delete.button(tr('Delete Previous Landlord'), key=f"del_prev_{pid}"):
-                #                 st.session_state[del_confirm_key] = True
-                #                 st.rerun()
-
-                #     # You can still render history in c_right if you want
-                #     continue
-
-
-                # if not active_req:
-                #     c_left, c_right = st.columns([1, 2])  # keep your layout consistent
-                #     with c_left:
-                #         st.caption(tr('No active reference request.'))
-                #         if st.button(tr('Start New Reference Request'), key=f"start_{pid}"):
-                #             rec = create_reference_request(st.session_state.user["id"], pid, email)
-                #             st.session_state.pop(suppress_key, None)  # allow normal flow again
-                #             st.rerun()
-                #     # You can still render history in c_right if you want, then move on
-                #     continue  # ← skip the rest of this landlord block since there's no active request
 
 
                 # Now we have an active request token we can use for uploads
