@@ -1773,10 +1773,10 @@ def tenant_dashboard():
                                 else:
                                     details = get_reference_request_by_token(tok_i)
                                     cancelled_when = details.get("filled_at") if details else None
-                                    if cancelled_when:
-                                        st.info(f"{tr('Cancelled')} — {tr('Created:')} {details.get('created_at', '—')} • {tr('Cancelled on')}: {cancelled_when}")
-                                    else:
-                                        st.info(tr('Cancelled'))
+                                    # if cancelled_when:
+                                    #     st.info(f"{tr('Cancelled')} — {tr('Created:')} {details.get('created_at', '—')} • {tr('Cancelled on')}: {cancelled_when}")
+                                    # else:
+                                    #     st.info(tr('Cancelled'))
                             else:
                                 # Non-final historical entries (rare): show status only
                                 if contract_i:
