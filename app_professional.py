@@ -1580,47 +1580,88 @@ def tenant_dashboard():
                     active_req = next(((t, s, c, sc) for (t, s, c, sc) in reqs if t == tok), None)
 
                 # If still no active request (e.g., cancelled & suppressed), stop here and show a Start button
+                # If still no active request (e.g., cancelled & suppressed), stop here and show Start + Delete
                 if not active_req:
-                    # Side-by-side buttons: Start + Delete
-                    c_left, c_right = st.columns([1, 2])
+                    st.caption(tr('No active reference request.'))
 
-                    with c_left:
-                        st.caption(tr('No active reference request.'))
+                    # Two buttons side-by-side
+                    col_start, col_delete = st.columns([1, 1])
 
-                        col_start, col_delete, _spacer = st.columns([1, 1, 3])
+                    # Start button
+                    if col_start.button(tr('Start New Reference Request'), key=f"start_{pid}"):
+                        rec = create_reference_request(st.session_state.user["id"], pid, email)
+                        st.session_state.pop(suppress_key, None)
+                        st.rerun()
 
-                        # Start button
-                        if col_start.button(tr('Start New Reference Request'), key=f"start_{pid}"):
-                            rec = create_reference_request(st.session_state.user["id"], pid, email)
-                            st.session_state.pop(suppress_key, None)
+                    # Delete flow (2-step confirm)
+                    del_confirm_key = f"confirm_delete_prev_{pid}"
+
+                    if st.session_state.get(del_confirm_key, False):
+                        st.warning(tr('Are you sure you want to delete this previous landlord and all related data?'))
+
+                        col_yes, col_no = st.columns([1, 1])
+                        if col_yes.button(tr('Yes, delete'), key=f"yes_del_prev_{pid}"):
+                            try:
+                                delete_previous_landlord_completely(st.session_state.user["id"], pid)
+                                st.success(tr('Previous landlord deleted permanently.'))
+                            except Exception as e:
+                                st.error(f"{tr('Unable to delete')}: {e}")
+                            finally:
+                                st.session_state.pop(del_confirm_key, None)
                             st.rerun()
 
-                        # Delete flow (2-step confirm)
-                        del_confirm_key = f"confirm_delete_prev_{pid}"
-                        if st.session_state.get(del_confirm_key, False):
-                            st.warning(tr('Are you sure you want to delete this previous landlord and all related data?'))
-                            col_yes, col_no = st.columns([1, 1])
+                        if col_no.button(tr('No, keep it'), key=f"no_del_prev_{pid}"):
+                            st.session_state.pop(del_confirm_key, None)
+                            st.rerun()
+                    else:
+                        if col_delete.button(tr('Delete Previous Landlord'), key=f"del_prev_{pid}"):
+                            st.session_state[del_confirm_key] = True
+                            st.rerun()
 
-                            if col_yes.button(tr('Yes, delete'), key=f"yes_del_prev_{pid}"):
-                                try:
-                                    delete_previous_landlord_completely(st.session_state.user["id"], pid)
-                                    st.success(tr('Previous landlord deleted permanently.'))
-                                except Exception as e:
-                                    st.error(f"{tr('Unable to delete')}: {e}")
-                                finally:
-                                    st.session_state.pop(del_confirm_key, None)
-                                st.rerun()
-
-                            if col_no.button(tr('No, keep it'), key=f"no_del_prev_{pid}"):
-                                st.session_state.pop(del_confirm_key, None)
-                                st.rerun()
-                        else:
-                            if col_delete.button(tr('Delete Previous Landlord'), key=f"del_prev_{pid}"):
-                                st.session_state[del_confirm_key] = True
-                                st.rerun()
-
-                    # You can still render history in c_right if you want
+                    # Don't render the rest of this landlord block
                     continue
+
+                # if not active_req:
+                #     # Side-by-side buttons: Start + Delete
+                #     c_left, c_right = st.columns([1, 2])
+
+                #     with c_left:
+                #         st.caption(tr('No active reference request.'))
+
+                #         col_start, col_delete, _spacer = st.columns([1, 1, 3])
+
+                #         # Start button
+                #         if col_start.button(tr('Start New Reference Request'), key=f"start_{pid}"):
+                #             rec = create_reference_request(st.session_state.user["id"], pid, email)
+                #             st.session_state.pop(suppress_key, None)
+                #             st.rerun()
+
+                #         # Delete flow (2-step confirm)
+                #         del_confirm_key = f"confirm_delete_prev_{pid}"
+                #         if st.session_state.get(del_confirm_key, False):
+                #             st.warning(tr('Are you sure you want to delete this previous landlord and all related data?'))
+                #             col_yes, col_no = st.columns([1, 1])
+
+                #             if col_yes.button(tr('Yes, delete'), key=f"yes_del_prev_{pid}"):
+                #                 try:
+                #                     delete_previous_landlord_completely(st.session_state.user["id"], pid)
+                #                     st.success(tr('Previous landlord deleted permanently.'))
+                #                 except Exception as e:
+                #                     st.error(f"{tr('Unable to delete')}: {e}")
+                #                 finally:
+                #                     st.session_state.pop(del_confirm_key, None)
+                #                 st.rerun()
+
+                #             if col_no.button(tr('No, keep it'), key=f"no_del_prev_{pid}"):
+                #                 st.session_state.pop(del_confirm_key, None)
+                #                 st.rerun()
+                #         else:
+                #             if col_delete.button(tr('Delete Previous Landlord'), key=f"del_prev_{pid}"):
+                #                 st.session_state[del_confirm_key] = True
+                #                 st.rerun()
+
+                #     # You can still render history in c_right if you want
+                #     continue
 
 
                 # if not active_req:
