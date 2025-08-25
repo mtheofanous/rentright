@@ -262,12 +262,6 @@ except Exception as e:
     st.error(f"Base directory not writable: {WRITABLE_BASE}\n{e}")
 
 
-# DB_PATH = "rental_app.db"
-
-# UPLOAD_DIR = Path("uploads") / "contracts"
-# UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-
 # ---------- Utilities ----------
 @st.cache_resource
 def get_conn():
@@ -296,6 +290,34 @@ def ensure_contracts_consent_column(conn):
     if "consent_status" not in cols:
         cur.execute("ALTER TABLE reference_contracts ADD COLUMN consent_status TEXT NOT NULL DEFAULT 'locked'")
         conn.commit()
+        
+        
+def add_column_if_missing(conn, table: str, col_def: str):
+    """
+    Add a column to `table` if missing.
+    col_def example: "emailed_at TEXT" or "consent_status TEXT NOT NULL DEFAULT 'locked'"
+    """
+    cur = conn.cursor()
+    cur.execute(f"PRAGMA table_info({table})")
+    existing = {row[1] for row in cur.fetchall()}
+    col_name = col_def.split()[0]
+    if col_name not in existing:
+        cur.execute(f"ALTER TABLE {table} ADD COLUMN {col_def}")
+        conn.commit()
+
+def run_migrations(conn):
+    # reference_requests: columns that newer code expects but old DBs may lack
+    add_column_if_missing(conn, "reference_requests", "emailed_at TEXT")
+    add_column_if_missing(conn, "reference_requests", "confirm_landlord INTEGER")
+    add_column_if_missing(conn, "reference_requests", "score INTEGER")
+    add_column_if_missing(conn, "reference_requests", "paid_on_time INTEGER")
+    add_column_if_missing(conn, "reference_requests", "utilities_unpaid INTEGER")
+    add_column_if_missing(conn, "reference_requests", "good_condition INTEGER")
+    add_column_if_missing(conn, "reference_requests", "comments TEXT")
+
+    # reference_contracts: make sure consent_status exists on old DBs
+    add_column_if_missing(conn, "reference_contracts", "consent_status TEXT NOT NULL DEFAULT 'locked'")
+
 
 def init_db():
     conn = get_conn()
@@ -391,6 +413,12 @@ def init_db():
     return conn
 
 conn = init_db()
+
+# Run lightweight migrations so old DBs gain new columns
+try:
+    run_migrations(conn)
+except Exception as e:
+    st.warning(f"DB migration warning: {e}")
 
 def add_future_landlord_contact(tenant_id: int, email: str):
     email = (email or "").strip().lower()
