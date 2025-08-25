@@ -1441,9 +1441,8 @@ def tenant_dashboard():
 
                 # Layout: left = upload flow; right = history
                 c_left, c_right = st.columns([1, 2])
-
+                
                 with c_left:
-
                     if contract:
                         # Show current contract info + download + replace-uploader
                         consent_row2 = conn.cursor().execute(
@@ -1451,7 +1450,6 @@ def tenant_dashboard():
                             (tok,)
                         ).fetchone()
                         consent_badge2 = f"Consent: {consent_row2[0] if consent_row2 else 'locked'}"
-                        # st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract['status'])} · {consent_badge2}")
 
                         try:
                             data_plain = load_contract_plaintext(tok)
@@ -1468,22 +1466,46 @@ def tenant_dashboard():
                         except Exception as e:
                             st.warning(f"{tr('Unable to read the saved file')}: {e}")
 
+                        # === NEW: control which buttons appear based on status ===
+                        final_norm = str(final_status).strip().lower()
 
-                        # Since a file exists, NOW show the "Request Reference" button
-                        if st.button(tr('Request Reference'), key=f"req_{pid}"):
-                            link = build_reference_link(tok)
-                            ok, msg = email_reference_request(
-                                st.session_state.user["name"], st.session_state.user["email"], email, link
-                            )
-                            if ok:
-                                st.success(tr('Reference request sent successfully by email.'))
-                            else:
-                                st.warning(f"{tr('Email delivery failed')} ({msg}). {tr('Please share this link manually')}:")
-                                st.code(link)
+                        # Only show "Request Reference" if not already requested/sent/finalized
+                        can_request = final_norm not in ("pending", "pending review", "pending_review", "completed", "cancelled")
+
+                        if can_request:
+                            if st.button(tr('Request Reference'), key=f"req_{pid}"):
+                                link = build_reference_link(tok)
+                                ok, msg = email_reference_request(
+                                    st.session_state.user["name"], st.session_state.user["email"], email, link
+                                )
+                                if ok:
+                                    # Mark request as pending so the button won’t show again
+                                    cur2 = conn.cursor()
+                                    cur2.execute(
+                                        "UPDATE reference_requests SET status=?, emailed_at=CURRENT_TIMESTAMP WHERE token=?",
+                                        ("pending", tok),
+                                    )
+                                    conn.commit()
+                                    st.success(tr('Reference request sent successfully by email.'))
+                                    st.rerun()
+                                else:
+                                    st.warning(f"{tr('Email delivery failed')} ({msg}). {tr('Please share this link manually')}:")
+                                    st.code(link)
+
+                        # Only allow cancelling while still pending or pending review
+                        if final_norm in ("pending", "pending review", "pending_review"):
+                            if st.button(tr('Cancel Request'), key=f"cancel_{pid}"):
+                                cur3 = conn.cursor()
+                                cur3.execute(
+                                    "UPDATE reference_requests SET status=?, filled_at=CURRENT_TIMESTAMP WHERE token=?",
+                                    ("cancelled", tok),
+                                )
+                                conn.commit()
+                                st.success(tr('Request cancelled.'))
+                                st.rerun()
 
                     else:
                         # No file yet → uploader only, no "Request Reference" button
-                        # st.markdown(f"**{tr('Contract Status:')}** {tr('⏳ Pending Review')} {tr('(no file yet)')}")
                         uploaded = st.file_uploader(
                             tr('Upload Tenancy Contract (PDF or Image)'),
                             type=["pdf", "png", "jpg", "jpeg", "webp"],
@@ -1496,6 +1518,62 @@ def tenant_dashboard():
                                 st.rerun()
                             else:
                                 st.error(msg)
+
+
+                # with c_left:
+
+                #     if contract:
+                #         # Show current contract info + download + replace-uploader
+                #         consent_row2 = conn.cursor().execute(
+                #             "SELECT consent_status FROM reference_contracts WHERE token=?",
+                #             (tok,)
+                #         ).fetchone()
+                #         consent_badge2 = f"Consent: {consent_row2[0] if consent_row2 else 'locked'}"
+                #         # st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract['status'])} · {consent_badge2}")
+
+                #         try:
+                #             data_plain = load_contract_plaintext(tok)
+                #             if data_plain is None:
+                #                 st.warning(tr('Contract is locked awaiting landlord consent.'))
+                #             else:
+                #                 st.download_button(
+                #                     tr('Download Contract'),
+                #                     data=data_plain,
+                #                     file_name=contract['filename'],
+                #                     mime=contract.get('content_type') or contract.get('mime_type'),
+                #                     key=f"dl_{tok}",
+                #                 )
+                #         except Exception as e:
+                #             st.warning(f"{tr('Unable to read the saved file')}: {e}")
+
+
+                #         # Since a file exists, NOW show the "Request Reference" button
+                #         if st.button(tr('Request Reference'), key=f"req_{pid}"):
+                #             link = build_reference_link(tok)
+                #             ok, msg = email_reference_request(
+                #                 st.session_state.user["name"], st.session_state.user["email"], email, link
+                #             )
+                #             if ok:
+                #                 st.success(tr('Reference request sent successfully by email.'))
+                #             else:
+                #                 st.warning(f"{tr('Email delivery failed')} ({msg}). {tr('Please share this link manually')}:")
+                #                 st.code(link)
+
+                #     else:
+                #         # No file yet → uploader only, no "Request Reference" button
+                #         # st.markdown(f"**{tr('Contract Status:')}** {tr('⏳ Pending Review')} {tr('(no file yet)')}")
+                #         uploaded = st.file_uploader(
+                #             tr('Upload Tenancy Contract (PDF or Image)'),
+                #             type=["pdf", "png", "jpg", "jpeg", "webp"],
+                #             key=f"up_{tok}",
+                #         )
+                #         if uploaded is not None:
+                #             ok, msg = save_contract_upload(tok, st.session_state.user["id"], uploaded)
+                #             if ok:
+                #                 st.success(tr('Contract uploaded. Status set to Pending Review.'))
+                #                 st.rerun()
+                #             else:
+                #                 st.error(msg)
 
                 with c_right:
                     # st.markdown(f"**{tr('Request History')}**")
