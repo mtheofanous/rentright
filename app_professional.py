@@ -65,6 +65,7 @@ TRANSLATIONS_EL = {
         "Add Previous Landlord": "Προσθήκη Προηγούμενου Ιδιοκτήτη",
         "Are you sure you want to cancel this reference request?": "Είσαι σίγουρος ότι θέλεις να ακυρώσεις αυτό το αίτημα;",
         "Yes, cancel it": "Ναι, ακύρωσε",
+        'Cancel Request': "Ακύρωση αιτήματος",
         'Request cancelled — landlord notified, contract and responses permanently deleted.':'Αίτημα ακυρώθηκε — ο ιδιοκτήτης ειδοποιήθηκε, το συμβόλαιο και οι απαντήσεις διαγράφηκαν οριστικά.',
         'No, keep it': "Όχι, διατήρησέ το",
         "Please enter the landlord’s name.": "Παρακαλώ εισαγάγετε το όνομα του ιδιοκτήτη.",
