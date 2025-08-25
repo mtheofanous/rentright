@@ -33,6 +33,7 @@ TRANSLATIONS_EL = {
         "This email is already registered.": "Αυτό το email έχει ήδη καταχωρηθεί.",
         "Unknown role:": "Άγνωστος ρόλος:",
         "Logged in as": "Συνδεθήκατε ως",
+        "Refresh": "Ανανέωση",
         # SMTP
         "Missing SMTP details: host, port, username, password, sender, or recipient.": "Λείπουν στοιχεία SMTP: host, port, όνομα χρήστη, κωδικός, αποστολέας ή παραλήπτης.",
         "Send Test Email": "Αποστολή Δοκιμαστικού Email",
@@ -162,7 +163,7 @@ def tr(s: str) -> str:
 
 # === Top-right language switcher (flags only) ===
 def render_topbar_language():
-    c1, c2 = st.columns([9, 2])
+    c1, c2, c3 = st.columns([8, 2, 2])
     with c2:
         choice = st.selectbox(
             "🌐 Language",
@@ -171,13 +172,14 @@ def render_topbar_language():
             index=0 if st.session_state.get("lang","English")=="English" else 1,
             label_visibility="collapsed",
         )
-        # Map flag back to language
         st.session_state["lang"] = "English" if choice == "ENG" else "Ελληνικά"
+    with c3:
+        # simple manual refresh that keeps session_state (so you stay logged in)
+        if st.button(tr("Refresh"), key="__refresh_topbar__", use_container_width=True):
+            st.rerun()
+            
 render_topbar_language()
 # === End top-right language switcher (flags only) ===
-
-
-
 
 
 # --- SMTP helpers integrados con st.secrets y session_state ---
@@ -766,8 +768,8 @@ def save_contract_upload(token: str, tenant_id: int, uploaded_file) -> tuple[boo
     if size > 15 * 1024 * 1024:
         return False, "File too large (max 15 MB)."
 
-    # Encrypt before storing (Data Vault)
-    from utils_vault import encrypt_bytes, sha256_bytes
+    # # Encrypt before storing (Data Vault)
+    # from utils_vault import encrypt_bytes, sha256_bytes
     ciphertext = encrypt_bytes(data)
     digest = sha256_bytes(data)
 
@@ -1068,12 +1070,6 @@ def list_reference_requests_for_landlord(landlord_email: str, status: str | None
         )
     return cur.fetchall()
 
-
-# def cancel_reference_request(token: str):
-#     cur = conn.cursor()
-#     cur.execute("UPDATE reference_requests SET status='cancelled' WHERE token=? AND status='pending'", (token,))
-#     conn.commit()
-
 def cancel_reference_request(token: str):
     cur = conn.cursor()
     cur.execute(
@@ -1144,12 +1140,6 @@ def list_latest_references_for_tenant(tenant_id: int):
     return cur.fetchall()
 
 
-# def build_reference_link(token: str) -> str:
-#     base = st.session_state.get("app_base_url")
-#     if base and base.strip():
-#         base = base.strip().rstrip('/')
-#         return f"{base}/?ref={token}"
-#     return f"http://localhost:8501/?ref={token}"
 
 def build_reference_link(token: str) -> str:
     base = st.session_state.get("app_base_url") or (st.secrets.get("APP_BASE_URL") if hasattr(st, "secrets") else "")
@@ -1462,16 +1452,22 @@ def admin_dashboard():
 
     
 def tenant_dashboard():
+    col_h1, col_h2, col_h3 = st.columns([4,1,1])
+    with col_h1: st.header(tr('Tenant Dashboard'))
+    with col_h2:
+        if st.button("🔄 " + tr("Refresh"), key="tenant_refresh"):
+            st.rerun()
+    with col_h3: logout_button()
  
 
-    # Header with a visible Sign Out button on the main page
-    col_h1, col_h2 = st.columns([4, 1])
-    with col_h1:
-        st.header(tr('Tenant Dashboard'))
-    with col_h2:
-        st.write("")
-        st.write("")
-        logout_button()
+    # # Header with a visible Sign Out button on the main page
+    # col_h1, col_h2 = st.columns([4, 1])
+    # with col_h1:
+    #     st.header(tr('Tenant Dashboard'))
+    # with col_h2:
+    #     st.write("")
+    #     st.write("")
+    #     logout_button()
 
     # === Future landlord email ===
     st.subheader(tr('Future Landlords (Contacts)'))
@@ -1842,14 +1838,20 @@ def tenant_dashboard():
 # ---------- Landlord Dashboard (enhanced) ----------
 
 def landlord_dashboard():
-    
-    col_h1, col_h2 = st.columns([4, 1])
-    with col_h1:
-        st.header(tr('Landlord Dashboard'))
+    col_h1, col_h2, col_h3 = st.columns([4,1,1])
+    with col_h1: st.header(tr('Tenant Dashboard'))
     with col_h2:
-        st.write("")
-        st.write("")
-        logout_button()
+        if st.button("🔄 " + tr("Refresh"), key="landlord_refresh"):
+            st.rerun()
+    with col_h3: logout_button()
+    
+    # col_h1, col_h2 = st.columns([4, 1])
+    # with col_h1:
+    #     st.header(tr('Landlord Dashboard'))
+    # with col_h2:
+    #     st.write("")
+    #     st.write("")
+    #     logout_button()
 
     landlord_email = st.session_state.user["email"]
     st.caption(f"Logged in as {landlord_email}")
