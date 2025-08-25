@@ -1452,22 +1452,22 @@ def admin_dashboard():
 
     
 def tenant_dashboard():
-    col_h1, col_h2, col_h3 = st.columns([4,1,1])
-    with col_h1: st.header(tr('Tenant Dashboard'))
-    with col_h2:
-        if st.button("🔄 " + tr("Refresh"), key="tenant_refresh"):
-            st.rerun()
-    with col_h3: logout_button()
+    # col_h1, col_h2, col_h3 = st.columns([4,1,1])
+    # with col_h1: st.header(tr('Tenant Dashboard'))
+    # with col_h2:
+    #     if st.button("🔄 " + tr("Refresh"), key="tenant_refresh"):
+    #         st.rerun()
+    # with col_h3: logout_button()
  
 
-    # # Header with a visible Sign Out button on the main page
-    # col_h1, col_h2 = st.columns([4, 1])
-    # with col_h1:
-    #     st.header(tr('Tenant Dashboard'))
-    # with col_h2:
-    #     st.write("")
-    #     st.write("")
-    #     logout_button()
+    # Header with a visible Sign Out button on the main page
+    col_h1, col_h2 = st.columns([4, 1])
+    with col_h1:
+        st.header(tr('Tenant Dashboard'))
+    with col_h2:
+        st.write("")
+        st.write("")
+        logout_button()
 
     # === Future landlord email ===
     st.subheader(tr('Future Landlords (Contacts)'))
@@ -1838,20 +1838,20 @@ def tenant_dashboard():
 # ---------- Landlord Dashboard (enhanced) ----------
 
 def landlord_dashboard():
-    col_h1, col_h2, col_h3 = st.columns([4,1,1])
-    with col_h1: st.header(tr('Tenant Dashboard'))
-    with col_h2:
-        if st.button("🔄 " + tr("Refresh"), key="landlord_refresh"):
-            st.rerun()
-    with col_h3: logout_button()
-    
-    # col_h1, col_h2 = st.columns([4, 1])
-    # with col_h1:
-    #     st.header(tr('Landlord Dashboard'))
+    # col_h1, col_h2, col_h3 = st.columns([4,1,1])
+    # with col_h1: st.header(tr('Tenant Dashboard'))
     # with col_h2:
-    #     st.write("")
-    #     st.write("")
-    #     logout_button()
+    #     if st.button("🔄 " + tr("Refresh"), key="landlord_refresh"):
+    #         st.rerun()
+    # with col_h3: logout_button()
+    
+    col_h1, col_h2 = st.columns([4, 1])
+    with col_h1:
+        st.header(tr('Landlord Dashboard'))
+    with col_h2:
+        st.write("")
+        st.write("")
+        logout_button()
 
     landlord_email = st.session_state.user["email"]
     st.caption(f"Logged in as {landlord_email}")
