@@ -1570,7 +1570,7 @@ def tenant_dashboard():
                 )
                 reqs = cur.fetchall()
 
-                # Helper: find an active (non-final) request
+          
                 # Helper: find an active (non-final) request
                 def pick_active_request(reqs_list):
                     for (tok, status, created_at2, score) in reqs_list:
@@ -1582,47 +1582,179 @@ def tenant_dashboard():
                 active_req = pick_active_request(reqs)
                 suppress_key = f'suppress_autodraft_{pid}'
 
-                # ⛔️ IMPORTANT: do NOT auto-create an active draft here.
-                # We want to show Start + Delete when there's no active request.
+                # ⛔️ Do NOT auto-create here — we want Start/Delete if nothing is active.
 
-                # If still no active request, show Start + Delete and skip rest of block
+                # ===== No active request path =====
                 if not active_req:
-                    st.caption(tr('No active reference request.'))
-
-                    # Two buttons side-by-side
-                    col_start, col_delete = st.columns([1, 1])
-
-                    # Start button
-                    if col_start.button(tr('Start New Reference Request'), key=f"start_{pid}"):
-                        rec = create_reference_request(st.session_state.user["id"], pid, email)
-                        st.session_state.pop(suppress_key, None)
-                        st.rerun()
-
-                    # Delete flow (2-step confirm)
-                    del_confirm_key = f"confirm_delete_prev_{pid}"
-
-                    if st.session_state.get(del_confirm_key, False):
-                        st.warning(tr('Are you sure you want to delete this previous landlord and all related data?'))
-                        col_yes, col_no = st.columns([1, 1])
-                        if col_yes.button(tr('Yes, delete'), key=f"yes_del_prev_{pid}"):
-                            try:
-                                delete_previous_landlord_completely(st.session_state.user["id"], pid)
-                                st.success(tr('Previous landlord deleted permanently.'))
-                            except Exception as e:
-                                st.error(f"{tr('Unable to delete')}: {e}")
-                            finally:
-                                st.session_state.pop(del_confirm_key, None)
-                            st.rerun()
-                        if col_no.button(tr('No, keep it'), key=f"no_del_prev_{pid}"):
-                            st.session_state.pop(del_confirm_key, None)
-                            st.rerun()
+                    # Latest request (reqs are DESC by id)
+                    latest = reqs[0] if reqs else None
+                    latest_tok = latest_status = None
+                    if latest:
+                        latest_tok, latest_status, latest_created, latest_score = latest
+                        latest_final = effective_reference_status(latest_status, latest_tok).lower()
                     else:
-                        if col_delete.button(tr('Delete Previous Landlord'), key=f"del_prev_{pid}"):
-                            st.session_state[del_confirm_key] = True
+                        latest_final = None
+
+                    if latest and latest_final == "completed":
+                        # ✅ Show completed summary (do NOT show Start/Delete)
+                        details = get_reference_request_by_token(latest_tok)
+                        contract_i = get_contract_by_token(latest_tok)
+
+                        # Contract status
+                        if contract_i:
+                            st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract_i['status'])}")
+                        else:
+                            st.markdown(f"**{tr('Contract Status:')}** {tr('✅ Verified Contract')}")
+
+                        # Answers
+                        if details:
+                            st.write(f"**{tr('Overall tenant score')}:** {details.get('score')}/10")
+                            st.write(f"**{tr('Did the tenant pay on time?')}:** {'Yes' if details.get('paid_on_time') else 'No'}")
+                            st.write(f"**{tr('Did the tenant leave utilities unpaid?')}:** {'Yes' if details.get('utilities_unpaid') else 'No'}")
+                            st.write(f"**{tr('Did the tenant leave the apartment in good condition?')}:** {'Yes' if details.get('good_condition') else 'No'}")
+                            if details.get('comments'):
+                                st.write("**" + tr('Optional comments') + ":**")
+                                st.write(details['comments'])
+
+                        # Optional download if consented
+                        if contract_i:
+                            try:
+                                data_plain_i = load_contract_plaintext(latest_tok)
+                                if data_plain_i is None:
+                                    st.warning(tr('Contract is locked awaiting landlord consent.'))
+                                else:
+                                    st.download_button(
+                                        tr('Download Contract'),
+                                        data=data_plain_i,
+                                        file_name=contract_i['filename'],
+                                        mime=contract_i.get('content_type') or contract_i.get('mime_type'),
+                                        key=f"dl_{latest_tok}",
+                                    )
+                            except Exception as e:
+                                st.warning(f"{tr('Unable to read the saved file:')} {e}")
+
+                    else:
+                        # No requests OR latest was cancelled → show Start/Delete
+                        st.caption(tr('No active reference request.'))
+                        col_start, col_delete = st.columns([1, 1])
+
+                        # Start
+                        if col_start.button(tr('Start New Reference Request'), key=f"start_{pid}"):
+                            rec = create_reference_request(st.session_state.user["id"], pid, email)
+                            st.session_state.pop(suppress_key, None)
                             st.rerun()
 
-                    # Skip the rest of this landlord block
+                        # Delete (2-step)
+                        del_confirm_key = f"confirm_delete_prev_{pid}"
+                        if st.session_state.get(del_confirm_key, False):
+                            st.warning(tr('Are you sure you want to delete this previous landlord and all related data?'))
+                            col_yes, col_no = st.columns([1, 1])
+                            if col_yes.button(tr('Yes, delete'), key=f"yes_del_prev_{pid}"):
+                                try:
+                                    delete_previous_landlord_completely(st.session_state.user["id"], pid)
+                                    st.success(tr('Previous landlord deleted permanently.'))
+                                except Exception as e:
+                                    st.error(f"{tr('Unable to delete')}: {e}")
+                                finally:
+                                    st.session_state.pop(del_confirm_key, None)
+                                st.rerun()
+                            if col_no.button(tr('No, keep it'), key=f"no_del_prev_{pid}"):
+                                st.session_state.pop(del_confirm_key, None)
+                                st.rerun()
+                        else:
+                            if col_delete.button(tr('Delete Previous Landlord'), key=f"del_prev_{pid}"):
+                                st.session_state[del_confirm_key] = True
+                                st.rerun()
+
+                    # 👉 Always render history in the no-active path
+                    if reqs:
+                        st.markdown("---")
+                        for (tok_i, status_i, created_at_i, score_i) in reqs:
+                            final_i = effective_reference_status(status_i, tok_i)
+                            contract_i = get_contract_by_token(tok_i)
+                            final_i_lower = str(final_i).lower()
+
+                            if final_i_lower in ("completed", "cancelled"):
+                                if final_i_lower == "completed":
+                                    if score_i is not None:
+                                        st.write(f"{tr('Score')}: **{score_i}**/10")
+                                    if contract_i:
+                                        st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract_i['status'])}")
+                                        try:
+                                            data_plain_i = load_contract_plaintext(tok_i)
+                                            if data_plain_i is None:
+                                                st.warning(tr('Contract is locked awaiting landlord consent'))
+                                            else:
+                                                st.download_button(
+                                                    tr('Download Contract'),
+                                                    data=data_plain_i,
+                                                    file_name=contract_i['filename'],
+                                                    mime=contract_i.get('content_type') or contract_i.get('mime_type'),
+                                                    key=f"dl_hist_{tok_i}",
+                                                )
+                                        except Exception as e:
+                                            st.warning(f"{tr('Unable to read the saved file')}: {e}")
+                                else:
+                                    details_i = get_reference_request_by_token(tok_i)
+                                    # Optionally show cancelled timestamp:
+                                    # st.caption(f"Cancelled at: {details_i.get('filled_at') or '—'}")
+                            else:
+                                if contract_i:
+                                    st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract_i['status'])}")
+
+                    # Done with the "no active" branch
                     continue
+                # def pick_active_request(reqs_list):
+                #     for (tok, status, created_at2, score) in reqs_list:
+                #         final_status = effective_reference_status(status, tok)
+                #         if str(final_status).lower() not in ("completed", "cancelled"):
+                #             return (tok, status, created_at2, score)
+                #     return None
+
+                # active_req = pick_active_request(reqs)
+                # suppress_key = f'suppress_autodraft_{pid}'
+
+                # # ⛔️ IMPORTANT: do NOT auto-create an active draft here.
+                # # We want to show Start + Delete when there's no active request.
+
+                # # If still no active request, show Start + Delete and skip rest of block
+                # if not active_req:
+                #     st.caption(tr('No active reference request.'))
+
+                #     # Two buttons side-by-side
+                #     col_start, col_delete = st.columns([1, 1])
+
+                #     # Start button
+                #     if col_start.button(tr('Start New Reference Request'), key=f"start_{pid}"):
+                #         rec = create_reference_request(st.session_state.user["id"], pid, email)
+                #         st.session_state.pop(suppress_key, None)
+                #         st.rerun()
+
+                #     # Delete flow (2-step confirm)
+                #     del_confirm_key = f"confirm_delete_prev_{pid}"
+
+                #     if st.session_state.get(del_confirm_key, False):
+                #         st.warning(tr('Are you sure you want to delete this previous landlord and all related data?'))
+                #         col_yes, col_no = st.columns([1, 1])
+                #         if col_yes.button(tr('Yes, delete'), key=f"yes_del_prev_{pid}"):
+                #             try:
+                #                 delete_previous_landlord_completely(st.session_state.user["id"], pid)
+                #                 st.success(tr('Previous landlord deleted permanently.'))
+                #             except Exception as e:
+                #                 st.error(f"{tr('Unable to delete')}: {e}")
+                #             finally:
+                #                 st.session_state.pop(del_confirm_key, None)
+                #             st.rerun()
+                #         if col_no.button(tr('No, keep it'), key=f"no_del_prev_{pid}"):
+                #             st.session_state.pop(del_confirm_key, None)
+                #             st.rerun()
+                #     else:
+                #         if col_delete.button(tr('Delete Previous Landlord'), key=f"del_prev_{pid}"):
+                #             st.session_state[del_confirm_key] = True
+                #             st.rerun()
+
+                #     # Skip the rest of this landlord block
+                #     continue
 
 
 
