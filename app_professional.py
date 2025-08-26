@@ -1932,7 +1932,7 @@ def tenant_dashboard():
                             if st.button(tr('Request Reference'), key=f"req_{pid}"):
                                 link = build_reference_link(tok)
                                 ok, msg = email_reference_request(
-                                    st.session_state.user["name"], st.session_state.user["email"], email, link
+                                    st.session_state.user["name"], st.session_state.user["email"], email, link, address
                                 )
                                 if ok:
                                     conn.execute(
@@ -2020,7 +2020,8 @@ def tenant_dashboard():
                                     st.session_state.user["name"],
                                     st.session_state.user["email"],
                                     email,
-                                    link
+                                    link,
+                                    address
                                 )
                                 if ok_mail:
                                     # Mark as emailed so we never send twice
