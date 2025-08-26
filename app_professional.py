@@ -381,7 +381,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             tenant_id INTEGER NOT NULL,
             email TEXT NOT NULL,
-            afm TEXT NOT NULL,
+            afm TEXT,
             name TEXT NOT NULL,
             address TEXT NOT NULL,
             created_at TEXT NOT NULL,
@@ -875,19 +875,19 @@ def upsert_tenant_profile(tenant_id: int, future_landlord_email: str | None):
     conn.commit()
 
 
-def add_previous_landlord(tenant_id: int, email: str, afm: str, name: str, address: str):
+def add_previous_landlord(tenant_id: int, email: str, name: str, address: str): # afm: str,
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO previous_landlords(tenant_id, email, afm, name, address, created_at) VALUES (?,?,?,?,?,?)",
-        (tenant_id, email.strip(), afm.strip(), name.strip(), address.strip(), datetime.utcnow().isoformat()),
+        "INSERT INTO previous_landlords(tenant_id, email, name, address, created_at) VALUES (?,?,?,?,?)",
+        (tenant_id, email.strip(), name.strip(), address.strip(), datetime.utcnow().isoformat()),
     )
     conn.commit()
 
 
-def list_previous_landlords(tenant_id: int):
+def list_previous_landlords(tenant_id: int): # afm,
     cur = conn.cursor()
     cur.execute(
-        "SELECT id, email, afm, name, address, created_at FROM previous_landlords WHERE tenant_id = ? ORDER BY id DESC",
+        "SELECT id, email, name, address, created_at FROM previous_landlords WHERE tenant_id = ? ORDER BY id DESC",
         (tenant_id,),
     )
     return cur.fetchall()
@@ -1105,7 +1105,7 @@ def list_prospective_tenants(landlord_email: str):
     return cur.fetchall()
 
 
-
+#     pl.afm AS prev_afm,
 def list_latest_references_for_tenant(tenant_id: int):
     """Return each previous landlord with the latest (most recent) reference request, if any, and its answers."""
     cur = conn.cursor()
@@ -1114,7 +1114,6 @@ def list_latest_references_for_tenant(tenant_id: int):
         SELECT pl.id AS prev_id,
                pl.name AS prev_name,
                pl.email AS prev_email,
-               pl.afm AS prev_afm,
                pl.address AS prev_address,
                rr.token,
                rr.status,
@@ -1390,6 +1389,31 @@ def admin_dashboard():
     c3.metric(tr('Cancelled'), len(cancelled_reqs))
 
     tab_pending, tab_completed, tab_cancelled = st.tabs([tr('Pending'), tr('Completed'), tr('Cancelled')])
+    
+    #AFM
+    
+    # def render_admin_reqs(reqs, prefix: str):
+    #     if not reqs:
+    #         st.info(tr('No requests available.'))
+    #         return
+
+    #     for (token, tenant_id, landlord_email, created_at, status, score) in reqs:
+    #         tenant = get_user_by_id(tenant_id)
+    #         tenant_label = tenant["name"] if tenant else f"Tenant #{tenant_id}"
+    #         final_status = effective_reference_status(status, token)
+
+    #         # Fetch request details and previous landlord info
+    #         details = get_reference_request_by_token(token)
+    #         pl_name = pl_email = pl_addr = "—"
+    #         if details and details.get("prev_landlord_id"):
+    #             cur = conn.cursor()
+    #             cur.execute(
+    #                 "SELECT name, afm, email, address FROM previous_landlords WHERE id=?",
+    #                 (details["prev_landlord_id"],),
+    #             )
+    #             row = cur.fetchone()
+    #             if row:
+    #                 pl_name, pl_afm, pl_email, pl_addr = row
 
     def render_admin_reqs(reqs, prefix: str):
         if not reqs:
@@ -1403,16 +1427,16 @@ def admin_dashboard():
 
             # Fetch request details and previous landlord info
             details = get_reference_request_by_token(token)
-            pl_name = pl_afm = pl_email = pl_addr = "—"
+            pl_name = pl_email = pl_addr = "—"
             if details and details.get("prev_landlord_id"):
                 cur = conn.cursor()
                 cur.execute(
-                    "SELECT name, afm, email, address FROM previous_landlords WHERE id=?",
+                    "SELECT name, email, address FROM previous_landlords WHERE id=?",
                     (details["prev_landlord_id"],),
                 )
                 row = cur.fetchone()
                 if row:
-                    pl_name, pl_afm, pl_email, pl_addr = row
+                    pl_name, pl_email, pl_addr = row
 
             with st.container(border=True):
                 cols = st.columns([3, 3, 3, 2])
@@ -1423,7 +1447,7 @@ def admin_dashboard():
 
                 # ⬇️ Show previous landlord Name + AFM
              
-                st.caption(f"Previous landlord: **{pl_name}** ({pl_email}) · AFM: **{pl_afm}** · Address: {pl_addr}")
+                st.caption(f"Previous landlord: **{pl_name}** ({pl_email}) · Address: {pl_addr}")
 
 
                 link = build_reference_link(token)
@@ -1584,7 +1608,7 @@ def tenant_dashboard():
         col1, col2 = st.columns([1, 1])
         with col1:
             pl_email = st.text_input(tr('Email'))
-            pl_afm = st.text_input(tr('Tax ID (9 digits)'))
+            # pl_afm = st.text_input(tr('Tax ID (9 digits)'))
         with col2:
             pl_name = st.text_input(tr('Name'))
             pl_address = st.text_input(tr('Address'))
@@ -1592,20 +1616,20 @@ def tenant_dashboard():
     if add:
         if not (pl_email and is_valid_email(pl_email)):
             st.error(tr('Please enter a valid email address.'))
-        elif not is_valid_afm(pl_afm):
-            st.error(tr('Tax ID must be exactly 9 digits.'))
+        # elif not is_valid_afm(pl_afm):
+        #     st.error(tr('Tax ID must be exactly 9 digits.'))
         elif not pl_name.strip():
             st.error(tr('Please enter your full name.'))
         elif not pl_address.strip():
             st.error(tr('Please enter the landlord’s address.'))
         else:
-            add_previous_landlord(st.session_state.user["id"], pl_email, pl_afm, pl_name, pl_address)
+            # add_previous_landlord(st.session_state.user["id"], pl_email, pl_name, pl_address) # pl_afm,
             st.success(tr('Previous landlord added successfully.'))
 
     rows = list_previous_landlords(st.session_state.user["id"]) or []
     st.subheader(tr('All Reference Requests'))
     if rows:
-        for (pid, email, afm, name, address, created_at) in rows:
+        for (pid, email, name, address, created_at) in rows: # afm,
             with st.expander(f"{name} • {email} • {address} "):
 
                 # --- Load all requests for this landlord
