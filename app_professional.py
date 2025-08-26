@@ -118,7 +118,7 @@ TRANSLATIONS_EL = {
         "🏠 RentRight — Landlord Reference Portal": "🏠 RentRight — Πύλη Σύστασης Ιδιοκτήτη",
         "Invalid or expired reference token.": "Μη έγκυρο ή ληγμένο διακριτικό σύστασης.",
         "This reference has already been submitted. Thank you!": "Αυτή η σύσταση έχει ήδη υποβληθεί. Ευχαριστούμε!",
-        "Reference for Tenant ID #": "Σύσταση για Ενοικιαστή ID #",
+        "Reference for": "Σύσταση για",
         "I confirm I was the landlord for this tenant.": "Επιβεβαιώνω ότι ήμουν ο ιδιοκτήτης αυτού του ενοικιαστή.",
         "Overall tenant score": "Συνολική αξιολόγηση ενοικιαστή",
         "Did the tenant pay on time?": "Πλήρωνε ο ενοικιαστής στην ώρα του;",
@@ -142,7 +142,17 @@ TRANSLATIONS_EL = {
         "Landlord": "Ιδιοκτήτης",
         "Admin": "Διαχειριστής",
         "completed": "Ολοκληρώθηκε",
-        
+        "I confirm that I was the landlord for this tenant. "
+        "By checking this box, I consent to the use of the uploaded tenancy contract "
+        "solely for verifying my relationship with the tenant and for completing this reference. "
+        "The contract will remain encrypted and locked until I provide this confirmation. "
+        "It will not be shared or used for any other purpose, in accordance with GDPR.":
+
+        "Επιβεβαιώνω ότι ήμουν ο ιδιοκτήτης αυτού του ενοικιαστή. "
+        "Με την επιλογή αυτού του πλαισίου συναινώ στη χρήση του ανεβασμένου μισθωτηρίου συμβολαίου "
+        "αποκλειστικά για την επαλήθευση της σχέσης μου με τον ενοικιαστή και για τη συμπλήρωση αυτής της σύστασης. "
+        "Το συμβόλαιο θα παραμείνει κρυπτογραφημένο και κλειδωμένο έως ότου δώσω αυτήν την επιβεβαίωση. "
+        "Δεν θα κοινοποιηθεί ούτε θα χρησιμοποιηθεί για οποιονδήποτε άλλο σκοπό, σύμφωνα με τον GDPR.",
     }
 
 
@@ -1179,10 +1189,40 @@ def reference_portal(token: str):
     if data["status"] == "completed":
         st.success(tr('This reference has already been submitted. Thank you!'))
         st.stop()
+        
+    # --- Fetch tenant name & email
+    tenant = get_user_by_id(data["tenant_id"])
+    tenant_name = tenant["name"] if tenant else f"Tenant #{data['tenant_id']}"
+    tenant_email = tenant["email"] if tenant else "—"
 
-    st.info(f"Reference for Tenant ID #{data['tenant_id']} — sent to {data['landlord_email']}")
+    # --- Fetch the address from previous_landlords via prev_landlord_id
+    address = "—"
+    if data.get("prev_landlord_id"):
+        cur = conn.cursor()
+        cur.execute("SELECT address FROM previous_landlords WHERE id=?", (data["prev_landlord_id"],))
+        row = cur.fetchone()
+        if row:
+            address = row[0]
+
+    # --- Info banner with richer details
+    st.info(
+        f"{tr('Reference for')} **{tenant_name}** ({tenant_email})\n\n"
+        f"📍 {tr('Address')}: {address}\n\n"
+        f"{tr('Sent to landlord')}: {data['landlord_email']}"
+    )
+
+    # st.info(f"Reference for Tenant ID #{data['tenant_id']} — sent to {data['landlord_email']}")
     with st.form("reference_form"):
-        confirm = st.checkbox(tr('I confirm I was the landlord for this tenant.'))
+        confirm = st.checkbox(
+            tr(
+                "I confirm that I was the landlord for this tenant. "
+                "By checking this box, I consent to the use of the uploaded tenancy contract "
+                "solely for verifying my relationship with the tenant and for completing this reference. "
+                "The contract will remain encrypted and locked until I provide this confirmation. "
+                "It will not be shared or used for any other purpose, in accordance with GDPR."
+            )
+        )
+
         score = st.slider(tr('Overall tenant score'), min_value=1, max_value=10, value=8)
         paid_on_time = st.radio(tr('Did the tenant pay on time?'), ["Yes","No"], horizontal=True)
         utilities_unpaid = st.radio(tr('Did the tenant leave utilities unpaid?'), ["No","Yes"], horizontal=True)
