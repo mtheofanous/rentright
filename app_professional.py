@@ -2193,7 +2193,7 @@ def landlord_dashboard():
                 refs = [r for r in refs if (r[6] is None) or (r[6] != "cancelled")]
                 if refs:
                     for (prev_id, prev_name, prev_email, prev_addr, token, status, score, paid_on_time, utilities_unpaid, good_condition, comments, created_at, filled_at) in refs:
-                        with st.expander(f"tr(Reference from) ({prev_email}) — tr(Status:) {status if status else 'not requested'}"):
+                        with st.expander(f"{tr("Reference from")} ({prev_email}) — {tr("Status:")} {status if status else 'not requested'}"):
                             
                             # if token:
                             #     st.write(f"Request created: {created_at}")
