@@ -168,6 +168,8 @@ TRANSLATIONS_EL = {
         "**Status:**": "**Κατάσταση:**",
         "**Created:**": "**Δημιουργήθηκε:**",
         "**Score:**": "**Βαθμολογία:**",
+        "No previous landlords added yet.": "Δεν έχουν προστεθεί ακόμη προηγούμενοι ιδιοκτήτες.",
+        "No active reference request.": "Δεν υπάρχει ενεργό αίτημα σύστασης.",
     }
 
 
@@ -2186,22 +2188,30 @@ def landlord_dashboard():
                 refs = [r for r in refs if (r[6] is None) or (r[6] != "cancelled")]
                 if refs:
                     for (prev_id, prev_name, prev_email, prev_addr, token, status, score, paid_on_time, utilities_unpaid, good_condition, comments, created_at, filled_at) in refs:
-                        with st.expander(f"Reference from ({prev_email}) — Status: {status if status else 'not requested'}"):
+                        with st.expander(f"tr(Reference from) ({prev_email}) — tr(Status:) {status if status else 'not requested'}"):
                             
                             # if token:
                             #     st.write(f"Request created: {created_at}")
                             #     st.write(f"Last update: {filled_at if filled_at else '—'}")
                             
                             if status == "completed":
-                                st.write(f"**Score:** {score}/10")
-                                st.write(f"**Paid on time:** {'Yes' if paid_on_time else 'No'}")
-                                st.write(f"**Utilities unpaid:** {'Yes' if utilities_unpaid else 'No'}")
-                                st.write(f"**Apartment in good condition:** {'Yes' if good_condition else 'No'}")
+                                st.markdown(f"{tr('**Score:**')} {score}/10")
+                                st.markdown(f"{tr('**Paid on time:**')} {tr('Yes') if paid_on_time else tr('No')}")
+                                st.markdown(f"{tr('**Utilities unpaid:**')} {tr('Yes') if utilities_unpaid else tr('No')}")
+                                st.markdown(f"{tr('**Apartment in good condition:**')} {tr('Yes') if good_condition else tr('No')}")
+
                                 if comments:
-                                    st.write("**Comments:**")
+                                    st.markdown(tr('**Comments:**'))
                                     st.write(comments)
+                                # st.write(f"tr(**Score:**) {score}/10")
+                                # st.write(f"tr(**Paid on time:**) {tr('Yes') if paid_on_time else tr('No')}")
+                                # st.write(f"tr(**Utilities unpaid:**) {tr('Yes') if utilities_unpaid else tr('No')}")
+                                # st.write(f"tr(**Apartment in good condition:**) {tr('Yes') if good_condition else tr('No')}")
+                                # if comments:
+                                #     st.write("tr(**Comments:**)")
+                                #     st.write(comments)
                 else:
-                    st.caption("No previous landlords listed yet.")
+                    st.caption(tr("No previous landlords listed yet."))
 
     st.divider()
 
@@ -2243,10 +2253,25 @@ def landlord_dashboard():
 
             with st.container(border=True):
                 cols = st.columns([3, 2, 3, 2])
-                cols[0].markdown(f"tr(**Tenant:**) {tenant_label}<br/>tr(**Email:**) {tenant_email}", unsafe_allow_html=True)
-                cols[1].markdown(f"tr(**Status:**) {status}")
-                cols[2].markdown(f"tr(**Created:**) {created_at}")
-                cols[3].markdown(f"tr(**Score:**) {score if score is not None else '—'}")
+                # Map status to localized display text (handles lowercase DB values)
+                display_status = {
+                    "pending": tr("Pending"),
+                    "completed": tr("Completed"),
+                    "cancelled": tr("Cancelled"),
+                }.get(str(status).lower(), status)
+
+                cols[0].markdown(
+                    f"{tr('**Tenant:**')} {tenant_label}<br/>{tr('**Email:**')} {tenant_email}",
+                    unsafe_allow_html=True
+                )
+                cols[1].markdown(f"{tr('**Status:**')} {display_status}")
+                cols[2].markdown(f"{tr('**Created:**')} {created_at}")
+                cols[3].markdown(f"{tr('**Score:**')} {score if score is not None else '—'}")
+
+                # cols[0].markdown(f"tr(**Tenant:**) {tenant_label}<br/>tr(**Email:**) {tenant_email}", unsafe_allow_html=True)
+                # cols[1].markdown(f"tr(**Status:**) {status}")
+                # cols[2].markdown(f"tr(**Created:**) {created_at}")
+                # cols[3].markdown(f"tr(**Score:**) {score if score is not None else '—'}")
                 st.caption(f"📍 **{tr('Address')}:** {address}")
 
                 if status == "pending":
