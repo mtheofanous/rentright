@@ -2135,7 +2135,7 @@ def landlord_dashboard():
                 refs = list_latest_references_for_tenant(tid)
                 refs = [r for r in refs if (r[6] is None) or (r[6] != "cancelled")]
                 if refs:
-                    for (prev_id, prev_name, prev_email, prev_afm, prev_addr, token, status, score, paid_on_time, utilities_unpaid, good_condition, comments, created_at, filled_at) in refs:
+                    for (prev_id, prev_name, prev_email, prev_addr, token, status, score, paid_on_time, utilities_unpaid, good_condition, comments, created_at, filled_at) in refs:
                         with st.expander(f"Reference from ({prev_email}) — Status: {status if status else 'not requested'}"):
                             
                             # if token:
