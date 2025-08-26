@@ -1623,7 +1623,7 @@ def tenant_dashboard():
         elif not pl_address.strip():
             st.error(tr('Please enter the landlord’s address.'))
         else:
-            # add_previous_landlord(st.session_state.user["id"], pl_email, pl_name, pl_address) # pl_afm,
+            add_previous_landlord(st.session_state.user["id"], pl_email, pl_name, pl_address) # pl_afm,
             st.success(tr('Previous landlord added successfully.'))
 
     rows = list_previous_landlords(st.session_state.user["id"]) or []
