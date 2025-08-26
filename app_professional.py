@@ -2279,41 +2279,6 @@ def landlord_dashboard():
                     st.caption(tr("No previous landlords added yet."))
 
 
-                # refs = list_latest_references_for_tenant(tid)
-                # # keep rows where status is None or not "cancelled"
-                # refs = [r for r in refs if (r[6] is None) or (str(r[6]).lower() != "cancelled")]
-
-                # if refs:
-                #     for (
-                #         prev_id, prev_name, prev_email, prev_afm, prev_addr,
-                #         token, status, score, paid_on_time, utilities_unpaid,
-                #         good_condition, comments, created_at, filled_at
-                #     ) in refs:
-
-                #         # Map raw status -> display key, then translate
-                #         display_status_key = {
-                #             None: "not requested",
-                #             "pending": "Pending",
-                #             "completed": "Completed",
-                #             "cancelled": "Cancelled",
-                #         }.get((status or "").lower() if status else None, status or "not requested")
-                #         display_status = tr(display_status_key)
-
-                #         # Expander title (fix quote nesting + translate labels)
-                #         with st.expander(
-                #             f"{tr('Reference from')} ({prev_email}) — {tr('**Status:**')} {display_status}"
-                #         ):
-                #             if status == "completed":
-                #                 st.markdown(f"{tr('**Score:**')} {score}/10")
-                #                 st.markdown(f"{tr('**Paid on time:**')} {tr('Yes') if paid_on_time else tr('No')}")
-                #                 st.markdown(f"{tr('**Utilities unpaid:**')} {tr('Yes') if utilities_unpaid else tr('No')}")
-                #                 st.markdown(f"{tr('**Apartment in good condition:**')} {tr('Yes') if good_condition else tr('No')}")
-                #                 if comments:
-                #                     st.markdown(tr('**Comments:**'))
-                #                     st.write(comments)
-
-                # else:
-                #     st.caption(tr("No previous landlords listed yet."))
 
     st.divider()
 
@@ -2370,10 +2335,6 @@ def landlord_dashboard():
                 cols[2].markdown(f"{tr('**Created:**')} {created_at}")
                 cols[3].markdown(f"{tr('**Score:**')} {score if score is not None else '—'}")
 
-                # cols[0].markdown(f"tr(**Tenant:**) {tenant_label}<br/>tr(**Email:**) {tenant_email}", unsafe_allow_html=True)
-                # cols[1].markdown(f"tr(**Status:**) {status}")
-                # cols[2].markdown(f"tr(**Created:**) {created_at}")
-                # cols[3].markdown(f"tr(**Score:**) {score if score is not None else '—'}")
                 st.caption(f"📍 **{tr('Address')}:** {address}")
 
                 if status == "pending":
@@ -2391,17 +2352,30 @@ def landlord_dashboard():
                     else:
                         with st.expander(tr('Respond Now')):
                             with st.form(f"{prefix}_landlord_response_{token}"):
-                                # ✅ GDPR-compliant consent text (translatable via tr)
                                 confirm = st.checkbox(
-                                    tr(
-                                        "I confirm that I was the landlord for this tenant. "
-                                        "By checking this box, I consent to the use of the uploaded tenancy contract "
-                                        "solely for verifying my relationship with the tenant and for completing this reference. "
-                                        "The contract will remain encrypted and locked until I provide this confirmation. "
-                                        "It will not be shared or used for any other purpose, in accordance with GDPR."
-                                    ),
+                                    tr("I confirm I was the landlord for this tenant and consent to the use and disclosure of my full name solely for verification of this reference."),
                                     key=f"{prefix}_confirm_{token}"
                                 )
+                                st.caption(
+                                    tr("Tenant: {tenant_name} — Address: {address}")
+                                    .format(tenant_name=tenant_label, address=address)
+                                )
+                                with st.expander(tr("Privacy & verification details")):
+                                    p = tr("RentRight processes your responses, and if the tenant has uploaded a tenancy contract, may decrypt and review it after your confirmation solely to verify this reference (lawful basis: legitimate interests). The contract remains encrypted and is not shown to you. You may object at any time as described in the Privacy Notice.")
+                                    if st.session_state.get("privacy_url"):
+                                        p += f" {tr('Privacy Notice')}: {st.session_state['privacy_url']}"
+                                    st.write(p)
+                        # with st.expander(tr('Respond Now')):
+                        #     with st.form(f"{prefix}_landlord_response_{token}"):
+                        #         # ✅ GDPR-compliant consent text (translatable via tr)
+                        #         confirm = st.checkbox(
+                        #             tr(
+                        #                 "I declare I was the landlord for {tenant_name} at {address}. "
+                        #                 "I consent to RentRight using and disclosing my full name solely to verify this reference. "
+                        #                 "I understand my responses are processed on the basis of legitimate interests and that I may object as described in the Privacy Notice."
+                        #             ).format(tenant_name=tenant_name, address=address)
+                        #         )
+
 
                                 s = st.slider(
                                     tr('Overall tenant score'), 1, 10, 8,
