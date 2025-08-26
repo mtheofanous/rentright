@@ -2391,9 +2391,9 @@ def landlord_dashboard():
                         with st.expander(tr('Respond Now'), expanded=True):
                             st.info(tr("Thanks — your response is saved. The request will complete once the tenant’s contract is verified by an admin."))
                             st.write(f"**{tr('Overall tenant score')}:** {details.get('score')}/10")
-                            st.write(f"**{tr('Did the tenant pay on time?')}:** {'Yes' if details.get('paid_on_time') else 'No'}")
-                            st.write(f"**{tr('Did the tenant leave utilities unpaid?')}:** {'Yes' if details.get('utilities_unpaid') else 'No'}")
-                            st.write(f"**{tr('Did the tenant leave the apartment in good condition?')}:** {'Yes' if details.get('good_condition') else 'No'}")
+                            st.write(f"**{tr('Did the tenant pay on time?')}:** {tr('Yes') if details.get('paid_on_time') else tr('No')}")
+                            st.write(f"**{tr('Did the tenant leave utilities unpaid?')}:** {tr('Yes') if details.get('utilities_unpaid') else tr('No')}")
+                            st.write(f"**{tr('Did the tenant leave the apartment in good condition?')}:** {tr('Yes') if details.get('good_condition') else tr('No')}")
                             if details.get('comments'):
                                 st.write("**" + tr('Optional comments') + ":**")
                                 st.write(details['comments'])
