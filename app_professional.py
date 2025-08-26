@@ -2190,16 +2190,16 @@ def landlord_dashboard():
                     st.caption(f"Based on {len(scores)} completed references.")
 
                 # Show latest reference status per previous landlord for this tenant
-                refs = list_latest_references_for_tenant(tid)
-                # keep rows where status is None or not "cancelled"
+                refs = list_latest_references_for_tenant(tid) or []
+
+                # keep rows where status is None or not "cancelled" (status is at index 6)
                 refs = [r for r in refs if (r[6] is None) or (str(r[6]).lower() != "cancelled")]
 
                 if refs:
-                    for (
-                        prev_id, prev_name, prev_email, prev_afm, prev_addr,
-                        token, status, score, paid_on_time, utilities_unpaid,
-                        good_condition, comments, created_at, filled_at
-                    ) in refs:
+                    for r in refs:
+                        # match the SELECT column order (14 cols)
+                        prev_id, prev_name, prev_email, prev_afm, prev_addr = r[0:5]
+                        token, status, score, paid_on_time, utilities_unpaid, good_condition, comments, created_at, filled_at = r[5:14]
 
                         # Map raw status -> display key, then translate
                         display_status_key = {
@@ -2210,7 +2210,6 @@ def landlord_dashboard():
                         }.get((status or "").lower() if status else None, status or "not requested")
                         display_status = tr(display_status_key)
 
-                        # Expander title (fix quote nesting + translate labels)
                         with st.expander(
                             f"{tr('Reference from')} ({prev_email}) — {tr('**Status:**')} {display_status}"
                         ):
@@ -2222,33 +2221,44 @@ def landlord_dashboard():
                                 if comments:
                                     st.markdown(tr('**Comments:**'))
                                     st.write(comments)
+                else:
+                    st.caption(tr('No previous landlords added yet.'))
 
-                # # Show latest reference status per previous landlord for this tenant
                 # refs = list_latest_references_for_tenant(tid)
-                # refs = [r for r in refs if (r[6] is None) or (r[6] != "cancelled")]
+                # # keep rows where status is None or not "cancelled"
+                # refs = [r for r in refs if (r[6] is None) or (str(r[6]).lower() != "cancelled")]
+
                 # if refs:
-                #     for (prev_id, prev_name, prev_email, prev_addr, token, status, score, paid_on_time, utilities_unpaid, good_condition, comments, created_at, filled_at) in refs:
-                #         with st.expander(f"{tr("Reference from")} ({prev_email}) — {tr("Status:")} {status if status else 'not requested'}"):
-                            
-                            
+                #     for (
+                #         prev_id, prev_name, prev_email, prev_afm, prev_addr,
+                #         token, status, score, paid_on_time, utilities_unpaid,
+                #         good_condition, comments, created_at, filled_at
+                #     ) in refs:
+
+                #         # Map raw status -> display key, then translate
+                #         display_status_key = {
+                #             None: "not requested",
+                #             "pending": "Pending",
+                #             "completed": "Completed",
+                #             "cancelled": "Cancelled",
+                #         }.get((status or "").lower() if status else None, status or "not requested")
+                #         display_status = tr(display_status_key)
+
+                #         # Expander title (fix quote nesting + translate labels)
+                #         with st.expander(
+                #             f"{tr('Reference from')} ({prev_email}) — {tr('**Status:**')} {display_status}"
+                #         ):
                 #             if status == "completed":
                 #                 st.markdown(f"{tr('**Score:**')} {score}/10")
                 #                 st.markdown(f"{tr('**Paid on time:**')} {tr('Yes') if paid_on_time else tr('No')}")
                 #                 st.markdown(f"{tr('**Utilities unpaid:**')} {tr('Yes') if utilities_unpaid else tr('No')}")
                 #                 st.markdown(f"{tr('**Apartment in good condition:**')} {tr('Yes') if good_condition else tr('No')}")
+                #                 if comments:
+                #                     st.markdown(tr('**Comments:**'))
+                #                     st.write(comments)
 
-                                if comments:
-                                    st.markdown(tr('**Comments:**'))
-                                    st.write(comments)
-                                # st.write(f"tr(**Score:**) {score}/10")
-                                # st.write(f"tr(**Paid on time:**) {tr('Yes') if paid_on_time else tr('No')}")
-                                # st.write(f"tr(**Utilities unpaid:**) {tr('Yes') if utilities_unpaid else tr('No')}")
-                                # st.write(f"tr(**Apartment in good condition:**) {tr('Yes') if good_condition else tr('No')}")
-                                # if comments:
-                                #     st.write("tr(**Comments:**)")
-                                #     st.write(comments)
-                else:
-                    st.caption(tr("No previous landlords listed yet."))
+                # else:
+                #     st.caption(tr("No previous landlords listed yet."))
 
     st.divider()
 
