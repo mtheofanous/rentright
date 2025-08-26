@@ -1844,40 +1844,40 @@ def tenant_dashboard():
                                 st.rerun()
 
                     # 👉 Always render history in the no-active path
-                    if reqs:
-                        st.markdown("---")
-                        for (tok_i, status_i, created_at_i, score_i) in reqs:
-                            final_i = effective_reference_status(status_i, tok_i)
-                            contract_i = get_contract_by_token(tok_i)
-                            final_i_lower = str(final_i).lower()
+                    # if reqs:
+                    #     st.markdown("---")
+                    #     for (tok_i, status_i, created_at_i, score_i) in reqs:
+                    #         final_i = effective_reference_status(status_i, tok_i)
+                    #         contract_i = get_contract_by_token(tok_i)
+                    #         final_i_lower = str(final_i).lower()
 
-                            if final_i_lower in ("completed", "cancelled"):
-                                if final_i_lower == "completed":
-                                    if score_i is not None:
-                                        st.write(f"{tr('Score')}: **{score_i}**/10")
-                                    if contract_i:
-                                        st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract_i['status'])}")
-                                        try:
-                                            data_plain_i = load_contract_plaintext(tok_i)
-                                            if data_plain_i is None:
-                                                st.warning(tr('Contract is locked awaiting landlord consent'))
-                                            else:
-                                                st.download_button(
-                                                    tr('Download Contract'),
-                                                    data=data_plain_i,
-                                                    file_name=contract_i['filename'],
-                                                    mime=contract_i.get('content_type') or contract_i.get('mime_type'),
-                                                    key=f"dl_hist_{tok_i}",
-                                                )
-                                        except Exception as e:
-                                            st.warning(f"{tr('Unable to read the saved file')}: {e}")
-                                else:
-                                    details_i = get_reference_request_by_token(tok_i)
-                                    # Optionally show cancelled timestamp:
-                                    # st.caption(f"Cancelled at: {details_i.get('filled_at') or '—'}")
-                            else:
-                                if contract_i:
-                                    st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract_i['status'])}")
+                    #         if final_i_lower in ("completed", "cancelled"):
+                    #             if final_i_lower == "completed":
+                    #                 if score_i is not None:
+                    #                     st.write(f"{tr('Score')}: **{score_i}**/10")
+                    #                 if contract_i:
+                    #                     st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract_i['status'])}")
+                    #                     try:
+                    #                         data_plain_i = load_contract_plaintext(tok_i)
+                    #                         if data_plain_i is None:
+                    #                             st.warning(tr('Contract is locked awaiting landlord consent'))
+                    #                         else:
+                    #                             st.download_button(
+                    #                                 tr('Download Contract'),
+                    #                                 data=data_plain_i,
+                    #                                 file_name=contract_i['filename'],
+                    #                                 mime=contract_i.get('content_type') or contract_i.get('mime_type'),
+                    #                                 key=f"dl_hist_{tok_i}",
+                    #                             )
+                    #                     except Exception as e:
+                    #                         st.warning(f"{tr('Unable to read the saved file')}: {e}")
+                    #             else:
+                    #                 details_i = get_reference_request_by_token(tok_i)
+                    #                 # Optionally show cancelled timestamp:
+                    #                 # st.caption(f"Cancelled at: {details_i.get('filled_at') or '—'}")
+                    #         else:
+                    #             if contract_i:
+                    #                 st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract_i['status'])}")
 
                     # Done with the "no active" branch
                     continue
