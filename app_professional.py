@@ -188,6 +188,26 @@ def tr(s: str) -> str:
         return TRANSLATIONS_EL.get(s, s)
     return s
 
+
+# === Label & status helpers (i18n-friendly) ===
+
+# 3) One status→label mapper (keep raw DB values in English)
+STATUS_LABELS = {
+    None: "not requested",
+    "pending": "Pending",
+    "completed": "Completed",
+    "cancelled": "Cancelled",
+}
+
+def display_status_label(status: str | None) -> str:
+    key = (status or "").lower() if status else None
+    return tr(STATUS_LABELS.get(key, "not requested"))
+
+# 4) Bold markdown label without duplicating "**...**" keys in translations
+def md_label(key_with_colon: str) -> str:
+    # e.g., md_label('Status:') -> "**Κατάσταση:**" (when lang is Greek)
+    return f"**{tr(key_with_colon)}**"
+
 # === End language utilities ===
 
 
@@ -308,6 +328,7 @@ except Exception as e:
 def get_conn():
     # one shared connection per process/session (cache this with st.cache_resource if you like)
     conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
+    conn.row_factory = sqlite3.Row  
 
     # Try WAL, but gracefully fall back if the FS doesn't support it
     try:
@@ -1247,6 +1268,42 @@ def list_latest_references_for_tenant(tenant_id: int):
         (tenant_id,),
     )
     return cur.fetchall()
+
+def list_latest_references_for_tenant_dict(tenant_id: int) -> list[dict]:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT
+            pl.id            AS prev_id,
+            pl.name          AS prev_name,
+            pl.email         AS prev_email,
+            pl.afm           AS prev_afm,
+            pl.address       AS prev_addr,
+            rr.token         AS token,
+            rr.status        AS status,
+            rr.score         AS score,
+            rr.paid_on_time  AS paid_on_time,
+            rr.utilities_unpaid AS utilities_unpaid,
+            rr.good_condition   AS good_condition,
+            rr.comments      AS comments,
+            rr.created_at    AS created_at,
+            rr.filled_at     AS filled_at
+        FROM previous_landlords pl
+        LEFT JOIN reference_requests rr
+          ON rr.prev_landlord_id = pl.id
+         AND rr.tenant_id       = pl.tenant_id
+         AND rr.id = (
+              SELECT MAX(id)
+              FROM reference_requests
+              WHERE prev_landlord_id = pl.id AND tenant_id = pl.tenant_id
+          )
+        WHERE pl.tenant_id = ?
+        ORDER BY pl.id DESC
+        """,
+        (tenant_id,),
+    )
+    rows = cur.fetchall()  # sqlite3.Row objects
+    return [dict(r) for r in rows]
 
 
 
@@ -2190,39 +2247,37 @@ def landlord_dashboard():
                     st.caption(f"Based on {len(scores)} completed references.")
 
                 # Show latest reference status per previous landlord for this tenant
-                refs = list_latest_references_for_tenant(tid) or []
-
-                # keep rows where status is None or not "cancelled" (status is at index 6)
-                refs = [r for r in refs if (r[6] is None) or (str(r[6]).lower() != "cancelled")]
+                # --- Show latest reference status per previous landlord for this tenant ---
+                refs = list_latest_references_for_tenant_dict(tid) or []
+                refs = [r for r in refs if (r.get("status") is None) or (str(r.get("status")).lower() != "cancelled")]
 
                 if refs:
                     for r in refs:
-                        # match the SELECT column order (14 cols)
-                        prev_id, prev_name, prev_email, prev_afm, prev_addr = r[0:5]
-                        token, status, score, paid_on_time, utilities_unpaid, good_condition, comments, created_at, filled_at = r[5:14]
+                        prev_name  = r.get("prev_name")  or "—"
+                        prev_email = r.get("prev_email") or "—"
+                        prev_afm   = r.get("prev_afm")   or "—"
+                        prev_addr  = r.get("prev_addr")  or "—"
+                        status     = r.get("status")
+                        score      = r.get("score")
+                        paid_on    = r.get("paid_on_time")
+                        util_unp   = r.get("utilities_unpaid")
+                        good_cond  = r.get("good_condition")
+                        comments   = r.get("comments")
 
-                        # Map raw status -> display key, then translate
-                        display_status_key = {
-                            None: "not requested",
-                            "pending": "Pending",
-                            "completed": "Completed",
-                            "cancelled": "Cancelled",
-                        }.get((status or "").lower() if status else None, status or "not requested")
-                        display_status = tr(display_status_key)
+                        with st.expander(f"{tr('Reference from')} ({prev_email}) — {md_label('Status:')} {display_status_label(status)}"):
+                            st.caption(f"{tr('Previous landlord:')} **{prev_name}** · AFM: **{prev_afm}** · {tr('Address:')} {prev_addr}")
 
-                        with st.expander(
-                            f"{tr('Reference from')} ({prev_email}) — {tr('**Status:**')} {display_status}"
-                        ):
-                            if status == "completed":
-                                st.markdown(f"{tr('**Score:**')} {score}/10")
-                                st.markdown(f"{tr('**Paid on time:**')} {tr('Yes') if paid_on_time else tr('No')}")
-                                st.markdown(f"{tr('**Utilities unpaid:**')} {tr('Yes') if utilities_unpaid else tr('No')}")
-                                st.markdown(f"{tr('**Apartment in good condition:**')} {tr('Yes') if good_condition else tr('No')}")
+                            if (status or "").lower() == "completed":
+                                st.markdown(f"{md_label('Score:')} {score}/10")
+                                st.markdown(f"{md_label('Paid on time:')} {tr('Yes') if paid_on else tr('No')}")
+                                st.markdown(f"{md_label('Utilities unpaid:')} {tr('Yes') if util_unp else tr('No')}")
+                                st.markdown(f"{md_label('Apartment in good condition:')} {tr('Yes') if good_cond else tr('No')}")
                                 if comments:
-                                    st.markdown(tr('**Comments:**'))
+                                    st.markdown(md_label('Comments:'))
                                     st.write(comments)
                 else:
-                    st.caption(tr('No previous landlords added yet.'))
+                    st.caption(tr("No previous landlords added yet."))
+
 
                 # refs = list_latest_references_for_tenant(tid)
                 # # keep rows where status is None or not "cancelled"
