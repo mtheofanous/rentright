@@ -1338,7 +1338,7 @@ def reference_portal(token: str):
     st.info(
         f"{tr('Reference for')} **{tenant_name}** ({tenant_email})\n\n"
         f"📍 {tr('Address')}: {address}\n\n"
-        f"{tr('Sent to landlord')}: {data['landlord_email']}"
+        # f"{tr('Sent to landlord')}: {data['landlord_email']}"
     )
 
     # st.info(f"Reference for Tenant ID #{data['tenant_id']} — sent to {data['landlord_email']}")
@@ -1395,39 +1395,6 @@ def reference_portal(token: str):
         except Exception:
             st.experimental_set_query_params(page="cancelled")
         st.rerun()
-
-    # with st.form("reference_form"):
-    #     confirm = st.checkbox(tr('I confirm I was the landlord for this tenant.'))
-    #     score = st.slider(tr('Overall tenant score'), min_value=1, max_value=10, value=8)
-    #     paid_on_time = st.radio(tr('Did the tenant pay on time?'), ["Yes","No"], horizontal=True)
-    #     utilities_unpaid = st.radio(tr('Did the tenant leave utilities unpaid?'), ["No","Yes"], horizontal=True)
-    #     good_condition = st.radio(tr('Did the tenant leave the apartment in good condition?'), ["Yes","No"], horizontal=True)
-    #     comments = st.text_area(tr('Optional comments'))
-    #     submit = st.form_submit_button(tr('Submit Reference'))
-
-    # if submit:
-    #     if not confirm:
-    #         st.error(tr('Please confirm you were the landlord.'))
-    #         return
-
-    #     mark_reference_completed(
-    #         token,
-    #         confirm_landlord=True,
-    #         score=int(score),
-    #         paid_on_time=(paid_on_time == "Yes"),
-    #         utilities_unpaid=(utilities_unpaid == "Yes"),
-    #         good_condition=(good_condition == "Yes"),
-    #         comments=comments,
-    #     )
-
-    #     # ➜ Redirect to a dedicated "thank you" page
-    #     try:
-    #         st.query_params.clear()              # drop token from URL for privacy
-    #         st.query_params["page"] = "submitted"
-    #     except Exception:
-    #         st.experimental_set_query_params(page="submitted")
-    #     st.rerun()
-
 
 
 
@@ -1608,16 +1575,35 @@ def admin_dashboard():
                 if row:
                     pl_name, pl_email, pl_addr = row
 
+            # with st.container(border=True):
+            #     cols = st.columns([3, 3, 3, 2])
+            #     cols[0].markdown(f"**Tenant:** {tenant_label} ({tenant['email'] if tenant else '—'})")
+            #     cols[1].markdown(f"**To landlord:** {landlord_email}")
+            #     cols[2].markdown(f"**Created:** {created_at}")
+            #     cols[3].markdown(f"**Status:** {final_status}")
+
+            #     # ⬇️ Show previous landlord Name + AFM
+             
+            #     st.caption(f"Previous landlord: **{pl_name}** ({pl_email}) · Address: {pl_addr}")
+            
             with st.container(border=True):
                 cols = st.columns([3, 3, 3, 2])
-                cols[0].markdown(f"**Tenant:** {tenant_label} ({tenant['email'] if tenant else '—'})")
-                cols[1].markdown(f"**To landlord:** {landlord_email}")
-                cols[2].markdown(f"**Created:** {created_at}")
-                cols[3].markdown(f"**Status:** {final_status}")
 
-                # ⬇️ Show previous landlord Name + AFM
-             
-                st.caption(f"Previous landlord: **{pl_name}** ({pl_email}) · Address: {pl_addr}")
+                # Localized display status
+                display_status = {
+                    "pending": tr("Pending"),
+                    "completed": tr("Completed"),
+                    "cancelled": tr("Cancelled"),
+                }.get(str(final_status).lower(), final_status)
+
+                cols[0].markdown(f"{tr('**Tenant:**')} {tenant_label} ({tenant['email'] if tenant else '—'})")
+                cols[1].markdown(f"{tr('**To landlord:**')} {landlord_email}")
+                cols[2].markdown(f"{tr('**Created:**')} {created_at}")
+                cols[3].markdown(f"{tr('**Status:**')} {display_status}")
+
+                # ⬇️ Previous landlord line (translated)
+                st.caption(f"{tr('Previous landlord:')} **{pl_name}** ({pl_email}) · {tr('Address:')} {pl_addr}")
+
 
 
                 link = build_reference_link(token)
