@@ -172,6 +172,7 @@ TRANSLATIONS_EL = {
         "No": " Όχι",
         "No previous landlords added yet.": "Δεν έχουν προστεθεί ακόμη προηγούμενοι ιδιοκτήτες.",
         "No active reference request.": "Δεν υπάρχει ενεργό αίτημα σύστασης.",
+        'Reference from': 'Σύσταση από'
     }
 
 
@@ -2265,8 +2266,7 @@ def landlord_dashboard():
                         comments   = r.get("comments")
 
                         with st.expander(f"{tr('Reference from')} ({prev_email}) — {md_label('Status:')} {display_status_label(status)}"):
-                            st.caption(f"{tr('Previous landlord:')} **{prev_name}** · AFM: **{prev_afm}** · {tr('Address:')} {prev_addr}")
-
+                            
                             if (status or "").lower() == "completed":
                                 st.markdown(f"{md_label('Score:')} {score}/10")
                                 st.markdown(f"{md_label('Paid on time:')} {tr('Yes') if paid_on else tr('No')}")
