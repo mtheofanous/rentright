@@ -494,16 +494,49 @@ def remove_future_landlord_contact(contact_id: int, tenant_id: int):
     )
     get_conn().commit()
 
+# def invite_future_landlord(tenant_id: int, email: str, tenant_name: str, tenant_email: str):
+#     base = st.session_state.get("app_base_url") or (st.secrets.get("APP_BASE_URL") if hasattr(st, "secrets") else "")
+#     join_link = base if base else ""
+#     subject = f"{tenant_name} would like to connect with you on RentRight"
+#     body = (
+#         "Hello,\n\n"
+#         f"{tenant_name} ({tenant_email}) has added you as a future landlord on RentRight.\n"
+#         + (f"You can sign in or create an account here: {join_link}\n\n" if join_link else "")
+#         + "Thank you."
+#     )
+#     ok, msg = send_email_smtp(email, subject, body)
+#     if ok:
+#         conn = get_conn()
+#         cur = conn.cursor()
+#         cur.execute(
+#             "UPDATE future_landlord_contacts SET invited = 1, invited_at = ? WHERE tenant_id = ? AND LOWER(email) = LOWER(?)",
+#             (datetime.utcnow().isoformat(), tenant_id, email),
+#         )
+#         conn.commit()
+#     return ok, msg
+
 def invite_future_landlord(tenant_id: int, email: str, tenant_name: str, tenant_email: str):
     base = st.session_state.get("app_base_url") or (st.secrets.get("APP_BASE_URL") if hasattr(st, "secrets") else "")
     join_link = base if base else ""
-    subject = f"{tenant_name} would like to connect with you on RentRight"
+
+    subject = f"Πρόσκληση στο RentRight από τον/την {tenant_name}"
+
     body = (
-        "Hello,\n\n"
-        f"{tenant_name} ({tenant_email}) has added you as a future landlord on RentRight.\n"
-        + (f"You can sign in or create an account here: {join_link}\n\n" if join_link else "")
-        + "Thank you."
+        "Καλησπέρα σας,\n\n"
+        f"Ο/Η {tenant_name} ({tenant_email}) σας πρόσθεσε ως μελλοντικό/ή ιδιοκτήτη/ιδιοκτήτρια στο RentRight.\n"
+        "Με αυτόν τον τρόπο επιθυμεί να παραμείνετε σε επαφή για πιθανή μελλοντική μίσθωση.\n\n"
+        "Τι μπορείτε να κάνετε:\n"
+        "- Συνδεθείτε ή δημιουργήστε έναν λογαριασμό στο RentRight, ώστε να ενημερώνεστε εύκολα και με ασφάλεια.\n"
+        + (f"\nΣύνδεσμος πρόσβασης:\n{join_link}\n" if join_link else "")
+        + (
+            "\nΑν ο σύνδεσμος δεν εμφανίζεται, επισκεφθείτε την αρχική σελίδα του RentRight και συνδεθείτε/εγγραφείτε.\n"
+            if not join_link else ""
+        )
+        + "\nΓια οποιαδήποτε απορία, μπορείτε να απαντήσετε απευθείας σε αυτό το email.\n\n"
+        "Σας ευχαριστούμε,\n"
+        "Η ομάδα RentRight"
     )
+
     ok, msg = send_email_smtp(email, subject, body)
     if ok:
         conn = get_conn()
@@ -514,6 +547,7 @@ def invite_future_landlord(tenant_id: int, email: str, tenant_name: str, tenant_
         )
         conn.commit()
     return ok, msg
+
 
 
 
@@ -1160,15 +1194,41 @@ def build_reference_link(token: str) -> str:
     return f"?ref={token}"
 
 
+# def email_reference_request(tenant_name: str, tenant_email: str, landlord_email: str, link: str):
+#     subject = f"Reference Request for Tenant {tenant_name}"
+#     body = (
+#         f"Hello,\n\n"
+#         f"{tenant_name} ({tenant_email}) listed you as a previous landlord and is requesting a short reference.\n"
+#         f"Please confirm and complete the form here: {link}\n\n"
+#         f"Thank you!"
+#     )
+#     return send_email_smtp(landlord_email, subject, body)
+
 def email_reference_request(tenant_name: str, tenant_email: str, landlord_email: str, link: str):
-    subject = f"Reference Request for Tenant {tenant_name}"
+    subject = f"RentRight • Αίτημα σύστασης για τον/την {tenant_name}"
+
     body = (
-        f"Hello,\n\n"
-        f"{tenant_name} ({tenant_email}) listed you as a previous landlord and is requesting a short reference.\n"
-        f"Please confirm and complete the form here: {link}\n\n"
-        f"Thank you!"
+        "Καλησπέρα,\n\n"
+        f"Ο/Η {tenant_name} ({tenant_email}) σας δήλωσε ως προηγούμενο ιδιοκτήτη και ζητάει μια σύντομη σύσταση ενοικίασης.\n\n"
+        "Τι χρειάζεται να κάνετε:\n"
+        "1) Επιβεβαιώστε ότι ήσασταν ο ιδιοκτήτης\n"
+        "2) Απαντήστε σε μερικές γρήγορες ερωτήσεις (≈1–2 λεπτά)\n\n"
+        "Ανοίξτε την ασφαλή φόρμα εδώ:\n"
+        f"{link}\n\n"
+        "Γιατί το ζητάμε:\n"
+        "- Οι απαντήσεις σας βοηθούν έναν μελλοντικό ιδιοκτήτη να επιβεβαιώσει ότι ο/η ενοικιαστής υπήρξε αξιόπιστος και συνεπής.\n"
+        "- Χρησιμοποιούμε αυτές τις πληροφορίες μόνο για τη συγκεκριμένη σύσταση.\n\n"
+        "Απόρρητο & ασφάλεια:\n"
+        "- Οποιοδήποτε μισθωτήριο έχει ανεβάσει ο ενοικιαστής παραμένει κρυπτογραφημένο και κλειδωμένο.\n"
+        "- Ξεκλειδώνεται μόνο εάν επιβεβαιώσετε ότι ήσασταν ο ιδιοκτήτης και αποκλειστικά για σκοπούς επαλήθευσης.\n"
+        "- Δεν κοινοποιούμε τις απαντήσεις σας για άλλους σκοπούς (συμμόρφωση με GDPR).\n\n"
+        "Για τυχόν ερωτήσεις, μπορείτε να απαντήσετε απευθείας σε αυτό το email.\n\n"
+        "Σας ευχαριστούμε,\n"
+        "Η ομάδα RentRight"
     )
+
     return send_email_smtp(landlord_email, subject, body)
+
 
 # ---------- Landlord Reference Portal (public) ----------
 
