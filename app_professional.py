@@ -115,7 +115,7 @@ TRANSLATIONS_EL = {
         "Request cancelled.": "Το αίτημα ακυρώθηκε.",
         "View Submitted Reference": "Προβολή Υποβληθείσας Σύστασης",
         # Public portal
-        "🏠 RentRight — Landlord Reference Portal": "🏠 RentRight — Πύλη Σύστασης Ιδιοκτήτη",
+        "🏠 RentRight — Landlord Reference Portal": "🏠 RentRight — Συστατικές επιστολές Ιδιοκτήτη",
         "Invalid or expired reference token.": "Μη έγκυρο ή ληγμένο διακριτικό σύστασης.",
         "This reference has already been submitted. Thank you!": "Αυτή η σύσταση έχει ήδη υποβληθεί. Ευχαριστούμε!",
         "Reference for": "Σύσταση για",
@@ -153,6 +153,21 @@ TRANSLATIONS_EL = {
         "αποκλειστικά για την επαλήθευση της σχέσης μου με τον ενοικιαστή και για τη συμπλήρωση αυτής της σύστασης. "
         "Το συμβόλαιο θα παραμείνει κρυπτογραφημένο και κλειδωμένο έως ότου δώσω αυτήν την επιβεβαίωση. "
         "Δεν θα κοινοποιηθεί ούτε θα χρησιμοποιηθεί για οποιονδήποτε άλλο σκοπό, σύμφωνα με τον GDPR.",
+        "Reference Requests Sent To You": "Αιτήματα σύστασης που σας στάλθηκαν",
+        "Pending": "Εκκρεμή",
+        "Completed": "Ολοκληρωμένα",
+        "Cancelled": "Ακυρωμένα",
+        "All": "Όλα",
+        "Tenant:": "Ενοικιαστής:",
+        "Email:": "Email:",
+        "Status:": "Κατάσταση:",
+        "Created:": "Δημιουργήθηκε:",
+        "Score:": "Βαθμολογία:",
+        "**Tenant:**": "**Ενοικιαστής:**",
+        "**Email:**": "**Email:**",
+        "**Status:**": "**Κατάσταση:**",
+        "**Created:**": "**Δημιουργήθηκε:**",
+        "**Score:**": "**Βαθμολογία:**",
     }
 
 
@@ -625,6 +640,33 @@ def delete_landlord_responses(token: str):
                     pass
     conn.commit()
 
+# def email_reference_cancellation_smtp(
+#     tenant_name: str,
+#     tenant_email: str,
+#     landlord_email: str,
+#     landlord_name: str | None,
+#     landlord_address: str | None,
+#     token: str,
+#     cancelled_at: str | None,
+# ):
+#     subject = "Reference request cancelled — data deleted"
+#     body = f"""Hello {landlord_name or 'there'},
+
+# The tenant {tenant_name} has cancelled their rental reference request.
+
+# What this means:
+# • The reference link for token {token} is now disabled.
+# • The uploaded contract file has been permanently deleted.
+# • Any responses you submitted in the reference form have been permanently deleted.
+
+# Address on file: {landlord_address or '—'}
+# Cancelled at: {cancelled_at or '—'}
+
+# If you have questions, you can reply to {tenant_email}.
+# """
+#     # Uses your existing SMTP helper
+#     return send_email_smtp(landlord_email, subject, body)
+
 def email_reference_cancellation_smtp(
     tenant_name: str,
     tenant_email: str,
@@ -634,22 +676,22 @@ def email_reference_cancellation_smtp(
     token: str,
     cancelled_at: str | None,
 ):
-    subject = "Reference request cancelled — data deleted"
-    body = f"""Hello {landlord_name or 'there'},
+    subject = "Ακύρωση αιτήματος σύστασης — διαγραφή δεδομένων"
+    body = f"""Καλησπέρα {landlord_name or 'σας'},
 
-The tenant {tenant_name} has cancelled their rental reference request.
+Ο/Η {tenant_name} ακύρωσε το αίτημα σύστασης ενοικίασης.
 
-What this means:
-• The reference link for token {token} is now disabled.
-• The uploaded contract file has been permanently deleted.
-• Any responses you submitted in the reference form have been permanently deleted.
+Τι σημαίνει αυτό:
+• Ο σύνδεσμος σύστασης με το token {token} έχει πλέον απενεργοποιηθεί.
+• Το ανεβασμένο μισθωτήριο συμβόλαιο διαγράφηκε οριστικά.
+• Τυχόν απαντήσεις που υποβάλατε στη φόρμα σύστασης διαγράφηκαν οριστικά.
 
-Address on file: {landlord_address or '—'}
-Cancelled at: {cancelled_at or '—'}
+Διεύθυνση στο αρχείο: {landlord_address or '—'}
+Ώρα ακύρωσης: {cancelled_at or '—'}
 
-If you have questions, you can reply to {tenant_email}.
+Για οποιαδήποτε απορία, μπορείτε να απαντήσετε στο {tenant_email}.
 """
-    # Uses your existing SMTP helper
+    # Χρήση του υπάρχοντος SMTP helper
     return send_email_smtp(landlord_email, subject, body)
 
 
@@ -1291,9 +1333,9 @@ def reference_portal(token: str):
         )
 
         score = st.slider(tr('Overall tenant score'), min_value=1, max_value=10, value=8)
-        paid_on_time = st.radio(tr('Did the tenant pay on time?'), ["Yes","No"], horizontal=True)
-        utilities_unpaid = st.radio(tr('Did the tenant leave utilities unpaid?'), ["No","Yes"], horizontal=True)
-        good_condition = st.radio(tr('Did the tenant leave the apartment in good condition?'), ["Yes","No"], horizontal=True)
+        paid_on_time = st.radio(tr('Did the tenant pay on time?'), [tr("Yes"),tr("No")], horizontal=True)
+        utilities_unpaid = st.radio(tr('Did the tenant leave utilities unpaid?'), [tr("No"),tr("Yes")], horizontal=True)
+        good_condition = st.radio(tr('Did the tenant leave the apartment in good condition?'), [tr("Yes"),tr("No")], horizontal=True)
         comments = st.text_area(tr('Optional comments'))
 
         col_a, col_b = st.columns([1, 1])
@@ -1786,9 +1828,9 @@ def tenant_dashboard():
                         # Answers
                         if details:
                             st.write(f"**{tr('Overall tenant score')}:** {details.get('score')}/10")
-                            st.write(f"**{tr('Did the tenant pay on time?')}:** {'Yes' if details.get('paid_on_time') else 'No'}")
-                            st.write(f"**{tr('Did the tenant leave utilities unpaid?')}:** {'Yes' if details.get('utilities_unpaid') else 'No'}")
-                            st.write(f"**{tr('Did the tenant leave the apartment in good condition?')}:** {'Yes' if details.get('good_condition') else 'No'}")
+                            st.write(f"**{tr('Did the tenant pay on time?')}:** {tr('Yes') if details.get('paid_on_time') else tr('No')}")
+                            st.write(f"**{tr('Did the tenant leave utilities unpaid?')}:** {tr('Yes') if details.get('utilities_unpaid') else tr('No')}")
+                            st.write(f"**{tr('Did the tenant leave the apartment in good condition?')}:** {tr('Yes') if details.get('good_condition') else tr('No')}")
                             if details.get('comments'):
                                 st.write("**" + tr('Optional comments') + ":**")
                                 st.write(details['comments'])
@@ -2201,10 +2243,10 @@ def landlord_dashboard():
 
             with st.container(border=True):
                 cols = st.columns([3, 2, 3, 2])
-                cols[0].markdown(f"**Tenant:** {tenant_label}<br/>**Email:** {tenant_email}", unsafe_allow_html=True)
-                cols[1].markdown(f"**Status:** {status}")
-                cols[2].markdown(f"**Created:** {created_at}")
-                cols[3].markdown(f"**Score:** {score if score is not None else '—'}")
+                cols[0].markdown(f"tr(**Tenant:**) {tenant_label}<br/>tr(**Email:**) {tenant_email}", unsafe_allow_html=True)
+                cols[1].markdown(f"tr(**Status:**) {status}")
+                cols[2].markdown(f"tr(**Created:**) {created_at}")
+                cols[3].markdown(f"tr(**Score:**) {score if score is not None else '—'}")
                 st.caption(f"📍 **{tr('Address')}:** {address}")
 
                 if status == "pending":
