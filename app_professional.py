@@ -16,7 +16,7 @@ from utils_vault import encrypt_bytes, decrypt_bytes, sha256_bytes
 st.set_page_config(page_title="RentRight", page_icon="🏠", layout="centered")
 # === Language selector & translation ===
 if "lang" not in st.session_state:
-    st.session_state["lang"] = "English"  # default
+    st.session_state["lang"] = "Ελληνικά"  # default
 
 TRANSLATIONS_EL = {
         # Auth & common
@@ -144,6 +144,7 @@ TRANSLATIONS_EL = {
         "completed": "Ολοκληρώθηκε",
         
     }
+
 
 def tr(s: str) -> str:
     """Translate string s to Greek if the UI language is Greek; otherwise return s."""
