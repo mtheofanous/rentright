@@ -733,14 +733,33 @@ def login_form():
         email = st.text_input(tr('Email'))
         password = st.text_input(tr('Password'), type="password")
         submitted = st.form_submit_button(tr('Sign In'))
-        
+
     if submitted:
         user = get_user_by_email(email)
         if not user or user["password_hash"] != hash_password(password):
             st.error(tr('Incorrect email or password. Please try again.'))
-            return
+            st.stop()  # stop this run so the form stays visible with the error
+
+        # Save session and immediately rerun so main() routes to the dashboard
         st.session_state.user = {k: user[k] for k in ["id","email","name","role"]}
-        st.success(f"Welcome, {user['name']}!")
+        # Optional: flash once after rerun (uncomment + handle in dashboard if you want)
+        # st.session_state["flash_welcome"] = f"{tr('Welcome, ')}{user['name']}!"
+        st.rerun()
+
+# def login_form():
+#     st.subheader(tr('Sign In'))
+#     with st.form("login_form"):
+#         email = st.text_input(tr('Email'))
+#         password = st.text_input(tr('Password'), type="password")
+#         submitted = st.form_submit_button(tr('Sign In'))
+        
+#     if submitted:
+#         user = get_user_by_email(email)
+#         if not user or user["password_hash"] != hash_password(password):
+#             st.error(tr('Incorrect email or password. Please try again.'))
+#             return
+#         st.session_state.user = {k: user[k] for k in ["id","email","name","role"]}
+#         st.success(f"Welcome, {user['name']}!")
 
 
 def signup_form():
