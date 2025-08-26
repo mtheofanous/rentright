@@ -172,7 +172,32 @@ TRANSLATIONS_EL = {
         "No": " Όχι",
         "No previous landlords added yet.": "Δεν έχουν προστεθεί ακόμη προηγούμενοι ιδιοκτήτες.",
         "No active reference request.": "Δεν υπάρχει ενεργό αίτημα σύστασης.",
-        'Reference from': 'Σύσταση από'
+        'Reference from': 'Σύσταση από',
+        # === Reference Portal (info banner + consent) ===
+        "Reference for": "Σύσταση για",
+        "Address": "Διεύθυνση",
+
+        "I confirm I was the landlord for this tenant and consent to the use and disclosure of my full name solely for verification of this reference.":
+        "Επιβεβαιώνω ότι ήμουν ο/η ιδιοκτήτης/ιδιοκτήτρια αυτού του ενοικιαστή και συναινώ στη χρήση και κοινοποίηση του πλήρους ονόματός μου αποκλειστικά για την επαλήθευση αυτής της σύστασης.",
+
+        "Tenant: {tenant_name} — Address: {address}":
+        "Ενοικιαστής/στρια: {tenant_name} — Διεύθυνση: {address}",
+
+        "Privacy & verification details": "Λεπτομέρειες απορρήτου & επαλήθευσης",
+
+        "RentRight processes your responses, and if the tenant has uploaded a tenancy contract, may decrypt and review it after your confirmation solely to verify this reference (lawful basis: legitimate interests). The contract remains encrypted and is not shown to you. You may object at any time as described in the Privacy Notice.":
+        "Η RentRight επεξεργάζεται τις απαντήσεις σας και, αν ο ενοικιαστής έχει ανεβάσει μισθωτήριο συμβόλαιο, μπορεί να το αποκρυπτογραφήσει και να το εξετάσει μετά την επιβεβαίωσή σας, αποκλειστικά για να επαληθεύσει αυτή τη σύσταση (νομική βάση: έννομα συμφέροντα). Το συμβόλαιο παραμένει κρυπτογραφημένο και δεν εμφανίζεται σε εσάς. Μπορείτε να προβάλλετε αντίρρηση ανά πάσα στιγμή όπως περιγράφεται στην Πολιτική Απορρήτου.",
+
+        "Privacy Notice": "Πολιτική Απορρήτου",
+
+        # --- Form fields (in case any are missing) ---
+        "Overall tenant score": "Συνολική βαθμολογία ενοικιαστή",
+        "Did the tenant pay on time?": "Πλήρωνε ο ενοικιαστής στην ώρα του;",
+        "Did the tenant leave utilities unpaid?": "Άφησε ο ενοικιαστής απλήρωτους λογαριασμούς;",
+        "Did the tenant leave the apartment in good condition?": "Άφησε ο ενοικιαστής το διαμέρισμα σε καλή κατάσταση;",
+        "Optional comments": "Προαιρετικά σχόλια",
+        "Submit Reference": "Υποβολή σύστασης",
+
     }
 
 
@@ -1397,21 +1422,44 @@ def reference_portal(token: str):
     # --- Info banner with richer details
     st.info(
         f"{tr('Reference for')} **{tenant_name}** ({tenant_email})\n\n"
-        f"📍 {tr('Address')}: {address}\n\n"
-        # f"{tr('Sent to landlord')}: {data['landlord_email']}"
-    )
-
-    # st.info(f"Reference for Tenant ID #{data['tenant_id']} — sent to {data['landlord_email']}")
-    with st.form("reference_form"):
-        confirm = st.checkbox(
-            tr(
-                "I confirm that I was the landlord for this tenant. "
-                "By checking this box, I consent to the use of the uploaded tenancy contract "
-                "solely for verifying my relationship with the tenant and for completing this reference. "
-                "The contract will remain encrypted and locked until I provide this confirmation. "
-                "It will not be shared or used for any other purpose, in accordance with GDPR."
-            )
+        f"📍 {tr('Address')}: {address}"
         )
+
+    with st.form("reference_form"):
+        # ✅ Short attestation + limited consent (no contract shown to landlord)
+        confirm = st.checkbox(
+            tr("I confirm I was the landlord for this tenant and consent to the use and disclosure of my full name solely for verification of this reference.")
+        )
+
+        # Context line with placeholders (avoids PII inside the checkbox itself)
+        st.caption(
+            tr("Tenant: {tenant_name} — Address: {address}")
+            .format(tenant_name=tenant_name, address=address)
+        )
+
+        # Transparency (legitimate interests + right to object)
+        with st.expander(tr("Privacy & verification details")):
+            p = tr("RentRight processes your responses, and if the tenant has uploaded a tenancy contract, may decrypt and review it after your confirmation solely to verify this reference (lawful basis: legitimate interests). The contract remains encrypted and is not shown to you. You may object at any time as described in the Privacy Notice.")
+            if st.session_state.get("privacy_url"):
+                p += f" {tr('Privacy Notice')}: {st.session_state['privacy_url']}"
+            st.write(p)
+    # st.info(
+    #     f"{tr('Reference for')} **{tenant_name}** ({tenant_email})\n\n"
+    #     f"📍 {tr('Address')}: {address}\n\n"
+    #     # f"{tr('Sent to landlord')}: {data['landlord_email']}"
+    # )
+
+    # # st.info(f"Reference for Tenant ID #{data['tenant_id']} — sent to {data['landlord_email']}")
+    # with st.form("reference_form"):
+    #     confirm = st.checkbox(
+    #         tr(
+    #             "I confirm that I was the landlord for this tenant. "
+    #             "By checking this box, I consent to the use of the uploaded tenancy contract "
+    #             "solely for verifying my relationship with the tenant and for completing this reference. "
+    #             "The contract will remain encrypted and locked until I provide this confirmation. "
+    #             "It will not be shared or used for any other purpose, in accordance with GDPR."
+    #         )
+    #     )
 
         score = st.slider(tr('Overall tenant score'), min_value=1, max_value=10, value=8)
         paid_on_time = st.radio(tr('Did the tenant pay on time?'), [tr("Yes"),tr("No")], horizontal=True)
