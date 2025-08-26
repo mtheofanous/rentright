@@ -2110,25 +2110,36 @@ def landlord_dashboard():
     c3.metric(tr('Cancelled'), len(cancelled_reqs))
 
     tab_all, tab_pending, tab_completed, tab_cancelled = st.tabs([tr('All'), tr('Pending'), tr('Completed'), tr('Cancelled')])
-
+    
     def render_requests(reqs, prefix: str):
         if not reqs:
             st.info(tr('No requests found.'))
             return
 
         for (token, tenant_id, created_at, status, score) in reqs:
-            tenant = get_user_by_id(tenant_id)
+            tenant = get_user_by_id(tenant_id)  # name + email
+            tenant_label = tenant["name"] if tenant else f"Tenant #{tenant_id}"
+            tenant_email = tenant["email"] if tenant else "—"
+
+            # Pull address from previous_landlords by prev_landlord_id on this request
+            details = get_reference_request_by_token(token)
+            address = "—"
+            if details and details.get("prev_landlord_id"):
+                cur = conn.cursor()
+                cur.execute("SELECT address FROM previous_landlords WHERE id=?", (details["prev_landlord_id"],))
+                row = cur.fetchone()
+                if row:
+                    address = row[0]
+
             with st.container(border=True):
-                cols = st.columns([3,2,3,2])
-                tenant_label = tenant["name"] if tenant else f"Tenant #{tenant_id}"
-                cols[0].markdown(f"**Tenant:** {tenant_label}")
+                cols = st.columns([3, 2, 3, 2])
+                cols[0].markdown(f"**Tenant:** {tenant_label}<br/>**Email:** {tenant_email}", unsafe_allow_html=True)
                 cols[1].markdown(f"**Status:** {status}")
                 cols[2].markdown(f"**Created:** {created_at}")
                 cols[3].markdown(f"**Score:** {score if score is not None else '—'}")
-                
-                if status == "pending":
-                    details = get_reference_request_by_token(token)
+                st.caption(f"📍 **{tr('Address')}:** {address}")
 
+                if status == "pending":
                     # If landlord already submitted, show a read-only summary instead of the form
                     if details and details.get("confirm_landlord"):
                         with st.expander(tr('Respond Now'), expanded=True):
@@ -2143,10 +2154,18 @@ def landlord_dashboard():
                     else:
                         with st.expander(tr('Respond Now')):
                             with st.form(f"{prefix}_landlord_response_{token}"):
+                                # ✅ GDPR-compliant consent text (translatable via tr)
                                 confirm = st.checkbox(
-                                    tr('I confirm I was the landlord for this tenant.'),
+                                    tr(
+                                        "I confirm that I was the landlord for this tenant. "
+                                        "By checking this box, I consent to the use of the uploaded tenancy contract "
+                                        "solely for verifying my relationship with the tenant and for completing this reference. "
+                                        "The contract will remain encrypted and locked until I provide this confirmation. "
+                                        "It will not be shared or used for any other purpose, in accordance with GDPR."
+                                    ),
                                     key=f"{prefix}_confirm_{token}"
                                 )
+
                                 s = st.slider(
                                     tr('Overall tenant score'), 1, 10, 8,
                                     key=f"{prefix}_score_{token}"
@@ -2192,6 +2211,89 @@ def landlord_dashboard():
                                 cancel_reference_request(token)
                                 st.warning(tr('Request cancelled.'))
                                 st.rerun()
+
+
+    # def render_requests(reqs, prefix: str):
+    #     if not reqs:
+    #         st.info(tr('No requests found.'))
+    #         return
+
+    #     for (token, tenant_id, created_at, status, score) in reqs:
+    #         tenant = get_user_by_id(tenant_id)
+    #         with st.container(border=True):
+    #             cols = st.columns([3,2,3,2])
+    #             tenant_label = tenant["name"] if tenant else f"Tenant #{tenant_id}"
+    #             cols[0].markdown(f"**Tenant:** {tenant_label}")
+    #             cols[1].markdown(f"**Status:** {status}")
+    #             cols[2].markdown(f"**Created:** {created_at}")
+    #             cols[3].markdown(f"**Score:** {score if score is not None else '—'}")
+                
+    #             if status == "pending":
+    #                 details = get_reference_request_by_token(token)
+
+    #                 # If landlord already submitted, show a read-only summary instead of the form
+    #                 if details and details.get("confirm_landlord"):
+    #                     with st.expander(tr('Respond Now'), expanded=True):
+    #                         st.info(tr("Thanks — your response is saved. The request will complete once the tenant’s contract is verified by an admin."))
+    #                         st.write(f"**{tr('Overall tenant score')}:** {details.get('score')}/10")
+    #                         st.write(f"**{tr('Did the tenant pay on time?')}:** {'Yes' if details.get('paid_on_time') else 'No'}")
+    #                         st.write(f"**{tr('Did the tenant leave utilities unpaid?')}:** {'Yes' if details.get('utilities_unpaid') else 'No'}")
+    #                         st.write(f"**{tr('Did the tenant leave the apartment in good condition?')}:** {'Yes' if details.get('good_condition') else 'No'}")
+    #                         if details.get('comments'):
+    #                             st.write("**" + tr('Optional comments') + ":**")
+    #                             st.write(details['comments'])
+    #                 else:
+    #                     with st.expander(tr('Respond Now')):
+    #                         with st.form(f"{prefix}_landlord_response_{token}"):
+    #                             confirm = st.checkbox(
+    #                                 tr('I confirm I was the landlord for this tenant.'),
+    #                                 key=f"{prefix}_confirm_{token}"
+    #                             )
+    #                             s = st.slider(
+    #                                 tr('Overall tenant score'), 1, 10, 8,
+    #                                 key=f"{prefix}_score_{token}"
+    #                             )
+    #                             paid_on_time = st.radio(
+    #                                 tr('Did the tenant pay on time?'), ["Yes","No"],
+    #                                 horizontal=True, key=f"{prefix}_paid_{token}"
+    #                             )
+    #                             utilities_unpaid = st.radio(
+    #                                 tr('Did the tenant leave utilities unpaid?'), ["No","Yes"],
+    #                                 horizontal=True, key=f"{prefix}_utilities_{token}"
+    #                             )
+    #                             good_condition = st.radio(
+    #                                 tr('Did the tenant leave the apartment in good condition?'), ["Yes","No"],
+    #                                 horizontal=True, key=f"{prefix}_condition_{token}"
+    #                             )
+    #                             comments = st.text_area(
+    #                                 tr('Optional comments'),
+    #                                 key=f"{prefix}_comments_{token}"
+    #                             )
+
+    #                             col_a, col_b = st.columns([1,1])
+    #                             submit = col_a.form_submit_button(tr('Submit Reference'))
+    #                             cancel_btn = col_b.form_submit_button(tr('Not My Tenant / Cancel'))
+
+    #                         if submit:
+    #                             if not confirm:
+    #                                 st.error(tr('Please confirm you were the landlord.'))
+    #                             else:
+    #                                 mark_reference_completed(
+    #                                     token,
+    #                                     confirm_landlord=True,
+    #                                     score=int(s),
+    #                                     paid_on_time=(paid_on_time == "Yes"),
+    #                                     utilities_unpaid=(utilities_unpaid == "Yes"),
+    #                                     good_condition=(good_condition == "Yes"),
+    #                                     comments=comments,
+    #                                 )
+    #                                 st.success(tr('Reference submitted successfully.'))
+    #                                 st.rerun()
+
+    #                         if cancel_btn:
+    #                             cancel_reference_request(token)
+    #                             st.warning(tr('Request cancelled.'))
+    #                             st.rerun()
 
 
                 # if status == "pending":
