@@ -784,12 +784,11 @@ def login_form():
         user = get_user_by_email(email)
         if not user or user["password_hash"] != hash_password(password):
             st.error(tr('Incorrect email or password. Please try again.'))
-            st.stop()  # stop this run so the form stays visible with the error
 
         # Save session and immediately rerun so main() routes to the dashboard
         st.session_state.user = {k: user[k] for k in ["id","email","name","role"]}
         # Optional: flash once after rerun (uncomment + handle in dashboard if you want)
-        # st.session_state["flash_welcome"] = f"{tr('Welcome, ')}{user['name']}!"
+        st.session_state["flash_welcome"] = f"{tr('Welcome, ')}{user['name']}!"
         st.rerun()
 
 # def login_form():
