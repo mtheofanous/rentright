@@ -12,6 +12,9 @@ import tempfile
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo 
 from utils_vault import encrypt_bytes, decrypt_bytes, sha256_bytes
+import requests
+from functools import lru_cache
+
 
 # ⚠️ set_page_config must be the first Streamlit command
 st.set_page_config(page_title="RentRight", page_icon="🏠", layout="centered")
@@ -97,7 +100,7 @@ TRANSLATIONS_EL = {
         "⏳ Pending Review": "⏳ Αναμονή Ελέγχου",
         "✅ Verified Contract": "✅ Επικυρωμένο Συμβόλαιο",
         "❌ Rejected Contract": "❌ Απορριφθέν Συμβόλαιο",
-        "Thanks, your response is saved. The request will complete once the tenant’s contract is verified.": "Ευχαριστούμε — η απάντησή σας αποθηκεύτηκε. Το αίτημα θα ολοκληρωθεί μόλις επαληθευτεί το συμβόλαιο του ενοικιαστή.",
+        "Thanks, your response is saved.": "Ευχαριστούμε, η απάντησή σας αποθηκεύτηκε.",
         "Pending References (All Tenants)": "Εκκρεμείς Συστάσεις (Όλοι οι Ενοικιαστές)",
         "No requests available.": "Δεν υπάρχουν διαθέσιμα αιτήματα.",
         "Reference Link": "Σύνδεσμος Σύστασης",
@@ -402,6 +405,76 @@ def ensure_contracts_consent_column(conn):
         cur.execute("ALTER TABLE reference_contracts ADD COLUMN consent_status TEXT NOT NULL DEFAULT 'locked'")
         conn.commit()
         
+# --- Places search via OpenStreetMap Nominatim (free) ---
+
+def _nominatim_headers():
+    # Keep the API happy with a descriptive UA (put your contact email in secrets if you like)
+    contact = ""
+    try:
+        contact = st.secrets.get("CONTACT_EMAIL", "")
+    except Exception:
+        pass
+    ua = "RentRight/1.0 (+https://example.com)"
+    if contact:
+        ua += f" {contact}"
+    return {"User-Agent": ua}
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def search_places(q: str, country: str = "gr", feature: str | None = None, limit: int = 10):
+    """
+    q: free-text query
+    country: 2-letter ISO country filter (e.g. 'gr', 'es', 'it')
+    feature: None (all), or one of: 'city','town','village','suburb','neighbourhood','district'
+    """
+    if not q or len(q.strip()) < 2:
+        return []
+    url = "https://nominatim.openstreetmap.org/search"
+    params = {
+        "q": q.strip(),
+        "format": "jsonv2",
+        "addressdetails": 1,
+        "limit": limit,
+        "accept-language": "en",
+        "countrycodes": (country or "").lower(),
+    }
+    # feature filtering: OSM uses 'class' + 'type' — we’ll post-filter on 'type'
+    try:
+        r = requests.get(url, params=params, headers=_nominatim_headers(), timeout=10)
+        r.raise_for_status()
+        data = r.json() or []
+    except Exception:
+        return []
+
+    # canonical label builder
+    def label(item):
+        addr = item.get("address", {})
+        parts = [
+            item.get("name") or addr.get("city") or addr.get("town") or addr.get("village"),
+            addr.get("state") or addr.get("county"),
+            addr.get("country_code", "").upper(),
+        ]
+        return ", ".join([p for p in parts if p])
+
+    # optional feature filter using item['type'] (e.g. 'city','town','village','suburb','neighbourhood','district')
+    results = []
+    for it in data:
+        t = (it.get("type") or "").lower()
+        if feature and t != feature.lower():
+            # allow close family when user asks for "district": accept suburb/neighbourhood
+            if feature.lower() == "district" and t in ("suburb", "neighbourhood", "city_district"):
+                pass
+            else:
+                continue
+        results.append({
+            "osm_id": it.get("osm_id"),
+            "type": it.get("type"),
+            "class": it.get("class"),
+            "lat": it.get("lat"),
+            "lon": it.get("lon"),
+            "label": label(it) or (it.get("display_name") or "").split(",")[0],
+        })
+    return results
+       
 
 def format_dt(value, tz="Europe/Athens") -> str:
     """Return dd/mm/yyyy HH:MM in local time, robust to strings/naive dt."""
@@ -469,6 +542,10 @@ def run_migrations(conn):
     add_column_if_missing(conn, "tenant_profiles", "floor_max INTEGER")
     add_column_if_missing(conn, "tenant_profiles", "price_min INTEGER")
     add_column_if_missing(conn, "tenant_profiles", "price_max INTEGER")
+    # Optional: add OSM reference columns for stronger data integrity
+    add_column_if_missing("tenant_profiles", "search_city_osm_id", "INTEGER")
+    add_column_if_missing("tenant_profiles", "search_district_osm_id", "INTEGER")
+
 
         
 def delete_previous_landlord_completely(tenant_id: int, prev_landlord_id: int):
@@ -743,6 +820,8 @@ def save_open_to_rent_prefs(
     rooms_min: int | None, rooms_max: int | None,
     floor_min: int | None, floor_max: int | None,
     price_min: int | None, price_max: int | None,
+    city_osm_id: int | None = None,
+    district_osm_id: int | None = None,
 ):
     ensure_tenant_profile_row(tenant_id)
     now = datetime.utcnow().isoformat()
@@ -751,8 +830,8 @@ def save_open_to_rent_prefs(
         """
         UPDATE tenant_profiles
            SET open_to_rent=?,
-               search_city=?,
-               search_district=?,
+               search_city=?, search_city_osm_id=?,
+               search_district=?, search_district_osm_id=?,
                size_min=?, size_max=?,
                rooms_min=?, rooms_max=?,
                floor_min=?, floor_max=?,
@@ -762,8 +841,8 @@ def save_open_to_rent_prefs(
         """,
         (
             1 if open_to_rent else 0,
-            (city or "").strip() or None,
-            (district or "").strip() or None,
+            (city or "").strip() or None, city_osm_id,
+            (district or "").strip() or None, district_osm_id,
             size_min, size_max,
             rooms_min, rooms_max,
             floor_min, floor_max,
@@ -772,7 +851,48 @@ def save_open_to_rent_prefs(
         ),
     )
     conn.commit()
-    
+
+
+
+# def save_open_to_rent_prefs(
+#     tenant_id: int,
+#     open_to_rent: bool,
+#     city: str | None,
+#     district: str | None,
+#     size_min: int | None, size_max: int | None,
+#     rooms_min: int | None, rooms_max: int | None,
+#     floor_min: int | None, floor_max: int | None,
+#     price_min: int | None, price_max: int | None,
+# ):
+#     ensure_tenant_profile_row(tenant_id)
+#     now = datetime.utcnow().isoformat()
+#     cur = conn.cursor()
+#     cur.execute(
+#         """
+#         UPDATE tenant_profiles
+#            SET open_to_rent=?,
+#                search_city=?,
+#                search_district=?,
+#                size_min=?, size_max=?,
+#                rooms_min=?, rooms_max=?,
+#                floor_min=?, floor_max=?,
+#                price_min=?, price_max=?,
+#                updated_at=?
+#          WHERE tenant_id=?
+#         """,
+#         (
+#             1 if open_to_rent else 0,
+#             (city or "").strip() or None,
+#             (district or "").strip() or None,
+#             size_min, size_max,
+#             rooms_min, rooms_max,
+#             floor_min, floor_max,
+#             price_min, price_max,
+#             now, tenant_id
+#         ),
+#     )
+#     conn.commit()
+
 def tenant_open_to_rent_section():
     st.subheader(tr("Open to Rent"))
 
@@ -785,10 +905,54 @@ def tenant_open_to_rent_section():
     )
 
     with st.container(border=True):
-        col_city, col_dist = st.columns(2)
-        city = col_city.text_input(tr("City"), value=prefs.get("search_city") or "")
-        district = col_dist.text_input(tr("District"), value=prefs.get("search_district") or "")
+        # --- Country filter for search relevance (defaults to Greece) ---
+        col_country, _gap = st.columns([1,3])
+        country = col_country.selectbox(
+            "Country (for search)",
+            options=[("Greece","gr"), ("Spain","es"), ("Italy","it"), ("Romania","ro"), ("Ireland","ie")],
+            index=0,
+            format_func=lambda x: x[0],
+            key="otr_country",
+        )[1]
 
+        col_city, col_dist = st.columns(2)
+
+        # --- City search + pick ---
+        city_query_default = prefs.get("search_city") or ""
+        city_query = col_city.text_input(tr("City"), value=city_query_default, key="otr_city_query")
+        city_suggestions = search_places(city_query, country=country, feature="city", limit=8) if len(city_query.strip()) >= 3 else []
+        if city_suggestions:
+            city_labels = [r["label"] for r in city_suggestions]
+            try:
+                idx = city_labels.index(city_query_default) if city_query_default in city_labels else 0
+            except Exception:
+                idx = 0
+            picked_city = col_city.selectbox(tr("Pick a city"), options=city_labels, index=idx, key="otr_city_pick")
+            city = picked_city
+            city_osm_id = next((r["osm_id"] for r in city_suggestions if r["label"] == picked_city), None)
+        else:
+            city = city_query.strip()
+            city_osm_id = None
+
+        # --- District search + pick (suburb/neighbourhood/city_district) ---
+        district_query_default = prefs.get("search_district") or ""
+        district_query = col_dist.text_input(tr("District"), value=district_query_default, key="otr_dist_query")
+        dist_q_effective = f"{district_query} {city}".strip() if city else district_query
+        dist_suggestions = search_places(dist_q_effective, country=country, feature="district", limit=10) if len(district_query.strip()) >= 3 else []
+        if dist_suggestions:
+            dist_labels = [r["label"] for r in dist_suggestions]
+            try:
+                idx = dist_labels.index(district_query_default) if district_query_default in dist_labels else 0
+            except Exception:
+                idx = 0
+            picked_dist = col_dist.selectbox(tr("Pick a district"), options=dist_labels, index=idx, key="otr_dist_pick")
+            district = picked_dist
+            district_osm_id = next((r["osm_id"] for r in dist_suggestions if r["label"] == picked_dist), None)
+        else:
+            district = district_query.strip()
+            district_osm_id = None
+
+        # --- The rest of your filters (unchanged) ---
         c1, c2 = st.columns(2)
         size_min = c1.number_input(tr("Min size (m²)"), min_value=0, max_value=10000, value=int(prefs.get("size_min") or 0), step=1)
         size_max = c2.number_input(tr("Max size (m²)"), min_value=0, max_value=10000, value=int(prefs.get("size_max") or 0), step=1)
@@ -798,51 +962,216 @@ def tenant_open_to_rent_section():
         rooms_max = r2.number_input(tr("Max rooms"), min_value=0, max_value=20, value=int(prefs.get("rooms_max") or 0), step=1)
 
         f1, f2 = st.columns(2)
-        floor_min = f1.number_input(tr("Min floor"), min_value=0, max_value=100, value=int(prefs.get("floor_min") or 0), step=1)
-        floor_max = f2.number_input(tr("Max floor"), min_value=0, max_value=100, value=int(prefs.get("floor_max") or 0), step=1)
+        floor_min = f1.number_input(tr("Min floor"), min_value=-5, max_value=100, value=int(prefs.get("floor_min") or 0), step=1)
+        floor_max = f2.number_input(tr("Max floor"), min_value=-5, max_value=100, value=int(prefs.get("floor_max") or 0), step=1)
 
         p1, p2 = st.columns(2)
-        price_min = p1.number_input(tr("Min price (€)"), min_value=0, max_value=10_000_000, value=int(prefs.get("price_min") or 0), step=10)
-        price_max = p2.number_input(tr("Max price (€)"), min_value=0, max_value=10_000_000, value=int(prefs.get("price_max") or 0), step=10)
+        price_min = p1.number_input(tr("Min price (€)"), min_value=0, max_value=1_000_000, value=int(prefs.get("price_min") or 0), step=50)
+        price_max = p2.number_input(tr("Max price (€)"), min_value=0, max_value=1_000_000, value=int(prefs.get("price_max") or 0), step=50)
 
-        # Hint
-        st.caption(tr("Tip: leave a minimum as 0 if you have no minimum for that field."))
-
-        # Save
-        if st.button(tr("Save preferences")):
-            # Basic validation when active
-            if open_flag and not (city.strip() or district.strip()):
-                st.error(tr("Please enter at least a city or a district."))
-            elif (size_max and size_min and size_max < size_min) \
-                 or (rooms_max and rooms_min and rooms_max < rooms_min) \
-                 or (floor_max and floor_min and floor_max < floor_min) \
-                 or (price_max and price_min and price_max < price_min):
-                st.error(tr("Please check your ranges: maximums must be greater than or equal to minimums."))
+        # --- Save ---
+        col_save, _ = st.columns([1,3])
+        if col_save.button(tr("Save preferences")):
+            if not city and not district:
+                st.warning(tr("Please enter at least a city or a district."))
             else:
-                # Convert zeros to None (treat as unset)
-                z2n = lambda v: None if (v is None or int(v) == 0) else int(v)
                 save_open_to_rent_prefs(
-                    tid, open_flag, city, district,
-                    z2n(size_min), z2n(size_max),
-                    z2n(rooms_min), z2n(rooms_max),
-                    z2n(floor_min), z2n(floor_max),
-                    z2n(price_min), z2n(price_max),
+                    tid, open_flag,
+                    city, district,
+                    size_min, size_max,
+                    rooms_min, rooms_max,
+                    floor_min, floor_max,
+                    price_min, price_max,
+                    city_osm_id=city_osm_id,
+                    district_osm_id=district_osm_id,
                 )
                 st.success(tr("Preferences saved."))
 
-    # Nice compact summary (optional)
-    summary = []
-    if city: summary.append(city)
-    if district: summary.append(district)
-    if (prefs.get("size_min") or size_min) or (prefs.get("size_max") or size_max):
-        summary.append(f"{(prefs.get('size_min') or size_min) or '—'}–{(prefs.get('size_max') or size_max) or '—'} m²")
-    if (prefs.get("rooms_min") or rooms_min) or (prefs.get("rooms_max") or rooms_max):
-        summary.append(f"{(prefs.get('rooms_min') or rooms_min) or '—'}–{(prefs.get('rooms_max') or rooms_max) or '—'} {tr('rooms')}")
-    if (prefs.get("price_min") or price_min) or (prefs.get("price_max") or price_max):
-        summary.append(f"€{(prefs.get('price_min') or price_min) or '—'}–€{(prefs.get('price_max') or price_max) or '—'}")
+    # --- Cleaner summary (compact & readable) ---
+    def _fmt_range(lo, hi, suffix=""):
+        has_lo = lo not in (None, 0, "0", "")
+        has_hi = hi not in (None, 0, "0", "")
+        if not has_lo and not has_hi:
+            return None
+        lo_txt = f"{int(lo):,}" if has_lo else "—"
+        hi_txt = f"{int(hi):,}" if has_hi else "—"
+        return f"{lo_txt}–{hi_txt}{suffix}"
+
+    # Use the just-entered values if present, falling back to prefs
+    summary_bits = []
+    loc_bits = []
+    if city: loc_bits.append(str(city).strip())
+    if district: loc_bits.append(str(district).strip())
+    if loc_bits: summary_bits.append(" — ".join(loc_bits))
+
+    size_txt = _fmt_range((prefs.get("size_min") or size_min), (prefs.get("size_max") or size_max), " m²")
+    if size_txt: summary_bits.append(size_txt)
+
+    rooms_txt = _fmt_range((prefs.get("rooms_min") or rooms_min), (prefs.get("rooms_max") or rooms_max), f" {tr('rooms')}")
+    if rooms_txt: summary_bits.append(rooms_txt)
+
+    floor_txt = _fmt_range((prefs.get("floor_min") or floor_min), (prefs.get("floor_max") or floor_max))
+    if floor_txt: summary_bits.append(tr("Floor") + " " + floor_txt)
+
+    price_txt = _fmt_range((prefs.get("price_min") or price_min), (prefs.get("price_max") or price_max))
+    if price_txt: summary_bits.append("€" + price_txt.replace("–", "–€"))  # €1,000–€1,500
 
     state_label = tr("Active") if open_flag else tr("Inactive")
-    st.caption(f"{tr('Status:')} {state_label}" + (f" · {tr('Looking in')}: " + " — ".join(summary) if summary else ""))
+    looking = " — ".join(summary_bits) if summary_bits else tr("Anywhere")
+    st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {looking}")
+
+    
+# def tenant_open_to_rent_section():
+#     st.subheader(tr("Open to Rent"))
+
+#     tid = st.session_state.user["id"]
+#     prefs = load_open_to_rent_prefs(tid)
+
+#     open_flag = st.checkbox(
+#         tr("I'm currently looking for a place"),
+#         value=bool(prefs.get("open_to_rent")),
+#     )
+
+#     # with st.container(border=True):
+#     #     col_city, col_dist = st.columns(2)
+#     #     city = col_city.text_input(tr("City"), value=prefs.get("search_city") or "")
+#     #     district = col_dist.text_input(tr("District"), value=prefs.get("search_district") or "")
+#     with st.container(border=True):
+#         # --- New user-friendly location picker ---
+#         col_country, _ = st.columns([1,3])
+#         country = col_country.selectbox(
+#             "Country (for search)",
+#             # add more if you need multi-country; 'gr' default as you’re Athens-based
+#             options=[("Greece","gr"), ("Spain","es"), ("Italy","it"), ("Romania","ro"), ("Ireland","ie")],
+#             index=0,
+#             format_func=lambda x: x[0],
+#             key="otr_country",
+#         )[1]
+
+#         col_city, col_dist = st.columns(2)
+
+#         # City search + pick
+#         city_query = col_city.text_input(tr("City"), value=prefs.get("search_city") or "", key="otr_city_query")
+#         city_suggestions = search_places(city_query, country=country, feature="city", limit=8) if len(city_query.strip()) >= 3 else []
+#         if city_suggestions:
+#             city_labels = [r["label"] for r in city_suggestions]
+#             # preselect if current value matches one of the suggestions
+#             try:
+#                 idx = city_labels.index(prefs.get("search_city")) if prefs.get("search_city") in city_labels else 0
+#             except Exception:
+#                 idx = 0
+#             picked_city = col_city.selectbox("Pick a city", options=city_labels, index=idx, key="otr_city_pick")
+#             city = picked_city  # save selected canonical label
+#         else:
+#             city = city_query.strip()  # fall back to free text if no suggestions
+
+#         # District search + pick (suburb/neighbourhood/city_district)
+#         district_query = col_dist.text_input(tr("District"), value=prefs.get("search_district") or "", key="otr_dist_query")
+#         dist_suggestions = search_places(district_query, country=country, feature="district", limit=10) if len(district_query.strip()) >= 3 else []
+#         if dist_suggestions:
+#             dist_labels = [r["label"] for r in dist_suggestions]
+#             try:
+#                 idx = dist_labels.index(prefs.get("search_district")) if prefs.get("search_district") in dist_labels else 0
+#             except Exception:
+#                 idx = 0
+#             picked_dist = col_dist.selectbox("Pick a district", options=dist_labels, index=idx, key="otr_dist_pick")
+#             district = picked_dist
+#         else:
+#             district = district_query.strip()
+
+#         c1, c2 = st.columns(2)
+#         size_min = c1.number_input(tr("Min size (m²)"), min_value=0, max_value=10000, value=int(prefs.get("size_min") or 0), step=1)
+#         size_max = c2.number_input(tr("Max size (m²)"), min_value=0, max_value=10000, value=int(prefs.get("size_max") or 0), step=1)
+
+#         r1, r2 = st.columns(2)
+#         rooms_min = r1.number_input(tr("Min rooms"), min_value=0, max_value=20, value=int(prefs.get("rooms_min") or 0), step=1)
+#         rooms_max = r2.number_input(tr("Max rooms"), min_value=0, max_value=20, value=int(prefs.get("rooms_max") or 0), step=1)
+
+#         f1, f2 = st.columns(2)
+#         floor_min = f1.number_input(tr("Min floor"), min_value=0, max_value=100, value=int(prefs.get("floor_min") or 0), step=1)
+#         floor_max = f2.number_input(tr("Max floor"), min_value=0, max_value=100, value=int(prefs.get("floor_max") or 0), step=1)
+
+#         p1, p2 = st.columns(2)
+#         price_min = p1.number_input(tr("Min price (€)"), min_value=0, max_value=10_000_000, value=int(prefs.get("price_min") or 0), step=10)
+#         price_max = p2.number_input(tr("Max price (€)"), min_value=0, max_value=10_000_000, value=int(prefs.get("price_max") or 0), step=10)
+
+#         # Hint
+#         st.caption(tr("Tip: leave a minimum as 0 if you have no minimum for that field."))
+
+#         # Save
+#         if st.button(tr("Save preferences")):
+#             # Basic validation when active
+#             if open_flag and not (city.strip() or district.strip()):
+#                 st.error(tr("Please enter at least a city or a district."))
+#             elif (size_max and size_min and size_max < size_min) \
+#                  or (rooms_max and rooms_min and rooms_max < rooms_min) \
+#                  or (floor_max and floor_min and floor_max < floor_min) \
+#                  or (price_max and price_min and price_max < price_min):
+#                 st.error(tr("Please check your ranges: maximums must be greater than or equal to minimums."))
+#             else:
+#                 # Convert zeros to None (treat as unset)
+#                 z2n = lambda v: None if (v is None or int(v) == 0) else int(v)
+#                 save_open_to_rent_prefs(
+#                     tid, open_flag, city, district,
+#                     z2n(size_min), z2n(size_max),
+#                     z2n(rooms_min), z2n(rooms_max),
+#                     z2n(floor_min), z2n(floor_max),
+#                     z2n(price_min), z2n(price_max),
+#                 )
+#                 st.success(tr("Preferences saved."))
+
+#     # Nice compact summary (optional)
+#     # Nice compact summary (optional) — cleaner labels
+#     def _fmt_range(lo, hi, suffix=""):
+#         has_lo = lo not in (None, 0, "0", "")
+#         has_hi = hi not in (None, 0, "0", "")
+#         if not has_lo and not has_hi:
+#             return None
+#         lo_txt = f"{int(lo):,}" if has_lo else "—"
+#         hi_txt = f"{int(hi):,}" if has_hi else "—"
+#         return f"{lo_txt}–{hi_txt}{suffix}"
+
+#     summary_bits = []
+
+#     # Location first (city → district)
+#     loc_bits = []
+#     if city: loc_bits.append(str(city).strip())
+#     if district: loc_bits.append(str(district).strip())
+#     if loc_bits:
+#         summary_bits.append(" — ".join(loc_bits))
+
+#     # Size (m²)
+#     size_txt = _fmt_range((prefs.get("size_min") or size_min), (prefs.get("size_max") or size_max), " m²")
+#     if size_txt: summary_bits.append(size_txt)
+
+#     # Rooms
+#     rooms_txt = _fmt_range((prefs.get("rooms_min") or rooms_min), (prefs.get("rooms_max") or rooms_max), f" {tr('rooms')}")
+#     if rooms_txt: summary_bits.append(rooms_txt)
+
+#     # Floor
+#     floor_txt = _fmt_range((prefs.get("floor_min") or floor_min), (prefs.get("floor_max") or floor_max))
+#     if floor_txt: summary_bits.append(tr("Floor") + " " + floor_txt)
+
+#     # Price (€)
+#     price_txt = _fmt_range((prefs.get("price_min") or price_min), (prefs.get("price_max") or price_max))
+#     if price_txt: summary_bits.append("€" + price_txt.replace("–", "–€"))  # €1,000–€1,500
+
+#     state_label = tr("Active") if open_flag else tr("Inactive")
+#     looking = " — ".join(summary_bits) if summary_bits else tr("Anywhere")
+#     st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {looking}")
+
+    # summary = []
+    # if city: summary.append(city)
+    # if district: summary.append(district)
+    # if (prefs.get("size_min") or size_min) or (prefs.get("size_max") or size_max):
+    #     summary.append(f"{(prefs.get('size_min') or size_min) or '—'}–{(prefs.get('size_max') or size_max) or '—'} m²")
+    # if (prefs.get("rooms_min") or rooms_min) or (prefs.get("rooms_max") or rooms_max):
+    #     summary.append(f"{(prefs.get('rooms_min') or rooms_min) or '—'}–{(prefs.get('rooms_max') or rooms_max) or '—'} {tr('rooms')}")
+    # if (prefs.get("price_min") or price_min) or (prefs.get("price_max") or price_max):
+    #     summary.append(f"€{(prefs.get('price_min') or price_min) or '—'}–€{(prefs.get('price_max') or price_max) or '—'}")
+
+    # state_label = tr("Active") if open_flag else tr("Inactive")
+    # st.caption(f"{tr('Status:')} {state_label}" + (f" · {tr('Looking in')}: " + " — ".join(summary) if summary else ""))
 
 
 
@@ -2613,11 +2942,11 @@ def landlord_dashboard():
                     # If landlord already submitted, show a read-only summary instead of the form
                     if details and details.get("confirm_landlord"):
                         with st.expander(tr('Respond Now'), expanded=True):
-                            st.info(tr("Thanks — your response is saved. The request will complete once the tenant’s contract is verified."))
-                            st.write(f"**{tr('Overall tenant score')}:** {details.get('score')}/10")
-                            st.write(f"**{tr('Did the tenant pay on time?')}:** {tr('Yes') if details.get('paid_on_time') else tr('No')}")
-                            st.write(f"**{tr('Did the tenant leave utilities unpaid?')}:** {tr('Yes') if details.get('utilities_unpaid') else tr('No')}")
-                            st.write(f"**{tr('Did the tenant leave the apartment in good condition?')}:** {tr('Yes') if details.get('good_condition') else tr('No')}")
+                            st.info(tr("Thanks, your response is saved."))
+                            st.write(f"**{tr('Overall tenant score')}** {details.get('score')}/10")
+                            st.write(f"**{tr('Did the tenant pay on time?')}** {tr('Yes') if details.get('paid_on_time') else tr('No')}")
+                            st.write(f"**{tr('Did the tenant leave utilities unpaid?')}** {tr('Yes') if details.get('utilities_unpaid') else tr('No')}")
+                            st.write(f"**{tr('Did the tenant leave the apartment in good condition?')}** {tr('Yes') if details.get('good_condition') else tr('No')}")
                             if details.get('comments'):
                                 st.write("**" + tr('Optional comments') + ":**")
                                 st.write(details['comments'])
