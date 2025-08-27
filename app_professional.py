@@ -506,20 +506,20 @@ def _to_area_id(osm_type: str | None, osm_id: int | None):
     return None  # node has no boundary polygon
 
 @st.cache_data(ttl=86400, show_spinner=False)
-def list_districts_for_city(city_elem_type: str, city_osm_id: int, lat: float | None = None, lon: float | None = None):
+def list_districts_for_city(city_elem_type: str, city_osm_id: int,
+                            lat: float | None = None, lon: float | None = None,
+                            city_label: str | None = None):
     """
-    Districts inside a city: exact types only.
-    Allowed: suburb, neighbourhood, city_district, quarter, borough.
+    Επιστρέφει λίστα συνοικιών για μια πόλη, με προώθηση (promotion) σε διοικητικό όριο όταν η πόλη είναι node.
+    Επιτρεπτοί τύποι συνοικιών: suburb, neighbourhood, city_district, quarter, borough.
     """
     allowed = ["suburb", "neighbourhood", "city_district", "quarter", "borough"]
     pattern = "^(" + "|".join(allowed) + ")$"
-
     overpass = "https://overpass-api.de/api/interpreter"
-    area_id = _to_area_id(city_elem_type, city_osm_id)
 
-    if area_id is not None:
-        q = f"""
-        [out:json][timeout:30];
+    def _area_query(area_id: int) -> str:
+        return f"""
+        [out:json][timeout:35];
         area({area_id})->.a;
         (
           node["place"~"{pattern}"](area.a);
@@ -528,32 +528,150 @@ def list_districts_for_city(city_elem_type: str, city_osm_id: int, lat: float | 
         );
         out tags center;
         """
-    else:
-        # Fallback for node cities: 15 km radius around center
-        if lat is None or lon is None:
-            return []
-        q = f"""
-        [out:json][timeout:30];
+
+    def _around_query(radius_m: int, lat: float, lon: float) -> str:
+        return f"""
+        [out:json][timeout:35];
         (
-          node(around:15000,{lat},{lon})["place"~"{pattern}"];
-          way(around:15000,{lat},{lon})["place"~"{pattern}"];
-          relation(around:15000,{lat},{lon})["place"~"{pattern}"];
+          node(around:{radius_m},{lat},{lon})["place"~"{pattern}"];
+          way(around:{radius_m},{lat},{lon})["place"~"{pattern}"];
+          relation(around:{radius_m},{lat},{lon})["place"~"{pattern}"];
         );
         out tags center;
         """
 
-    try:
-        r = requests.post(overpass, data={"data": q}, headers=_ua_headers(), timeout=35)
-        r.raise_for_status()
-        js = r.json()
-    except Exception:
-        return []
+    def _is_in_admin_areas(lat: float, lon: float):
+        # Βρες περιοχές διοικητικού ορίου που περιέχουν το σημείο (προτίμηση στα πιο τοπικά επίπεδα)
+        q = f"""
+        [out:json][timeout:35];
+        is_in({lat},{lon})->.a;
+        area.a["boundary"="administrative"]["admin_level"~"^(6|7|8|9|10)$"];
+        out ids tags;
+        """
+        try:
+            r = requests.post(overpass, data={"data": q}, headers=_ua_headers(), timeout=35)
+            r.raise_for_status()
+            js = r.json()
+        except Exception:
+            return []
 
+        out = []
+        for a in js.get("elements", []):
+            tags = a.get("tags", {}) or {}
+            name_el = tags.get("name:el")
+            name = tags.get("name") or name_el
+            level = tags.get("admin_level")
+            if not name or not level:
+                continue
+            out.append({
+                "area_id": a.get("id"),  # ήδη area id (360.../24...)
+                "name": name_el or name,
+                "admin_level": int(level) if str(level).isdigit() else 999
+            })
+
+        # Σκοράρισμα: προτίμησε admin_level 8 (Δήμος), μετά 9-10, μετά 7, μετά 6
+        def score(x):
+            lvl = x["admin_level"]
+            if lvl == 8: base = 100
+            elif lvl in (9,10): base = 90
+            elif lvl == 7: base = 80
+            elif lvl == 6: base = 70
+            else: base = 0
+            # bonus αν ταιριάζει με την ετικέτα πόλης
+            bonus = 0
+            if city_label:
+                cl = city_label.casefold()
+                nm = x["name"].casefold()
+                if nm == cl or nm.startswith(cl):
+                    bonus = 5
+                # ειδικό: Αθήνα
+                if "αθηνα" in cl or "athen" in cl:
+                    if "δήμος αθηναίων" in nm or "municipality of athens" in nm:
+                        bonus = 10
+            return -(base + bonus)  # για sort ascending
+
+        out.sort(key=score)
+        return out
+
+    def _area_from_name(city_label: str):
+        # Αναζήτηση διοικητικού ορίου με βάση το όνομα, μόνο Ελλάδα (ISO3166-1=GR)
+        # Στόχος: π.χ. "Δήμος Αθηναίων" για Αθήνα.
+        name_regex = city_label or ""
+        # Ειδική ενίσχυση για Αθήνα
+        if "Αθήνα" in (city_label or "") or "Athens" in (city_label or ""):
+            name_regex = "(Δήμος Αθηναίων|Municipality of Athens|Athens|Αθήνα)"
+        q = f"""
+        [out:json][timeout:35];
+        area["ISO3166-1"="GR"][admin_level=2]->.gr;
+        relation(area.gr)["boundary"="administrative"]["admin_level"~"^(7|8|9|10)$"]["name"~"{name_regex}",i];
+        out ids tags;
+        """
+        try:
+            r = requests.post(overpass, data={"data": q}, headers=_ua_headers(), timeout=35)
+            r.raise_for_status()
+            js = r.json()
+        except Exception:
+            return None
+
+        # Προτίμησε admin_level 8
+        cands = []
+        for e in js.get("elements", []):
+            tags = e.get("tags", {}) or {}
+            lvl = tags.get("admin_level")
+            if not lvl:
+                continue
+            cands.append({
+                "rel_id": e.get("id"),
+                "name": tags.get("name:el") or tags.get("name"),
+                "admin_level": int(lvl) if str(lvl).isdigit() else 999
+            })
+        if not cands:
+            return None
+        cands.sort(key=lambda x: (0 if x["admin_level"]==8 else 1, (x["name"] or "")))
+        rel_id = cands[0]["rel_id"]
+        return 3600000000 + int(rel_id)  # convert relation → area id
+
+    # --- Βήμα 1: αν υπάρχει polygon, χρησιμοποίησέ το
+    area_id = _to_area_id(city_elem_type, city_osm_id)
+    queries = []
+    if area_id is not None:
+        queries.append(("by_city_area", _area_query(area_id)))
+
+    # --- Βήμα 2: για node, από is_in και (αν χρειαστεί) από όνομα
+    if area_id is None and lat is not None and lon is not None:
+        # (α) is_in
+        admins = _is_in_admin_areas(lat, lon)
+        for cand in admins[:3]:
+            queries.append((f"by_is_in_{cand['admin_level']}", _area_query(cand["area_id"])))
+        # (β) αναζήτηση με όνομα (π.χ. Δήμος Αθηναίων)
+        named_area = _area_from_name(city_label or "")
+        if named_area:
+            queries.append(("by_named_admin", _area_query(named_area)))
+
+    # --- Βήμα 3: fallbacks σε ακτίνα
+    if lat is not None and lon is not None:
+        queries.append(("around15km", _around_query(15000, lat, lon)))
+        queries.append(("around30km", _around_query(30000, lat, lon)))
+
+    # Εκτέλεση κατά σειρά μέχρι να βρούμε αποτελέσματα
+    elements = []
+    for label_src, q in queries:
+        try:
+            r = requests.post(overpass, data={"data": q}, headers=_ua_headers(), timeout=40)
+            r.raise_for_status()
+            js = r.json()
+            elements = js.get("elements", [])
+            if elements:
+                break
+        except Exception:
+            continue
+
+    # Μετατροπή σε λίστα συνοικιών
     out = []
-    for e in js.get("elements", []):
+    for e in elements or []:
         tags = e.get("tags", {}) or {}
         place = (tags.get("place") or "").lower()
-        if place not in set(allowed):       # hard filter, just in case
+        if place not in set(allowed):
             continue
         name_el = tags.get("name:el")
         name = tags.get("name") or name_el
@@ -567,14 +685,13 @@ def list_districts_for_city(city_elem_type: str, city_osm_id: int, lat: float | 
             "name": name,
             "place": place,
             "osm_id": e.get("id"),
-            "elem_type": e.get("type"),      # node / way / relation
+            "elem_type": e.get("type"),
             "lat": center.get("lat"),
             "lon": center.get("lon"),
         })
 
+    # Ταξινόμηση & αποδιπλοποίηση
     out.sort(key=lambda x: (x["label"] or "").casefold())
-
-    # dedupe by label (some districts appear as both way & relation)
     seen = set()
     uniq = []
     for d in out:
@@ -584,7 +701,6 @@ def list_districts_for_city(city_elem_type: str, city_osm_id: int, lat: float | 
         seen.add(key)
         uniq.append(d)
     return uniq
-
 
        
 
@@ -1141,8 +1257,10 @@ def tenant_open_to_rent_section():
             with st.spinner("Loading districts for the selected city..."):
                 districts = list_districts_for_city(
                     sel_city["elem_type"], int(sel_city["osm_id"]),
-                    lat=sel_city.get("lat"), lon=sel_city.get("lon")
+                    lat=sel_city.get("lat"), lon=sel_city.get("lon"),
+                    city_label=sel_city.get("label")
                 )
+
 
             if districts:
                 dist_labels = [f"{d['label']} ({d.get('place','')})".strip().rstrip("() ") for d in districts]
