@@ -201,6 +201,28 @@ TRANSLATIONS_EL = {
         "Submit Reference": "Υποβολή σύστασης",
         "Previous landlord:": "Προηγούμενος ιδιοκτήτης",
         "Consent": "Συγκατάθεση",
+        # Open to Rent
+        "Open to Rent": "Διαθέσιμος/η για ενοικίαση",
+        "I'm currently looking for a place": "Αναζητώ αυτήν την περίοδο σπίτι",
+        "City": "Πόλη",
+        "District": "Περιοχή",
+        "Min size (m²)": "Ελάχιστο μέγεθος (τ.μ.)",
+        "Max size (m²)": "Μέγιστο μέγεθος (τ.μ.)",
+        "Min rooms": "Ελάχιστα δωμάτια",
+        "Max rooms": "Μέγιστα δωμάτια",
+        "Min floor": "Ελάχιστος όροφος",
+        "Max floor": "Μέγιστος όροφος",
+        "Min price (€)": "Ελάχιστη τιμή (€)",
+        "Max price (€)": "Μέγιστη τιμή (€)",
+        "Save preferences": "Αποθήκευση προτιμήσεων",
+        "Preferences saved.": "Οι προτιμήσεις αποθηκεύτηκαν.",
+        "Please enter at least a city or a district.": "Καταχωρίστε τουλάχιστον πόλη ή περιοχή.",
+        "Please check your ranges: maximums must be greater than or equal to minimums.": "Ελέγξτε τα εύρη: τα μέγιστα πρέπει να είναι μεγαλύτερα ή ίσα από τα ελάχιστα.",
+        "Tip: leave a minimum as 0 if you have no minimum for that field.": "Συμβουλή: αφήστε το ελάχιστο ως 0 αν δεν έχετε ελάχιστο για το πεδίο.",
+        "rooms": "δωμάτια",
+        "Looking in": "Αναζήτηση σε",
+        "Active": "Ενεργό",
+        "Inactive": "Ανενεργό",
 
     }
 
@@ -435,6 +457,20 @@ def run_migrations(conn):
     # reference_contracts: make sure consent_status exists on old DBs
     add_column_if_missing(conn, "reference_contracts", "consent_status TEXT NOT NULL DEFAULT 'locked'")
     
+    # --- Open-to-rent columns on tenant_profiles ---
+    add_column_if_missing(conn, "tenant_profiles", "open_to_rent INTEGER NOT NULL DEFAULT 0")
+    add_column_if_missing(conn, "tenant_profiles", "search_city TEXT")
+    add_column_if_missing(conn, "tenant_profiles", "search_district TEXT")
+    add_column_if_missing(conn, "tenant_profiles", "size_min INTEGER")
+    add_column_if_missing(conn, "tenant_profiles", "size_max INTEGER")
+    add_column_if_missing(conn, "tenant_profiles", "rooms_min INTEGER")
+    add_column_if_missing(conn, "tenant_profiles", "rooms_max INTEGER")
+    add_column_if_missing(conn, "tenant_profiles", "floor_min INTEGER")
+    add_column_if_missing(conn, "tenant_profiles", "floor_max INTEGER")
+    add_column_if_missing(conn, "tenant_profiles", "price_min INTEGER")
+    add_column_if_missing(conn, "tenant_profiles", "price_max INTEGER")
+
+        
 def delete_previous_landlord_completely(tenant_id: int, prev_landlord_id: int):
     """
     Fully remove a previous landlord and ALL related data for this tenant.
@@ -668,9 +704,147 @@ def get_user_by_email(email: str):
         return dict(zip(keys, row))
     return None
 
- # Tenant deletes request 
 # Starts here
-import os
+
+def ensure_tenant_profile_row(tenant_id: int):
+    """Make sure tenant_profiles has a row for this tenant."""
+    cur = conn.cursor()
+    row = cur.execute("SELECT tenant_id FROM tenant_profiles WHERE tenant_id=?", (tenant_id,)).fetchone()
+    if not row:
+        cur.execute(
+            "INSERT INTO tenant_profiles(tenant_id, future_landlord_email, updated_at) VALUES (?,?,?)",
+            (tenant_id, None, datetime.utcnow().isoformat()),
+        )
+        conn.commit()
+
+def load_open_to_rent_prefs(tenant_id: int) -> dict:
+    ensure_tenant_profile_row(tenant_id)
+    cur = conn.cursor()
+    row = cur.execute(
+        """
+        SELECT open_to_rent, search_city, search_district,
+               size_min, size_max, rooms_min, rooms_max,
+               floor_min, floor_max, price_min, price_max, updated_at
+        FROM tenant_profiles WHERE tenant_id=?
+        """,
+        (tenant_id,),
+    ).fetchone()
+    keys = ["open_to_rent","search_city","search_district",
+            "size_min","size_max","rooms_min","rooms_max",
+            "floor_min","floor_max","price_min","price_max","updated_at"]
+    return dict(zip(keys, row)) if row else {}
+
+def save_open_to_rent_prefs(
+    tenant_id: int,
+    open_to_rent: bool,
+    city: str | None,
+    district: str | None,
+    size_min: int | None, size_max: int | None,
+    rooms_min: int | None, rooms_max: int | None,
+    floor_min: int | None, floor_max: int | None,
+    price_min: int | None, price_max: int | None,
+):
+    ensure_tenant_profile_row(tenant_id)
+    now = datetime.utcnow().isoformat()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE tenant_profiles
+           SET open_to_rent=?,
+               search_city=?,
+               search_district=?,
+               size_min=?, size_max=?,
+               rooms_min=?, rooms_max=?,
+               floor_min=?, floor_max=?,
+               price_min=?, price_max=?,
+               updated_at=?
+         WHERE tenant_id=?
+        """,
+        (
+            1 if open_to_rent else 0,
+            (city or "").strip() or None,
+            (district or "").strip() or None,
+            size_min, size_max,
+            rooms_min, rooms_max,
+            floor_min, floor_max,
+            price_min, price_max,
+            now, tenant_id
+        ),
+    )
+    conn.commit()
+    
+def tenant_open_to_rent_section():
+    st.subheader(tr("Open to Rent"))
+
+    tid = st.session_state.user["id"]
+    prefs = load_open_to_rent_prefs(tid)
+
+    open_flag = st.checkbox(
+        tr("I'm currently looking for a place"),
+        value=bool(prefs.get("open_to_rent")),
+    )
+
+    with st.container(border=True):
+        col_city, col_dist = st.columns(2)
+        city = col_city.text_input(tr("City"), value=prefs.get("search_city") or "")
+        district = col_dist.text_input(tr("District"), value=prefs.get("search_district") or "")
+
+        c1, c2 = st.columns(2)
+        size_min = c1.number_input(tr("Min size (m²)"), min_value=0, max_value=10000, value=int(prefs.get("size_min") or 0), step=1)
+        size_max = c2.number_input(tr("Max size (m²)"), min_value=0, max_value=10000, value=int(prefs.get("size_max") or 0), step=1)
+
+        r1, r2 = st.columns(2)
+        rooms_min = r1.number_input(tr("Min rooms"), min_value=0, max_value=20, value=int(prefs.get("rooms_min") or 0), step=1)
+        rooms_max = r2.number_input(tr("Max rooms"), min_value=0, max_value=20, value=int(prefs.get("rooms_max") or 0), step=1)
+
+        f1, f2 = st.columns(2)
+        floor_min = f1.number_input(tr("Min floor"), min_value=0, max_value=100, value=int(prefs.get("floor_min") or 0), step=1)
+        floor_max = f2.number_input(tr("Max floor"), min_value=0, max_value=100, value=int(prefs.get("floor_max") or 0), step=1)
+
+        p1, p2 = st.columns(2)
+        price_min = p1.number_input(tr("Min price (€)"), min_value=0, max_value=10_000_000, value=int(prefs.get("price_min") or 0), step=10)
+        price_max = p2.number_input(tr("Max price (€)"), min_value=0, max_value=10_000_000, value=int(prefs.get("price_max") or 0), step=10)
+
+        # Hint
+        st.caption(tr("Tip: leave a minimum as 0 if you have no minimum for that field."))
+
+        # Save
+        if st.button(tr("Save preferences")):
+            # Basic validation when active
+            if open_flag and not (city.strip() or district.strip()):
+                st.error(tr("Please enter at least a city or a district."))
+            elif (size_max and size_min and size_max < size_min) \
+                 or (rooms_max and rooms_min and rooms_max < rooms_min) \
+                 or (floor_max and floor_min and floor_max < floor_min) \
+                 or (price_max and price_min and price_max < price_min):
+                st.error(tr("Please check your ranges: maximums must be greater than or equal to minimums."))
+            else:
+                # Convert zeros to None (treat as unset)
+                z2n = lambda v: None if (v is None or int(v) == 0) else int(v)
+                save_open_to_rent_prefs(
+                    tid, open_flag, city, district,
+                    z2n(size_min), z2n(size_max),
+                    z2n(rooms_min), z2n(rooms_max),
+                    z2n(floor_min), z2n(floor_max),
+                    z2n(price_min), z2n(price_max),
+                )
+                st.success(tr("Preferences saved."))
+
+    # Nice compact summary (optional)
+    summary = []
+    if city: summary.append(city)
+    if district: summary.append(district)
+    if (prefs.get("size_min") or size_min) or (prefs.get("size_max") or size_max):
+        summary.append(f"{(prefs.get('size_min') or size_min) or '—'}–{(prefs.get('size_max') or size_max) or '—'} m²")
+    if (prefs.get("rooms_min") or rooms_min) or (prefs.get("rooms_max") or rooms_max):
+        summary.append(f"{(prefs.get('rooms_min') or rooms_min) or '—'}–{(prefs.get('rooms_max') or rooms_max) or '—'} {tr('rooms')}")
+    if (prefs.get("price_min") or price_min) or (prefs.get("price_max") or price_max):
+        summary.append(f"€{(prefs.get('price_min') or price_min) or '—'}–€{(prefs.get('price_max') or price_max) or '—'}")
+
+    state_label = tr("Active") if open_flag else tr("Inactive")
+    st.caption(f"{tr('Status:')} {state_label}" + (f" · {tr('Looking in')}: " + " — ".join(summary) if summary else ""))
+
+
 
 def storage_delete(storage_key: str):
     # Replace with S3/GCS delete if you use cloud storage
@@ -1912,6 +2086,9 @@ def tenant_dashboard():
         st.caption(tr('No future landlord contacts yet.'))
 
     st.divider()
+    
+    tenant_open_to_rent_section()
+
     
     # === Previous landlords + reference requests ===
     st.subheader(tr('Previous Landlords and References'))
