@@ -239,7 +239,7 @@ def md_label(key_with_colon: str) -> str:
 
 # === Top-right language switcher (flags only) ===
 def render_topbar_language():
-    c1, c2 = st.columns([8, 2])
+    c1, c2 = st.columns([8, 1])
     with c2:
         choice = st.selectbox(
             "🌐 Language",
@@ -1743,8 +1743,6 @@ def admin_dashboard():
                     st.caption(tr('No contract uploaded yet.'))
 
 
-
-                # --- Admin actions ---
                 # --- Admin actions (conditional) ---
                 ac1, ac2 = st.columns(2)
 
