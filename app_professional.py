@@ -422,32 +422,32 @@ def _ua_headers():
     return {"User-Agent": ua}
 
 @st.cache_data(ttl=86400, show_spinner=False)
-def list_greek_cities(include_towns=True, include_villages=False, limit: int | None = None):
+def list_greek_cities(include_towns=True, include_villages=False, prefer_polygons=True, limit: int | None = None):
     """
-    Returns a list of {label, name_el, name, place, osm_id, elem_type, lat, lon}
-    for Greek settlements from OSM.
-    - place filters: city (+ town if include_towns), (+ village if include_villages)
-    - Greek labels when available (name:el), else 'name'
+    Greece-only settlements from OSM with exact place types.
+    Returns [{label, name_el, name, place, osm_id, elem_type, lat, lon}]
     """
-    kinds = ["city"]
+    allowed = ["city"]
     if include_towns:
-        kinds.append("town")
+        allowed.append("town")
     if include_villages:
-        kinds.append("village")
+        allowed.append("village")
 
-    kinds_regex = "|".join(kinds)
+    # Exact-match regex (anchor!), so 'city_block' won't match 'city'
+    pattern = "^(" + "|".join(allowed) + ")$"
+
     overpass = "https://overpass-api.de/api/interpreter"
-    # Greece boundary by ISO3166-1=GR (admin_level=2)
     q = f"""
     [out:json][timeout:60];
     area["ISO3166-1"="GR"][admin_level=2]->.gr;
     (
-      node["place"~"{kinds_regex}"](area.gr);
-      way["place"~"{kinds_regex}"](area.gr);
-      relation["place"~"{kinds_regex}"](area.gr);
+      node["place"~"{pattern}"](area.gr);
+      way["place"~"{pattern}"](area.gr);
+      relation["place"~"{pattern}"](area.gr);
     );
     out tags center;
     """
+
     try:
         r = requests.post(overpass, data={"data": q}, headers=_ua_headers(), timeout=60)
         r.raise_for_status()
@@ -455,40 +455,45 @@ def list_greek_cities(include_towns=True, include_villages=False, limit: int | N
     except Exception:
         return []
 
-    out = []
+    rows = []
     for e in js.get("elements", []):
         tags = e.get("tags", {}) or {}
+        place = (tags.get("place") or "").lower()
+        if place not in set(allowed):      # hard filter (belt & braces)
+            continue
         name_el = tags.get("name:el")
         name = tags.get("name") or name_el
-        if not name and not name_el:
+        if not (name or name_el):
             continue
         label = name_el or name
         center = e.get("center") or {}
-        out.append({
+        rows.append({
             "label": label,
             "name_el": name_el,
             "name": name,
-            "place": tags.get("place"),           # city / town / village
+            "place": place,                    # city / town / village
             "osm_id": e.get("id"),
-            "elem_type": e.get("type"),           # node / way / relation
+            "elem_type": e.get("type"),        # node / way / relation
             "lat": center.get("lat"),
             "lon": center.get("lon"),
         })
 
-    # Sort Greek-alphabetically by label & de-duplicate
-    out.sort(key=lambda x: (x["label"] or "").lower())
-    seen = set()
-    uniq = []
-    for row in out:
-        k = (row["elem_type"], row["osm_id"])
-        if k in seen:
-            continue
-        seen.add(k)
-        uniq.append(row)
+    # Prefer polygons (relation > way > node) for duplicates by label
+    rank = {"relation": 3, "way": 2, "node": 1}
+    picked = {}
+    for row in rows:
+        k = (row["label"] or "").casefold()
+        cur = picked.get(k)
+        if cur is None or rank.get(row["elem_type"], 0) > rank.get(cur["elem_type"], 0):
+            picked[k] = row
+
+    out = list(picked.values())
+    out.sort(key=lambda x: (x["label"] or "").casefold())
 
     if limit:
-        uniq = uniq[:limit]
-    return uniq
+        out = out[:limit]
+    return out
+
 
 def _to_area_id(osm_type: str | None, osm_id: int | None):
     if not osm_type or not osm_id:
@@ -503,11 +508,12 @@ def _to_area_id(osm_type: str | None, osm_id: int | None):
 @st.cache_data(ttl=86400, show_spinner=False)
 def list_districts_for_city(city_elem_type: str, city_osm_id: int, lat: float | None = None, lon: float | None = None):
     """
-    Returns districts (suburb/neighbourhood/city_district) for a given city.
-    - If the city has a polygon (way/relation) → query by area boundary
-    - Else (node) → fallback to a radius search around city center (15 km)
-    Each item: {label, name_el, name, place, osm_id, elem_type, lat, lon}
+    Districts inside a city: exact types only.
+    Allowed: suburb, neighbourhood, city_district, quarter, borough.
     """
+    allowed = ["suburb", "neighbourhood", "city_district", "quarter", "borough"]
+    pattern = "^(" + "|".join(allowed) + ")$"
+
     overpass = "https://overpass-api.de/api/interpreter"
     area_id = _to_area_id(city_elem_type, city_osm_id)
 
@@ -516,23 +522,22 @@ def list_districts_for_city(city_elem_type: str, city_osm_id: int, lat: float | 
         [out:json][timeout:30];
         area({area_id})->.a;
         (
-          node["place"~"suburb|neighbourhood|city_district"](area.a);
-          way["place"~"suburb|neighbourhood|city_district"](area.a);
-          relation["place"~"suburb|neighbourhood|city_district"](area.a);
+          node["place"~"{pattern}"](area.a);
+          way["place"~"{pattern}"](area.a);
+          relation["place"~"{pattern}"](area.a);
         );
         out tags center;
         """
     else:
-        # Fallback for node cities: use a distance filter around the city center
-        # 15km is a reasonable radius for big Greek cities' urban areas
+        # Fallback for node cities: 15 km radius around center
         if lat is None or lon is None:
             return []
         q = f"""
         [out:json][timeout:30];
         (
-          node(around:15000,{lat},{lon})["place"~"suburb|neighbourhood|city_district"];
-          way(around:15000,{lat},{lon})["place"~"suburb|neighbourhood|city_district"];
-          relation(around:15000,{lat},{lon})["place"~"suburb|neighbourhood|city_district"];
+          node(around:15000,{lat},{lon})["place"~"{pattern}"];
+          way(around:15000,{lat},{lon})["place"~"{pattern}"];
+          relation(around:15000,{lat},{lon})["place"~"{pattern}"];
         );
         out tags center;
         """
@@ -547,9 +552,12 @@ def list_districts_for_city(city_elem_type: str, city_osm_id: int, lat: float | 
     out = []
     for e in js.get("elements", []):
         tags = e.get("tags", {}) or {}
+        place = (tags.get("place") or "").lower()
+        if place not in set(allowed):       # hard filter, just in case
+            continue
         name_el = tags.get("name:el")
         name = tags.get("name") or name_el
-        if not name and not name_el:
+        if not (name or name_el):
             continue
         label = name_el or name
         center = e.get("center") or {}
@@ -557,23 +565,26 @@ def list_districts_for_city(city_elem_type: str, city_osm_id: int, lat: float | 
             "label": label,
             "name_el": name_el,
             "name": name,
-            "place": tags.get("place"),
+            "place": place,
             "osm_id": e.get("id"),
-            "elem_type": e.get("type"),
+            "elem_type": e.get("type"),      # node / way / relation
             "lat": center.get("lat"),
             "lon": center.get("lon"),
         })
 
-    # Alphabetize + dedupe by label
-    out.sort(key=lambda x: (x["label"] or "").lower())
+    out.sort(key=lambda x: (x["label"] or "").casefold())
+
+    # dedupe by label (some districts appear as both way & relation)
     seen = set()
     uniq = []
     for d in out:
-        if d["label"] in seen:
+        key = (d["label"] or "").casefold()
+        if key in seen:
             continue
-        seen.add(d["label"])
+        seen.add(key)
         uniq.append(d)
     return uniq
+
 
        
 
