@@ -239,7 +239,7 @@ def md_label(key_with_colon: str) -> str:
 
 # === Top-right language switcher (flags only) ===
 def render_topbar_language():
-    c1, c2, c3 = st.columns([8, 2, 2])
+    c1, c2 = st.columns([8, 2])
     with c2:
         choice = st.selectbox(
             "🌐 Language",
@@ -249,10 +249,7 @@ def render_topbar_language():
             label_visibility="collapsed",
         )
         st.session_state["lang"] = "English" if choice == "ENG" else "Ελληνικά"
-    # with c3:
-    #     # simple manual refresh that keeps session_state (so you stay logged in)
-    #     if st.button(tr("Refresh"), key="__refresh_topbar__", use_container_width=True):
-    #         st.rerun()
+
             
 render_topbar_language()
 # === End top-right language switcher (flags only) ===
@@ -1786,7 +1783,7 @@ def admin_dashboard():
 
     
 def tenant_dashboard():
-    col_h1, col_h2, col_h3 = st.columns([4,1,2])
+    col_h1, col_h2, col_h3 = st.columns([5,1,2])
     with col_h1: st.header(tr('Tenant Dashboard'))
     with col_h2:
         if st.button("🔄", key="tenant_refresh"):
@@ -1894,7 +1891,7 @@ def tenant_dashboard():
     st.subheader(tr('All Reference Requests'))
     if rows:
         for (pid, email, name, address, created_at) in rows: # afm,
-            with st.expander(f"{name} • {email} • {address} "):
+            with st.expander(f"{name} • {email} • {address} ", False):
 
                 # --- Load all requests for this landlord
                 cur = conn.cursor()
