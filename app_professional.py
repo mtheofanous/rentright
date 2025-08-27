@@ -405,83 +405,12 @@ def ensure_contracts_consent_column(conn):
         cur.execute("ALTER TABLE reference_contracts ADD COLUMN consent_status TEXT NOT NULL DEFAULT 'locked'")
         conn.commit()
         
-# --- Places search via OpenStreetMap Nominatim (free) ---
-
-def _nominatim_headers():
-    # Keep the API happy with a descriptive UA (put your contact email in secrets if you like)
-    contact = ""
-    try:
-        contact = st.secrets.get("CONTACT_EMAIL", "")
-    except Exception:
-        pass
-    ua = "RentRight/1.0 (+https://example.com)"
-    if contact:
-        ua += f" {contact}"
-    return {"User-Agent": ua}
-
-@st.cache_data(ttl=86400, show_spinner=False)
-def search_places(q: str, country: str = "gr", feature: str | None = None, limit: int = 10):
-    """
-    q: free-text query
-    country: 2-letter ISO country filter (e.g. 'gr', 'es', 'it')
-    feature: None (all), or one of: 'city','town','village','suburb','neighbourhood','district'
-    """
-    if not q or len(q.strip()) < 2:
-        return []
-    url = "https://nominatim.openstreetmap.org/search"
-    params = {
-        "q": q.strip(),
-        "format": "jsonv2",
-        "addressdetails": 1,
-        "limit": limit,
-        "accept-language": "en",
-        "countrycodes": (country or "").lower(),
-    }
-    # feature filtering: OSM uses 'class' + 'type' — we’ll post-filter on 'type'
-    try:
-        r = requests.get(url, params=params, headers=_nominatim_headers(), timeout=10)
-        r.raise_for_status()
-        data = r.json() or []
-    except Exception:
-        return []
-
-    # canonical label builder
-    def label(item):
-        addr = item.get("address", {})
-        parts = [
-            item.get("name") or addr.get("city") or addr.get("town") or addr.get("village"),
-            addr.get("state") or addr.get("county"),
-            addr.get("country_code", "").upper(),
-        ]
-        return ", ".join([p for p in parts if p])
-
-    # optional feature filter using item['type'] (e.g. 'city','town','village','suburb','neighbourhood','district')
-    results = []
-    for it in data:
-        t = (it.get("type") or "").lower()
-        if feature and t != feature.lower():
-            # allow close family when user asks for "district": accept suburb/neighbourhood
-            if feature.lower() == "district" and t in ("suburb", "neighbourhood", "city_district"):
-                pass
-            else:
-                continue
-        results.append({
-            "osm_id": it.get("osm_id"),
-            "type": it.get("type"),
-            "class": it.get("class"),
-            "lat": it.get("lat"),
-            "lon": it.get("lon"),
-            "label": label(it) or (it.get("display_name") or "").split(",")[0],
-        })
-    return results
-
 import requests
-from functools import lru_cache
 
-# ---------- Nominatim: Greece-only city autocomplete (Greek or English) ----------
+# ---------- Overpass helpers (Greece-only) ----------
 
-def _nom_headers():
-    # Add a polite UA; optionally add your contact email via st.secrets["CONTACT_EMAIL"]
+def _ua_headers():
+    # Be polite to OSM — add a UA; optionally append contact email from st.secrets
     contact = ""
     try:
         contact = st.secrets.get("CONTACT_EMAIL", "")
@@ -493,132 +422,150 @@ def _nom_headers():
     return {"User-Agent": ua}
 
 @st.cache_data(ttl=86400, show_spinner=False)
-def gr_search_cities(query: str, limit: int = 12):
+def list_greek_cities(include_towns=True, include_villages=False, limit: int | None = None):
     """
-    Autocomplete Greek cities/towns/villages.
-    Accepts Greek or English input. Returns list of dicts:
-    { label, label_en, name_el, name, osm_id, osm_type, lat, lon }
+    Returns a list of {label, name_el, name, place, osm_id, elem_type, lat, lon}
+    for Greek settlements from OSM.
+    - place filters: city (+ town if include_towns), (+ village if include_villages)
+    - Greek labels when available (name:el), else 'name'
     """
-    q = (query or "").strip()
-    if len(q) < 2:
-        return []
-    params = {
-        "q": q,
-        "format": "jsonv2",
-        "addressdetails": 1,
-        "limit": limit,
-        "countrycodes": "gr",
-        "accept-language": "el,en",
-        "namedetails": 1,  # to get localized names
-    }
-    try:
-        r = requests.get("https://nominatim.openstreetmap.org/search",
-                         params=params, headers=_nom_headers(), timeout=12)
-        r.raise_for_status()
-        data = r.json() or []
-    except Exception:
-        return []
+    kinds = ["city"]
+    if include_towns:
+        kinds.append("town")
+    if include_villages:
+        kinds.append("village")
 
-    results = []
-    for it in data:
-        t = (it.get("type") or "").lower()
-        # keep city-like features
-        if t not in ("city", "town", "village", "municipality"):
-            continue
-        nd = it.get("namedetails", {}) or {}
-        name_el = nd.get("name:el")
-        name_en = nd.get("name:en")
-        name = it.get("name") or name_el or name_en
-        # Preferred label in Greek if available, else fallback
-        label = name_el or name or (it.get("display_name") or "").split(",")[0]
-        label_en = name_en or name
-        results.append({
-            "label": label,
-            "label_en": label_en,
-            "name_el": name_el,
-            "name": name,
-            "osm_id": it.get("osm_id"),
-            "osm_type": it.get("osm_type"),  # "node" | "way" | "relation"
-            "lat": it.get("lat"),
-            "lon": it.get("lon"),
-            "place_type": t,
-        })
-    # de-duplicate by (osm_type, osm_id)
-    seen = set()
-    unique = []
-    for r in results:
-        k = (r["osm_type"], r["osm_id"])
-        if k in seen: 
-            continue
-        seen.add(k)
-        unique.append(r)
-    return unique
-
-
-# ---------- Overpass: districts within selected city (Greek labels) ----------
-
-def _to_area_id(osm_type: str, osm_id: int):
-    if not osm_type or not osm_id:
-        return None
-    osm_type = osm_type.lower()
-    if osm_type == "relation":
-        return 3600000000 + int(osm_id)
-    if osm_type == "way":
-        return 2400000000 + int(osm_id)
-    # nodes don't define admin areas; return None
-    return None
-
-@st.cache_data(ttl=86400, show_spinner=False)
-def list_districts_in_city(osm_type: str, osm_id: int):
-    """
-    Returns Greek-friendly list of districts (suburb/neighbourhood/city_district)
-    inside the city's administrative area. Prefers name:el when available.
-    """
-    area_id = _to_area_id(osm_type, osm_id)
-    if area_id is None:
-        return []
-
+    kinds_regex = "|".join(kinds)
     overpass = "https://overpass-api.de/api/interpreter"
+    # Greece boundary by ISO3166-1=GR (admin_level=2)
     q = f"""
-    [out:json][timeout:25];
-    area({area_id})->.a;
+    [out:json][timeout:60];
+    area["ISO3166-1"="GR"][admin_level=2]->.gr;
     (
-      node["place"~"suburb|neighbourhood|city_district"](area.a);
-      way["place"~"suburb|neighbourhood|city_district"](area.a);
-      relation["place"~"suburb|neighbourhood|city_district"](area.a);
+      node["place"~"{kinds_regex}"](area.gr);
+      way["place"~"{kinds_regex}"](area.gr);
+      relation["place"~"{kinds_regex}"](area.gr);
     );
-    out center tags;
+    out tags center;
     """
     try:
-        r = requests.post(overpass, data={"data": q}, headers=_nom_headers(), timeout=25)
+        r = requests.post(overpass, data={"data": q}, headers=_ua_headers(), timeout=60)
         r.raise_for_status()
         js = r.json()
-        elements = js.get("elements", [])
     except Exception:
         return []
 
     out = []
-    for e in elements:
+    for e in js.get("elements", []):
         tags = e.get("tags", {}) or {}
         name_el = tags.get("name:el")
         name = tags.get("name") or name_el
         if not name and not name_el:
             continue
         label = name_el or name
+        center = e.get("center") or {}
+        out.append({
+            "label": label,
+            "name_el": name_el,
+            "name": name,
+            "place": tags.get("place"),           # city / town / village
+            "osm_id": e.get("id"),
+            "elem_type": e.get("type"),           # node / way / relation
+            "lat": center.get("lat"),
+            "lon": center.get("lon"),
+        })
+
+    # Sort Greek-alphabetically by label & de-duplicate
+    out.sort(key=lambda x: (x["label"] or "").lower())
+    seen = set()
+    uniq = []
+    for row in out:
+        k = (row["elem_type"], row["osm_id"])
+        if k in seen:
+            continue
+        seen.add(k)
+        uniq.append(row)
+
+    if limit:
+        uniq = uniq[:limit]
+    return uniq
+
+def _to_area_id(osm_type: str | None, osm_id: int | None):
+    if not osm_type or not osm_id:
+        return None
+    t = osm_type.lower()
+    if t == "relation":
+        return 3600000000 + int(osm_id)
+    if t == "way":
+        return 2400000000 + int(osm_id)
+    return None  # node has no boundary polygon
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def list_districts_for_city(city_elem_type: str, city_osm_id: int, lat: float | None = None, lon: float | None = None):
+    """
+    Returns districts (suburb/neighbourhood/city_district) for a given city.
+    - If the city has a polygon (way/relation) → query by area boundary
+    - Else (node) → fallback to a radius search around city center (15 km)
+    Each item: {label, name_el, name, place, osm_id, elem_type, lat, lon}
+    """
+    overpass = "https://overpass-api.de/api/interpreter"
+    area_id = _to_area_id(city_elem_type, city_osm_id)
+
+    if area_id is not None:
+        q = f"""
+        [out:json][timeout:30];
+        area({area_id})->.a;
+        (
+          node["place"~"suburb|neighbourhood|city_district"](area.a);
+          way["place"~"suburb|neighbourhood|city_district"](area.a);
+          relation["place"~"suburb|neighbourhood|city_district"](area.a);
+        );
+        out tags center;
+        """
+    else:
+        # Fallback for node cities: use a distance filter around the city center
+        # 15km is a reasonable radius for big Greek cities' urban areas
+        if lat is None or lon is None:
+            return []
+        q = f"""
+        [out:json][timeout:30];
+        (
+          node(around:15000,{lat},{lon})["place"~"suburb|neighbourhood|city_district"];
+          way(around:15000,{lat},{lon})["place"~"suburb|neighbourhood|city_district"];
+          relation(around:15000,{lat},{lon})["place"~"suburb|neighbourhood|city_district"];
+        );
+        out tags center;
+        """
+
+    try:
+        r = requests.post(overpass, data={"data": q}, headers=_ua_headers(), timeout=35)
+        r.raise_for_status()
+        js = r.json()
+    except Exception:
+        return []
+
+    out = []
+    for e in js.get("elements", []):
+        tags = e.get("tags", {}) or {}
+        name_el = tags.get("name:el")
+        name = tags.get("name") or name_el
+        if not name and not name_el:
+            continue
+        label = name_el or name
+        center = e.get("center") or {}
         out.append({
             "label": label,
             "name_el": name_el,
             "name": name,
             "place": tags.get("place"),
             "osm_id": e.get("id"),
-            "elem_type": e.get("type"),  # node/way/relation
-            "lat": (e.get("center") or {}).get("lat"),
-            "lon": (e.get("center") or {}).get("lon"),
+            "elem_type": e.get("type"),
+            "lat": center.get("lat"),
+            "lon": center.get("lon"),
         })
 
-    # sort alphabetically (Greek labels first)
+    # Alphabetize + dedupe by label
     out.sort(key=lambda x: (x["label"] or "").lower())
-    # dedupe by label
     seen = set()
     uniq = []
     for d in out:
@@ -1123,67 +1070,104 @@ def tenant_open_to_rent_section():
     tid = st.session_state.user["id"]
     prefs = load_open_to_rent_prefs(tid)
 
+    # Current stored values (for prefill)
+    city_pref = (prefs.get("search_city") or "").strip()
+    city_pref_id = prefs.get("search_city_osm_id")
+    city_pref_type = prefs.get("search_city_osm_type")
+    dist_pref = (prefs.get("search_district") or "").strip()
+    dist_pref_id = prefs.get("search_district_osm_id")
+    dist_pref_type = prefs.get("search_district_osm_type")
+
     open_flag = st.checkbox(
         tr("I'm currently looking for a place"),
         value=bool(prefs.get("open_to_rent")),
     )
 
     with st.container(border=True):
-        # --- City + District (Greece-only, Greek-friendly, dependent) ---
-        col_city, col_dist = st.columns(2)
+        st.markdown("### 🇬🇷 Πόλη → Συνοικίες (Greece only)")
 
-        # CITY
-        city_query = col_city.text_input("Πόλη (City)", value=prefs.get("search_city") or "")
-        city_options = gr_search_cities(city_query) if len(city_query.strip()) >= 2 else []
+        # -------- City list (Greece-only) --------
+        c1, c2, c3 = st.columns([1,1,2])
+        include_towns = c1.toggle("Include towns", value=True, key="cities_inc_towns")
+        include_villages = c2.toggle("Include villages", value=False, key="cities_inc_villages")
 
-        city = (prefs.get("search_city") or "").strip()
-        city_osm_id = prefs.get("search_city_osm_id")
-        city_osm_type = prefs.get("search_city_osm_type")
+        # Load all Greek cities (cached)
+        with st.spinner("Loading Greek cities..."):
+            cities = list_greek_cities(include_towns=include_towns, include_villages=include_villages)
 
-        if city_options:
-            labels = [c["label"] for c in city_options]
-            # Preselect previously saved city if present
-            pre_idx = labels.index(city) if city and city in labels else 0
-            picked_label = col_city.selectbox("Διάλεξε πόλη (Pick a city)", options=labels, index=pre_idx)
-            picked_city = next(c for c in city_options if c["label"] == picked_label)
-            city = picked_city["label"]                 # Greek label
-            city_osm_id = picked_city["osm_id"]
-            city_osm_type = (picked_city.get("osm_type") or "").lower()
+        if not cities:
+            st.warning("Δεν βρέθηκαν πόλεις (OSM/Overpass). Προσπαθήστε ξανά αργότερα.")
+            # Fallback to manual text fields if API fails
+            col_city_text, col_dist_text = st.columns(2)
+            city = col_city_text.text_input("Πόλη (City)", value=city_pref)
+            district = col_dist_text.text_input("Περιοχή/Συνοικία (District)", value=dist_pref)
+            city_osm_id = city_osm_type = district_osm_id = district_osm_type = None
         else:
-            # allow fallback free text (optional)
-            city = city_query.strip()
-            city_osm_id = None
-            city_osm_type = None
+            # Build labels and try to preselect previously saved city
+            city_labels = [f"{row['label']} ({row['place']})" for row in cities]
+            # Preselect by label match first, else by OSM ID match, else 0
+            def _find_city_index():
+                if city_pref:
+                    for i, row in enumerate(cities):
+                        if row["label"] == city_pref:
+                            return i
+                if city_pref_id and city_pref_type:
+                    for i, row in enumerate(cities):
+                        if row["osm_id"] == city_pref_id and row["elem_type"] == city_pref_type:
+                            return i
+                return 0
 
-        # DISTRICTS depend on selected city boundary
-        if city_osm_id and city_osm_type:
-            district_list = list_districts_in_city(city_osm_type, int(city_osm_id))
-        else:
-            district_list = []
+            pre_idx = _find_city_index()
+            picked_city_label = st.selectbox("Επίλεξε πόλη", options=city_labels, index=pre_idx, key="__city_select__")
+            sel_city = cities[city_labels.index(picked_city_label)]
 
-        # Current values
-        district = (prefs.get("search_district") or "").strip()
-        district_osm_id = prefs.get("search_district_osm_id")
-        district_osm_type = prefs.get("search_district_osm_type")
+            city = sel_city["label"]
+            city_osm_id = sel_city["osm_id"]
+            city_osm_type = sel_city["elem_type"]
+            st.caption(f"Πόλη OSM → {city_osm_type} {city_osm_id} · {sel_city['place']}")
 
-        if district_list:
-            dist_labels = [d["label"] for d in district_list]
-            pre_idx = dist_labels.index(district) if district and district in dist_labels else 0
-            picked_dist = col_dist.selectbox("Περιοχή/Συνοικία (District)", options=dist_labels, index=pre_idx)
-            district = picked_dist
-            drow = next((d for d in district_list if d["label"] == picked_dist), None)
-            district_osm_id = drow.get("osm_id") if drow else None
-            # Overpass returns "elem_type": node/way/relation — store as osm_type for consistency
-            district_osm_type = (drow.get("elem_type") or "").lower() if drow else None
-        else:
-            district = col_dist.text_input("Περιοχή/Συνοικία (District)", value=prefs.get("search_district") or "")
-            district_osm_id = None
-            district_osm_type = None
+            # -------- Dependent district list (from city) --------
+            with st.spinner("Loading districts for the selected city..."):
+                districts = list_districts_for_city(
+                    sel_city["elem_type"], int(sel_city["osm_id"]),
+                    lat=sel_city.get("lat"), lon=sel_city.get("lon")
+                )
 
-        # --- Rest of your filters (unchanged) ---
-        c1, c2 = st.columns(2)
-        size_min = c1.number_input(tr("Min size (m²)"), min_value=0, max_value=10000, value=int(prefs.get("size_min") or 0), step=1)
-        size_max = c2.number_input(tr("Max size (m²)"), min_value=0, max_value=10000, value=int(prefs.get("size_max") or 0), step=1)
+            if districts:
+                dist_labels = [f"{d['label']} ({d.get('place','')})".strip().rstrip("() ") for d in districts]
+
+                def _find_dist_index():
+                    if dist_pref:
+                        for i, d in enumerate(districts):
+                            if d["label"] == dist_pref:
+                                return i
+                    if dist_pref_id and dist_pref_type:
+                        for i, d in enumerate(districts):
+                            if d["osm_id"] == dist_pref_id and d["elem_type"] == dist_pref_type:
+                                return i
+                    return 0
+
+                pre_didx = _find_dist_index()
+                picked_dist_label = st.selectbox("Επίλεξε περιοχή/συνοικία", options=dist_labels, index=pre_didx, key="__district_select__")
+                sel_dist = districts[dist_labels.index(picked_dist_label)]
+
+                district = sel_dist["label"]
+                district_osm_id = sel_dist["osm_id"]
+                district_osm_type = sel_dist["elem_type"]
+                st.caption(f"Συνοικία OSM → {district_osm_type} {district_osm_id} · {sel_dist.get('place','—')}")
+            else:
+                st.info("Δεν βρέθηκαν καταχωρημένες συνοικίες (ή η πόλη δεν έχει πολυγωνικό όριο). Μπορείτε να εισαγάγετε χειροκίνητα.")
+                col_city_text, col_dist_text = st.columns(2)
+                # Lock city to the selected city label, allow manual district
+                col_city_text.text_input("Πόλη (City)", value=city, key="city_manual", disabled=True)
+                district = col_dist_text.text_input("Περιοχή/Συνοικία (District)", value=dist_pref)
+                district_osm_id = None
+                district_osm_type = None
+
+        # -------- Your other filters (unchanged) --------
+        c1f, c2f = st.columns(2)
+        size_min = c1f.number_input(tr("Min size (m²)"), min_value=0, max_value=10000, value=int(prefs.get("size_min") or 0), step=1)
+        size_max = c2f.number_input(tr("Max size (m²)"), min_value=0, max_value=10000, value=int(prefs.get("size_max") or 0), step=1)
 
         r1, r2 = st.columns(2)
         rooms_min = r1.number_input(tr("Min rooms"), min_value=0, max_value=50, value=int(prefs.get("rooms_min") or 0), step=1)
@@ -1197,7 +1181,7 @@ def tenant_open_to_rent_section():
         price_min = p1.number_input(tr("Min price (€)"), min_value=0, max_value=1_000_000, value=int(prefs.get("price_min") or 0), step=50)
         price_max = p2.number_input(tr("Max price (€)"), min_value=0, max_value=1_000_000, value=int(prefs.get("price_max") or 0), step=50)
 
-        # --- Save ---
+        # -------- Save --------
         col_save, _ = st.columns([1,3])
         if col_save.button(tr("Save")):
             if not city and not district:
@@ -1217,7 +1201,7 @@ def tenant_open_to_rent_section():
                 )
                 st.success(tr("Preferences saved!"))
 
-    # --- Summary (same nice formatter you liked) ---
+    # -------- Compact summary --------
     def _fmt_range(lo, hi, suffix=""):
         has_lo = lo not in (None, 0, "0", "")
         has_hi = hi not in (None, 0, "0", "")
@@ -1227,11 +1211,25 @@ def tenant_open_to_rent_section():
         hi_txt = f"{int(hi):,}" if has_hi else "—"
         return f"{lo_txt}–{hi_txt}{suffix}"
 
+    # Use most recent UI entries if present; fall back to prefs
     summary_bits = []
     loc_bits = []
-    if city: loc_bits.append(str(city).strip())
-    if district: loc_bits.append(str(district).strip())
-    if loc_bits: summary_bits.append(" — ".join(loc_bits))
+    if city_pref or 'city_manual' in st.session_state or '__city_select__' in st.session_state:
+        # display the latest chosen/typed city
+        latest_city = st.session_state.get('city_manual') or city or city_pref
+        if latest_city: loc_bits.append(str(latest_city).strip())
+    else:
+        if city_pref: loc_bits.append(city_pref)
+
+    latest_dist = st.session_state.get('__district_select__') or district or dist_pref
+    if isinstance(latest_dist, str):
+        # strip the "(place)" decoration if present
+        latest_dist = latest_dist.split(" (")[0]
+    if latest_dist:
+        loc_bits.append(str(latest_dist).strip())
+
+    if loc_bits:
+        summary_bits.append(" — ".join(loc_bits))
 
     size_txt = _fmt_range((prefs.get("size_min") or size_min), (prefs.get("size_max") or size_max), " m²")
     if size_txt: summary_bits.append(size_txt)
@@ -1247,7 +1245,8 @@ def tenant_open_to_rent_section():
 
     state_label = tr("Active") if open_flag else tr("Inactive")
     looking = " — ".join(summary_bits) if summary_bits else tr("Anywhere")
-    st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {looking}") 
+    st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {looking}")
+ 
     
 # def tenant_open_to_rent_section():
 #     st.subheader(tr("Open to Rent"))
