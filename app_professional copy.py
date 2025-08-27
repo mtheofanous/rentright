@@ -201,6 +201,28 @@ TRANSLATIONS_EL = {
         "Submit Reference": "Υποβολή σύστασης",
         "Previous landlord:": "Προηγούμενος ιδιοκτήτης",
         "Consent": "Συγκατάθεση",
+        # Open to Rent
+        "Open to Rent": "Διαθέσιμος/η για ενοικίαση",
+        "I'm currently looking for a place": "Αναζητώ αυτήν την περίοδο σπίτι",
+        "City": "Πόλη",
+        "District": "Περιοχή",
+        "Min size (m²)": "Ελάχιστο μέγεθος (τ.μ.)",
+        "Max size (m²)": "Μέγιστο μέγεθος (τ.μ.)",
+        "Min rooms": "Ελάχιστα δωμάτια",
+        "Max rooms": "Μέγιστα δωμάτια",
+        "Min floor": "Ελάχιστος όροφος",
+        "Max floor": "Μέγιστος όροφος",
+        "Min price (€)": "Ελάχιστη τιμή (€)",
+        "Max price (€)": "Μέγιστη τιμή (€)",
+        "Save preferences": "Αποθήκευση προτιμήσεων",
+        "Preferences saved.": "Οι προτιμήσεις αποθηκεύτηκαν.",
+        "Please enter at least a city or a district.": "Καταχωρίστε τουλάχιστον πόλη ή περιοχή.",
+        "Please check your ranges: maximums must be greater than or equal to minimums.": "Ελέγξτε τα εύρη: τα μέγιστα πρέπει να είναι μεγαλύτερα ή ίσα από τα ελάχιστα.",
+        "Tip: leave a minimum as 0 if you have no minimum for that field.": "Συμβουλή: αφήστε το ελάχιστο ως 0 αν δεν έχετε ελάχιστο για το πεδίο.",
+        "rooms": "δωμάτια",
+        "Looking in": "Αναζήτηση σε",
+        "Active": "Ενεργό",
+        "Inactive": "Ανενεργό",
 
     }
 
