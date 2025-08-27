@@ -9,7 +9,8 @@ from uuid import uuid4
 import os
 from pathlib import Path
 import tempfile
-
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo 
 from utils_vault import encrypt_bytes, decrypt_bytes, sha256_bytes
 
 # ⚠️ set_page_config must be the first Streamlit command
@@ -376,7 +377,35 @@ def ensure_contracts_consent_column(conn):
         cur.execute("ALTER TABLE reference_contracts ADD COLUMN consent_status TEXT NOT NULL DEFAULT 'locked'")
         conn.commit()
         
-        
+
+def format_dt(value, tz="Europe/Athens") -> str:
+    """Return dd/mm/yyyy HH:MM in local time, robust to strings/naive dt."""
+    if not value:
+        return "—"
+    # Parse
+    if isinstance(value, str):
+        v = value.strip()
+        try:
+            v = v.replace("Z", "+00:00")
+            dt = datetime.fromisoformat(v)
+        except Exception:
+            # Fallbacks: trim microseconds/T if any
+            v2 = v.split(".")[0].replace("T", " ")
+            try:
+                dt = datetime.strptime(v2, "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                return v2  # last resort: show cleaned string
+    elif isinstance(value, (int, float)):
+        dt = datetime.fromtimestamp(value, tz=timezone.utc)
+    else:
+        dt = value
+
+    # Assume UTC if naive, then convert to target tz
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    local = dt.astimezone(ZoneInfo(tz))
+    return local.strftime("%d/%m/%Y")
+
 def add_column_if_missing(conn, table: str, col_def: str):
     """
     Add a column to `table` if missing.
@@ -1725,13 +1754,11 @@ def admin_dashboard():
 
                 cols[0].markdown(f"{tr('**Tenant:**')} {tenant_label} ({tenant['email'] if tenant else '—'})")
                 cols[1].markdown(f"{tr('**To landlord:**')} {landlord_email}")
-                cols[2].markdown(f"{tr('**Created:**')} {created_at}")
+                cols[2].markdown(f"{tr('**Created:**')} {format_dt(created_at)}")
                 cols[3].markdown(f"{tr('**Status:**')} {display_status}")
 
                 # ⬇️ Previous landlord line (translated)
                 st.caption(f"{tr('Previous landlord:')} **{pl_name}** ({pl_email}) · {tr('Address:')} {pl_addr}")
-
-
 
                 link = build_reference_link(token)
                 st.text_input(tr('Reference Link'), value=link, key=f"{prefix}_link_{token}", disabled=True)
@@ -2397,7 +2424,7 @@ def landlord_dashboard():
                     unsafe_allow_html=True
                 )
                 cols[1].markdown(f"{tr('**Status:**')} {display_status}")
-                cols[2].markdown(f"{tr('**Created:**')} {created_at}")
+                cols[2].markdown(f"{tr('**Created:**')} {format_dt(created_at)}")
                 cols[3].markdown(f"{tr('**Score:**')} {score if score is not None else '—'}")
 
                 st.caption(f"📍 **{tr('Address')}:** {address}")
@@ -2447,15 +2474,15 @@ def landlord_dashboard():
                                     key=f"{prefix}_score_{token}"
                                 )
                                 paid_on_time = st.radio(
-                                    tr('Did the tenant pay on time?'), ["Yes","No"],
+                                    tr('Did the tenant pay on time?'), [tr("Yes"),tr("No")],
                                     horizontal=True, key=f"{prefix}_paid_{token}"
                                 )
                                 utilities_unpaid = st.radio(
-                                    tr('Did the tenant leave utilities unpaid?'), ["No","Yes"],
+                                    tr('Did the tenant leave utilities unpaid?'), [tr("No"),tr("Yes")],
                                     horizontal=True, key=f"{prefix}_utilities_{token}"
                                 )
                                 good_condition = st.radio(
-                                    tr('Did the tenant leave the apartment in good condition?'), ["Yes","No"],
+                                    tr('Did the tenant leave the apartment in good condition?'), [tr("Yes"),tr("No")],
                                     horizontal=True, key=f"{prefix}_condition_{token}"
                                 )
                                 comments = st.text_area(
