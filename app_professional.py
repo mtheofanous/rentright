@@ -239,7 +239,7 @@ def md_label(key_with_colon: str) -> str:
 
 # === Top-right language switcher (flags only) ===
 def render_topbar_language():
-    c1, c2 = st.columns([8, 1])
+    c1, c2 = st.columns([8, 2])
     with c2:
         choice = st.selectbox(
             "🌐 Language",
