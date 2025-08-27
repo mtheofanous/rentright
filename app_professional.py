@@ -542,9 +542,9 @@ def run_migrations(conn):
     add_column_if_missing(conn, "tenant_profiles", "floor_max INTEGER")
     add_column_if_missing(conn, "tenant_profiles", "price_min INTEGER")
     add_column_if_missing(conn, "tenant_profiles", "price_max INTEGER")
-    # Optional: add OSM reference columns for stronger data integrity
-    add_column_if_missing("tenant_profiles", "search_city_osm_id", "INTEGER")
-    add_column_if_missing("tenant_profiles", "search_district_osm_id", "INTEGER")
+    # NEW: OSM reference columns
+    add_column_if_missing(conn, "tenant_profiles", "search_city_osm_id INTEGER")
+    add_column_if_missing(conn, "tenant_profiles", "search_district_osm_id INTEGER")
 
 
         
