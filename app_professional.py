@@ -773,24 +773,46 @@ def is_valid_afm(s: str) -> bool:
 
 # ---------- Auth UI ----------
 
+# def login_form():
+#     st.subheader(tr('Sign In'))
+#     with st.form("login_form"):
+#         email = st.text_input(tr('Email'))
+#         password = st.text_input(tr('Password'), type="password")
+#         submitted = st.form_submit_button(tr('Sign In'))
+
+#     if submitted:
+#         user = get_user_by_email(email)
+#         if not user or user["password_hash"] != hash_password(password):
+#             st.error(tr('Incorrect email or password. Please try again.'))
+#             st.rerun()
+
+#         # Save session and immediately rerun so main() routes to the dashboard
+#         st.session_state.user = {k: user[k] for k in ["id","email","name","role"]}
+#         # Optional: flash once after rerun (uncomment + handle in dashboard if you want)
+#         st.session_state["flash_welcome"] = f"{tr('Welcome, ')}{user['name']}!"
+#         time.sleep()
+#         st.rerun()
+
 def login_form():
     st.subheader(tr('Sign In'))
-    with st.form("login_form"):
+    with st.form("login_form", clear_on_submit=False):
         email = st.text_input(tr('Email'))
         password = st.text_input(tr('Password'), type="password")
         submitted = st.form_submit_button(tr('Sign In'))
 
-    if submitted:
-        user = get_user_by_email(email)
-        if not user or user["password_hash"] != hash_password(password):
-            st.error(tr('Incorrect email or password. Please try again.'))
-            st.rerun()
+    if not submitted:
+        return
 
-        # Save session and immediately rerun so main() routes to the dashboard
-        st.session_state.user = {k: user[k] for k in ["id","email","name","role"]}
-        # Optional: flash once after rerun (uncomment + handle in dashboard if you want)
-        st.session_state["flash_welcome"] = f"{tr('Welcome, ')}{user['name']}!"
-        st.rerun()
+    user = get_user_by_email(email)
+    if not user or user["password_hash"] != hash_password(password):
+        st.error(tr('Incorrect email or password. Please try again.'))
+        return  # don't st.stop()
+
+    # success → set session and rerun immediately (no sleep)
+    st.session_state.user = {k: user[k] for k in ["id","email","name","role"]}
+    st.session_state["just_logged_in"] = True
+    st.rerun()
+
 
 # def login_form():
 #     st.subheader(tr('Sign In'))
