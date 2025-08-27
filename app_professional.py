@@ -96,7 +96,7 @@ TRANSLATIONS_EL = {
         "⏳ Pending Review": "⏳ Αναμονή Ελέγχου",
         "✅ Verified Contract": "✅ Επικυρωμένο Συμβόλαιο",
         "❌ Rejected Contract": "❌ Απορριφθέν Συμβόλαιο",
-        # Admin
+        "Thanks, your response is saved. The request will complete once the tenant’s contract is verified.": "Ευχαριστούμε — η απάντησή σας αποθηκεύτηκε. Το αίτημα θα ολοκληρωθεί μόλις επαληθευτεί το συμβόλαιο του ενοικιαστή.",
         "Pending References (All Tenants)": "Εκκρεμείς Συστάσεις (Όλοι οι Ενοικιαστές)",
         "No requests available.": "Δεν υπάρχουν διαθέσιμα αιτήματα.",
         "Reference Link": "Σύνδεσμος Σύστασης",
@@ -2389,7 +2389,7 @@ def landlord_dashboard():
                     # If landlord already submitted, show a read-only summary instead of the form
                     if details and details.get("confirm_landlord"):
                         with st.expander(tr('Respond Now'), expanded=True):
-                            st.info(tr("Thanks — your response is saved. The request will complete once the tenant’s contract is verified by an admin."))
+                            st.info(tr("Thanks — your response is saved. The request will complete once the tenant’s contract is verified."))
                             st.write(f"**{tr('Overall tenant score')}:** {details.get('score')}/10")
                             st.write(f"**{tr('Did the tenant pay on time?')}:** {tr('Yes') if details.get('paid_on_time') else tr('No')}")
                             st.write(f"**{tr('Did the tenant leave utilities unpaid?')}:** {tr('Yes') if details.get('utilities_unpaid') else tr('No')}")
