@@ -133,6 +133,7 @@ TRANSLATIONS_EL = {
         "Email Settings (SMTP)": "Ρυθμίσεις Email (SMTP)",
         "App Base URL": "Βασικό URL Εφαρμογής",
         "Base URL for Links": "Βασικό URL για Συνδέσμους",
+        '**To landlord:**': 'Στον Ιδιοκτήτη',
         # Misc labels
         "Email": "Email",
         "Password": "Κωδικός",
@@ -198,6 +199,8 @@ TRANSLATIONS_EL = {
         "Did the tenant leave the apartment in good condition?": "Άφησε ο ενοικιαστής το διαμέρισμα σε καλή κατάσταση;",
         "Optional comments": "Προαιρετικά σχόλια",
         "Submit Reference": "Υποβολή σύστασης",
+        "Previous landlord:": "Προηγούμενος ιδιοκτήτης",
+        "Consent": "Συγκατάθεση",
 
     }
 
@@ -1677,8 +1680,8 @@ def admin_dashboard():
     cancelled_reqs = [r for r in all_reqs if eff(r) == "cancelled"]
 
     c1, c2, c3 = st.columns(3)
-    c1.metric("Pending (effective)", len(pending_reqs))
-    c2.metric("Completed (effective)", len(completed_reqs))
+    c1.metric(tr("Pending"), len(pending_reqs))
+    c2.metric(tr("Completed"), len(completed_reqs))
     c3.metric(tr('Cancelled'), len(cancelled_reqs))
 
     tab_pending, tab_completed, tab_cancelled = st.tabs([tr('Pending'), tr('Completed'), tr('Cancelled')])
@@ -1767,7 +1770,7 @@ def admin_dashboard():
                 contract = get_contract_by_token(token)
                 if contract:
                     consent_row = conn.cursor().execute("SELECT consent_status FROM reference_contracts WHERE token=?", (token,)).fetchone()
-                    consent_badge = f"Consent: {consent_row[0] if consent_row else 'locked'}"
+                    consent_badge = f"{tr("Consent")}: {consent_row[0] if consent_row else 'locked'}"
                     st.markdown(f"**Contract:** {contract['filename']} · {contract_status_badge(contract['status'])} · {consent_badge}")
                     st.caption(
                         f"Uploaded: {contract['uploaded_at']} • "
