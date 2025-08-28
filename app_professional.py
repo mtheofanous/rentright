@@ -985,7 +985,7 @@ def tenant_open_to_rent_section():
     tid = st.session_state.user["id"]
     prefs = load_open_to_rent_prefs(tid)
 
-    # Current stored values (for prefill)
+    # Prefill (stored values)
     saved_city = (prefs.get("search_city") or "").strip()        # Δήμος
     saved_dist = (prefs.get("search_district") or "").strip()    # Περιφερειακή Ενότητα
 
@@ -994,16 +994,22 @@ def tenant_open_to_rent_section():
         value=bool(prefs.get("open_to_rent")),
     )
 
-    with st.container(border=True):
-        # --- Location picker from ellada.json ---
-        data, regions, muni_idx = load_ellada_index("ellada.json")
+    # Defaults to avoid NameError even on early returns
+    region = ""
+    district = ""
+    city = ""
 
-        # Try to infer preselected Region/Unit from saved values
+    with st.container(border=True):
+        # ---- Load Region → P.E. → Municipality from ellada.json ----
+        # If you committed the file to ./data/ellada.json, pass that path;
+        # otherwise omit the argument to use the loader's search logic + uploader fallback.
+        data, regions, muni_idx = load_ellada_index()  # or load_ellada_index("data/ellada.json")
+
+        # Infer preselected Region/P.E. from saved values
         pre_region, pre_unit = (None, None)
         if saved_city and saved_city in muni_idx:
             pre_region, pre_unit = muni_idx[saved_city]
         elif saved_dist:
-            # find which region contains the saved peripheral unit
             for reg in data.get("Περιφέρειες", []):
                 units = (reg.get("Περιφερειακές Ενότητες") or {})
                 if saved_dist in units:
@@ -1011,29 +1017,27 @@ def tenant_open_to_rent_section():
                     pre_unit = saved_dist
                     break
 
-        # Region
-        if regions:
-            region_default = regions.index(pre_region) if pre_region in regions else 0
-            region = st.selectbox("Περιφέρεια", options=regions, index=region_default, key="loc_region")
-        else:
-            region = st.selectbox("Περιφέρεια", options=["—"], index=0, key="loc_region")
+        # Region select
+        region_options = regions if regions else ["—"]
+        region_index = region_options.index(pre_region) if pre_region in region_options else 0
+        region = st.selectbox("Περιφέρεια", options=region_options, index=region_index, key="loc_region")
 
-        # Peripheral Unit (depends on Region)
-        units = list_units(data, region) if region else []
-        unit_default = units.index(pre_unit) if (pre_unit in units) else (0 if units else 0)
-        unit = st.selectbox("Περιφερειακή Ενότητα", options=units or ["—"], index=unit_default, key="loc_unit")
+        # P.E. select (depends on Region)
+        units = list_units(data, region) if (region and region != "—") else []
+        unit_options = units if units else ["—"]
+        unit_index = unit_options.index(pre_unit) if pre_unit in unit_options else 0
+        unit = st.selectbox("Περιφερειακή Ενότητα", options=unit_options, index=unit_index, key="loc_unit")
 
-        # Municipality (depends on Peripheral Unit)
-        municipalities = list_municipalities(data, region, unit) if (region and unit) else []
-        city_default = municipalities.index(saved_city) if (saved_city in municipalities) else (0 if municipalities else 0)
-        city = st.selectbox("Δήμος (Πόλη)", options=municipalities or ["—"], index=city_default, key="loc_city")
+        # Municipality select (depends on P.E.)
+        municipalities = list_municipalities(data, region, unit) if (region and region != "—" and unit and unit != "—") else []
+        city_options = municipalities if municipalities else ["—"]
+        city_index = city_options.index(saved_city) if saved_city in city_options else 0
+        city = st.selectbox("Δήμος (Πόλη)", options=city_options, index=city_index, key="loc_city")
 
-        # Map to your schema:
-        # - City     -> Δήμος
-        # - District -> Περιφερειακή Ενότητα
+        # Map to your schema
         district = unit
 
-        # --- Other filters (unchanged) ---
+        # ---- Other filters (unchanged) ----
         c1, c2 = st.columns(2)
         size_min = c1.number_input(tr("Min size (m²)"), min_value=0, max_value=10000, value=int(prefs.get("size_min") or 0), step=1)
         size_max = c2.number_input(tr("Max size (m²)"), min_value=0, max_value=10000, value=int(prefs.get("size_max") or 0), step=1)
@@ -1050,17 +1054,16 @@ def tenant_open_to_rent_section():
         price_min = p1.number_input(tr("Min price (€)"), min_value=0, max_value=1_000_000, value=int(prefs.get("price_min") or 0), step=50)
         price_max = p2.number_input(tr("Max price (€)"), min_value=0, max_value=1_000_000, value=int(prefs.get("price_max") or 0), step=50)
 
-        # --- Save ---
+        # ---- Save ----
         col_save, _ = st.columns([1,3])
         if col_save.button(tr("Save")):
-            # Normalize placeholders
-            city_clean = "" if (city == "—") else city
-            district_clean = "" if (district == "—") else district
+            city_clean = "" if (city == "—") else (city or "")
+            district_clean = "" if (district == "—") else (district or "")
             if not city_clean and not district_clean:
                 st.warning(tr("Please enter at least a city or a district."))
             else:
-                # If your saver expects OSM fields, pass None (we're offline/JSON-only)
                 try:
+                    # If your saver accepts OSM args
                     save_open_to_rent_prefs(
                         tid, open_flag,
                         city_clean, district_clean,
@@ -1072,7 +1075,7 @@ def tenant_open_to_rent_section():
                         district_osm_id=None, district_osm_type=None,
                     )
                 except TypeError:
-                    # If your saver has the old signature without OSM fields
+                    # Old signature without OSM args
                     save_open_to_rent_prefs(
                         tid, open_flag,
                         city_clean, district_clean,
@@ -1082,6 +1085,45 @@ def tenant_open_to_rent_section():
                         price_min, price_max,
                     )
                 st.success(tr("Preferences saved!"))
+
+    # ---- Compact summary (no undefined names) ----
+    def _fmt_range(lo, hi, suffix=""):
+        has_lo = lo not in (None, 0, "0", "")
+        has_hi = hi not in (None, 0, "0", "")
+        if not has_lo and not has_hi:
+            return None
+        lo_txt = f"{int(lo):,}" if has_lo else "—"
+        hi_txt = f"{int(hi):,}" if has_hi else "—"
+        return f"{lo_txt}–{hi_txt}{suffix}"
+
+    latest_region = region if region and region != "—" else ""
+    latest_district = district if district and district != "—" else saved_dist
+    latest_city = city if city and city != "—" else saved_city
+
+    summary_bits = []
+    loc_bits = []
+    if latest_region: loc_bits.append(latest_region.strip())
+    if latest_district: loc_bits.append(latest_district.strip())
+    if latest_city: loc_bits.append(latest_city.strip())
+    if loc_bits:
+        summary_bits.append(" — ".join(loc_bits))
+
+    size_txt = _fmt_range((prefs.get("size_min") or size_min), (prefs.get("size_max") or size_max), " m²")
+    if size_txt: summary_bits.append(size_txt)
+
+    rooms_txt = _fmt_range((prefs.get("rooms_min") or rooms_min), (prefs.get("rooms_max") or rooms_max), f" {tr('rooms')}")
+    if rooms_txt: summary_bits.append(rooms_txt)
+
+    floor_txt = _fmt_range((prefs.get("floor_min") or floor_min), (prefs.get("floor_max") or floor_max))
+    if floor_txt: summary_bits.append(tr("Floor") + " " + floor_txt)
+
+    price_txt = _fmt_range((prefs.get("price_min") or price_min), (prefs.get("price_max") or price_max))
+    if price_txt: summary_bits.append("€" + price_txt.replace("–", "–€"))
+
+    state_label = tr("Active") if open_flag else tr("Inactive")
+    looking = " — ".join(summary_bits) if summary_bits else tr("Anywhere")
+    st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {looking}")
+
 
     # --- Compact summary (clean formatting) ---
     # --- Compact summary (clean formatting) ---
