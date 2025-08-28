@@ -1173,51 +1173,51 @@ def tenant_open_to_rent_section():
 
 
 
-    # -------- Compact summary --------
-    def _fmt_range(lo, hi, suffix=""):
-        has_lo = lo not in (None, 0, "0", "")
-        has_hi = hi not in (None, 0, "0", "")
-        if not has_lo and not has_hi:
-            return None
-        lo_txt = f"{int(lo):,}" if has_lo else "—"
-        hi_txt = f"{int(hi):,}" if has_hi else "—"
-        return f"{lo_txt}–{hi_txt}{suffix}"
+    # # -------- Compact summary --------
+    # def _fmt_range(lo, hi, suffix=""):
+    #     has_lo = lo not in (None, 0, "0", "")
+    #     has_hi = hi not in (None, 0, "0", "")
+    #     if not has_lo and not has_hi:
+    #         return None
+    #     lo_txt = f"{int(lo):,}" if has_lo else "—"
+    #     hi_txt = f"{int(hi):,}" if has_hi else "—"
+    #     return f"{lo_txt}–{hi_txt}{suffix}"
 
-    # Use most recent UI entries if present; fall back to prefs
-    summary_bits = []
-    loc_bits = []
-    if saved_city or 'city_manual' in st.session_state or '__city_select__' in st.session_state:
-        # display the latest chosen/typed city
-        latest_city = st.session_state.get('city_manual') or city or saved_city
-        if latest_city: loc_bits.append(str(latest_city).strip())
-    else:
-        if saved_city: loc_bits.append(saved_city)
+    # # Use most recent UI entries if present; fall back to prefs
+    # summary_bits = []
+    # loc_bits = []
+    # if saved_city or 'city_manual' in st.session_state or '__city_select__' in st.session_state:
+    #     # display the latest chosen/typed city
+    #     latest_city = st.session_state.get('city_manual') or city or saved_city
+    #     if latest_city: loc_bits.append(str(latest_city).strip())
+    # else:
+    #     if saved_city: loc_bits.append(saved_city)
 
-    latest_dist = st.session_state.get('__district_select__') or district or saved_dist
-    if isinstance(latest_dist, str):
-        # strip the "(place)" decoration if present
-        latest_dist = latest_dist.split(" (")[0]
-    if latest_dist:
-        loc_bits.append(str(latest_dist).strip())
+    # latest_dist = st.session_state.get('__district_select__') or district or saved_dist
+    # if isinstance(latest_dist, str):
+    #     # strip the "(place)" decoration if present
+    #     latest_dist = latest_dist.split(" (")[0]
+    # if latest_dist:
+    #     loc_bits.append(str(latest_dist).strip())
 
-    if loc_bits:
-        summary_bits.append(" — ".join(loc_bits))
+    # if loc_bits:
+    #     summary_bits.append(" — ".join(loc_bits))
 
-    size_txt = _fmt_range((prefs.get("size_min") or size_min), (prefs.get("size_max") or size_max), " m²")
-    if size_txt: summary_bits.append(size_txt)
+    # size_txt = _fmt_range((prefs.get("size_min") or size_min), (prefs.get("size_max") or size_max), " m²")
+    # if size_txt: summary_bits.append(size_txt)
 
-    rooms_txt = _fmt_range((prefs.get("rooms_min") or rooms_min), (prefs.get("rooms_max") or rooms_max), f" {tr('rooms')}")
-    if rooms_txt: summary_bits.append(rooms_txt)
+    # rooms_txt = _fmt_range((prefs.get("rooms_min") or rooms_min), (prefs.get("rooms_max") or rooms_max), f" {tr('rooms')}")
+    # if rooms_txt: summary_bits.append(rooms_txt)
 
-    floor_txt = _fmt_range((prefs.get("floor_min") or floor_min), (prefs.get("floor_max") or floor_max))
-    if floor_txt: summary_bits.append(tr("Floor") + " " + floor_txt)
+    # floor_txt = _fmt_range((prefs.get("floor_min") or floor_min), (prefs.get("floor_max") or floor_max))
+    # if floor_txt: summary_bits.append(tr("Floor") + " " + floor_txt)
 
-    price_txt = _fmt_range((prefs.get("price_min") or price_min), (prefs.get("price_max") or price_max))
-    if price_txt: summary_bits.append("€" + price_txt.replace("–", "–€"))
+    # price_txt = _fmt_range((prefs.get("price_min") or price_min), (prefs.get("price_max") or price_max))
+    # if price_txt: summary_bits.append("€" + price_txt.replace("–", "–€"))
 
-    state_label = tr("Active") if open_flag else tr("Inactive")
-    looking = " — ".join(summary_bits) if summary_bits else tr("Anywhere")
-    st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {looking}")
+    # state_label = tr("Active") if open_flag else tr("Inactive")
+    # looking = " — ".join(summary_bits) if summary_bits else tr("Anywhere")
+    # st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {looking}")
  
 
 def storage_delete(storage_key: str):
