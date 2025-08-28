@@ -409,14 +409,58 @@ import json
 import os
 
 # ----- Φόρτωμα & ευρετήρια από ellada.json -----
-@st.cache_data(ttl=86400, show_spinner=False)
-def load_ellada_index(json_path="/mnt/data/ellada.json"):
-    if not os.path.exists(json_path):
-        st.error(f"Δεν βρέθηκε το αρχείο: {json_path}")
-        return {"Περιφέρειες": []}, [], {}
-    with open(json_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
 
+@st.cache_data(ttl=86400, show_spinner=False)
+def load_ellada_index(json_path: str | None = None):
+    """
+    Load Region -> Peripheral Unit -> Municipalities from ellada.json.
+    Looks in several common locations, and finally prompts for upload.
+    Returns: (data, regions, muni_to_loc)
+    - regions: sorted list of Περιφέρειες
+    - muni_to_loc: dict { Δήμος -> (Περιφέρεια, Περιφερειακή Ενότητα) }
+    """
+    # 1) Candidates to search (order matters)
+    here = Path(__file__).parent
+    candidates: list[Path] = []
+    if json_path:
+        candidates.append(Path(json_path))
+    # from secrets (optional)
+    try:
+        secret_path = st.secrets.get("ELLADA_JSON_PATH", "")
+        if secret_path:
+            candidates.append(Path(secret_path))
+    except Exception:
+        pass
+    # typical repo locations
+    candidates += [
+        here / "ellada.json",
+        here / "data" / "ellada.json",
+        Path.cwd() / "ellada.json",
+        Path.cwd() / "data" / "ellada.json",
+        Path("/mnt/data/ellada.json"),  # last resort if you’re running locally
+    ]
+
+    for p in candidates:
+        if p.exists():
+            with open(p, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            break
+    else:
+        # Last-resort: let the user upload the JSON once
+        uploaded = st.file_uploader("Ανεβάστε το αρχείο ellada.json", type="json", key="ellada_upload")
+        if not uploaded:
+            st.error("Δεν βρέθηκε το αρχείο ellada.json. Προσθέστε το στο repo ή ανεβάστε το εδώ.")
+            st.stop()
+        data = json.load(uploaded)
+        # persist to /mnt/data so subsequent reruns can find it
+        try:
+            Path("/mnt/data").mkdir(parents=True, exist_ok=True)
+            with open("/mnt/data/ellada.json", "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False)
+        except Exception:
+            pass
+
+    # Build regions list and municipality index
     regions = []
     muni_to_loc = {}  # Δήμος -> (Περιφέρεια, Περιφερειακή Ενότητα)
     for reg in data.get("Περιφέρειες", []):
@@ -426,13 +470,13 @@ def load_ellada_index(json_path="/mnt/data/ellada.json"):
         regions.append(rname)
         units = reg.get("Περιφερειακές Ενότητες", {}) or {}
         for unit_name, municipalities in units.items():
-            for m in municipalities:
+            for m in municipalities or []:
                 muni_to_loc[m] = (rname, unit_name)
+
     regions.sort(key=lambda s: s.casefold())
     return data, regions, muni_to_loc
 
 def list_units(data, region_name: str):
-    """Επιστρέφει ταξινομημένη λίστα Περιφερειακών Ενοτήτων για την Περιφέρεια."""
     for reg in data.get("Περιφέρειες", []):
         if reg.get("όνομα") == region_name:
             units = list((reg.get("Περιφερειακές Ενότητες") or {}).keys())
@@ -441,7 +485,6 @@ def list_units(data, region_name: str):
     return []
 
 def list_municipalities(data, region_name: str, unit_name: str):
-    """Επιστρέφει ταξινομημένη λίστα Δήμων για τη δοσμένη Περιφερειακή Ενότητα."""
     for reg in data.get("Περιφέρειες", []):
         if reg.get("όνομα") == region_name:
             munis = (reg.get("Περιφερειακές Ενότητες") or {}).get(unit_name, []) or []
@@ -953,7 +996,7 @@ def tenant_open_to_rent_section():
 
     with st.container(border=True):
         # --- Location picker from ellada.json ---
-        data, regions, muni_idx = load_ellada_index()
+        data, regions, muni_idx = load_ellada_index("ellada.json")
 
         # Try to infer preselected Region/Unit from saved values
         pre_region, pre_unit = (None, None)
