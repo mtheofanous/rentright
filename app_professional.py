@@ -815,13 +815,29 @@ def add_future_landlord_contact(tenant_id: int, email: str):
     email = (email or "").strip().lower()
     if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
         raise ValueError("Invalid email")
+
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute(
-        "INSERT OR IGNORE INTO future_landlord_contacts(tenant_id, email, created_at) VALUES (?,?,?)",
-        (tenant_id, email, datetime.utcnow().isoformat()),
-    )
+
+    # 1) Insert (or update timestamp if already there)
+    cur.execute("""
+        INSERT INTO future_landlord_contacts (tenant_id, email, created_at, invited)
+        VALUES (?, ?, ?, 0)
+        ON CONFLICT(tenant_id, email)
+        DO UPDATE SET created_at=excluded.created_at
+    """, (tenant_id, email, datetime.utcnow().isoformat()))
     conn.commit()
+
+    # 2) If this email belongs to a registered landlord and there is an old 'rejected' link,
+    #    remove it so the UI no longer auto-hides this contact.
+    landlord_user_id = get_user_id_by_email(email)
+    if landlord_user_id:
+        cur.execute(
+            "DELETE FROM future_landlord_connections WHERE landlord_id=? AND tenant_id=? AND status='rejected'",
+            (landlord_user_id, tenant_id)
+        )
+        conn.commit()
+
 
 
 def list_future_landlord_contacts(tenant_id: int):
