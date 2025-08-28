@@ -3124,9 +3124,13 @@ def landlord_dashboard():
                 cols[3].markdown(f"{tr('**Score:**')} {score if score is not None else '—'}")
 
                 st.caption(f"📍 **{tr('Address')}:** {address}")
+                
+                # ... inside render_requests(reqs, prefix) loop, after st.caption(Address) ...
 
-                if status == "pending":
-                    # If landlord already submitted, show a read-only summary instead of the form
+                contract = get_contract_by_token(token)  # ⬅️ NEW: gate the form on contract presence
+
+                if str(status).lower() == "pending":
+                    # If the landlord already submitted earlier, show read-only summary
                     if details and details.get("confirm_landlord"):
                         with st.expander(tr('Respond Now'), expanded=True):
                             st.info(tr("Thanks, your response is saved."))
@@ -3137,6 +3141,13 @@ def landlord_dashboard():
                             if details.get('comments'):
                                 st.write("**" + tr('Optional comments') + ":**")
                                 st.write(details['comments'])
+
+                    # 🚫 No contract yet → DO NOT show the form
+                    elif not contract:
+                        st.warning(tr('No contract uploaded yet.'))
+                        st.caption(tr('The tenant must upload the tenancy contract before you can respond.'))
+
+                    # ✅ Contract exists → show the form
                     else:
                         with st.expander(tr('Respond Now')):
                             with st.form(f"{prefix}_landlord_response_{token}"):
@@ -3159,15 +3170,15 @@ def landlord_dashboard():
                                     key=f"{prefix}_score_{token}"
                                 )
                                 paid_on_time = st.radio(
-                                    tr('Did the tenant pay on time?'), [tr("Yes"),tr("No")],
+                                    tr('Did the tenant pay on time?'), [tr("Yes"), tr("No")],
                                     horizontal=True, key=f"{prefix}_paid_{token}"
                                 )
                                 utilities_unpaid = st.radio(
-                                    tr('Did the tenant leave utilities unpaid?'), [tr("No"),tr("Yes")],
+                                    tr('Did the tenant leave utilities unpaid?'), [tr("No"), tr("Yes")],
                                     horizontal=True, key=f"{prefix}_utilities_{token}"
                                 )
                                 good_condition = st.radio(
-                                    tr('Did the tenant leave the apartment in good condition?'), [tr("Yes"),tr("No")],
+                                    tr('Did the tenant leave the apartment in good condition?'), [tr("Yes"), tr("No")],
                                     horizontal=True, key=f"{prefix}_condition_{token}"
                                 )
                                 comments = st.text_area(
@@ -3175,7 +3186,7 @@ def landlord_dashboard():
                                     key=f"{prefix}_comments_{token}"
                                 )
 
-                                col_a, col_b = st.columns([1,1])
+                                col_a, col_b = st.columns([1, 1])
                                 submit = col_a.form_submit_button(tr('Submit Reference'))
                                 cancel_btn = col_b.form_submit_button(tr('Not My Tenant / Cancel'))
 
@@ -3187,9 +3198,9 @@ def landlord_dashboard():
                                         token,
                                         confirm_landlord=True,
                                         score=int(s),
-                                        paid_on_time=(paid_on_time == "Yes"),
-                                        utilities_unpaid=(utilities_unpaid == "Yes"),
-                                        good_condition=(good_condition == "Yes"),
+                                        paid_on_time=(paid_on_time == tr("Yes")),
+                                        utilities_unpaid=(utilities_unpaid == tr("Yes")),
+                                        good_condition=(good_condition == tr("Yes")),
                                         comments=comments,
                                     )
                                     st.success(tr('Reference submitted successfully.'))
@@ -3199,6 +3210,82 @@ def landlord_dashboard():
                                 cancel_reference_request(token)
                                 st.warning(tr('Request cancelled.'))
                                 st.rerun()
+
+
+                # if status == "pending":
+                #     # If landlord already submitted, show a read-only summary instead of the form
+                #     if details and details.get("confirm_landlord"):
+                #         with st.expander(tr('Respond Now'), expanded=True):
+                #             st.info(tr("Thanks, your response is saved."))
+                #             st.write(f"**{tr('Overall tenant score')}** {details.get('score')}/10")
+                #             st.write(f"**{tr('Did the tenant pay on time?')}** {tr('Yes') if details.get('paid_on_time') else tr('No')}")
+                #             st.write(f"**{tr('Did the tenant leave utilities unpaid?')}** {tr('Yes') if details.get('utilities_unpaid') else tr('No')}")
+                #             st.write(f"**{tr('Did the tenant leave the apartment in good condition?')}** {tr('Yes') if details.get('good_condition') else tr('No')}")
+                #             if details.get('comments'):
+                #                 st.write("**" + tr('Optional comments') + ":**")
+                #                 st.write(details['comments'])
+                #     else:
+                #         with st.expander(tr('Respond Now')):
+                #             with st.form(f"{prefix}_landlord_response_{token}"):
+                #                 confirm = st.checkbox(
+                #                     tr("I confirm I was the landlord for this tenant and consent to the use and disclosure of my full name solely for verification of this reference."),
+                #                     key=f"{prefix}_confirm_{token}"
+                #                 )
+                #                 st.caption(
+                #                     tr("Tenant: {tenant_name} — Address: {address}")
+                #                     .format(tenant_name=tenant_label, address=address)
+                #                 )
+                #                 with st.expander(tr("Privacy & verification details")):
+                #                     p = tr("RentRight processes your responses, and if the tenant has uploaded a tenancy contract, may decrypt and review it after your confirmation solely to verify this reference (lawful basis: legitimate interests). The contract remains encrypted and is not shown to you. You may object at any time as described in the Privacy Notice.")
+                #                     if st.session_state.get("privacy_url"):
+                #                         p += f" {tr('Privacy Notice')}: {st.session_state['privacy_url']}"
+                #                     st.write(p)
+
+                #                 s = st.slider(
+                #                     tr('Overall tenant score'), 1, 10, 8,
+                #                     key=f"{prefix}_score_{token}"
+                #                 )
+                #                 paid_on_time = st.radio(
+                #                     tr('Did the tenant pay on time?'), [tr("Yes"),tr("No")],
+                #                     horizontal=True, key=f"{prefix}_paid_{token}"
+                #                 )
+                #                 utilities_unpaid = st.radio(
+                #                     tr('Did the tenant leave utilities unpaid?'), [tr("No"),tr("Yes")],
+                #                     horizontal=True, key=f"{prefix}_utilities_{token}"
+                #                 )
+                #                 good_condition = st.radio(
+                #                     tr('Did the tenant leave the apartment in good condition?'), [tr("Yes"),tr("No")],
+                #                     horizontal=True, key=f"{prefix}_condition_{token}"
+                #                 )
+                #                 comments = st.text_area(
+                #                     tr('Optional comments'),
+                #                     key=f"{prefix}_comments_{token}"
+                #                 )
+
+                #                 col_a, col_b = st.columns([1,1])
+                #                 submit = col_a.form_submit_button(tr('Submit Reference'))
+                #                 cancel_btn = col_b.form_submit_button(tr('Not My Tenant / Cancel'))
+
+                #             if submit:
+                #                 if not confirm:
+                #                     st.error(tr('Please confirm you were the landlord.'))
+                #                 else:
+                #                     mark_reference_completed(
+                #                         token,
+                #                         confirm_landlord=True,
+                #                         score=int(s),
+                #                         paid_on_time=(paid_on_time == "Yes"),
+                #                         utilities_unpaid=(utilities_unpaid == "Yes"),
+                #                         good_condition=(good_condition == "Yes"),
+                #                         comments=comments,
+                #                     )
+                #                     st.success(tr('Reference submitted successfully.'))
+                #                     st.rerun()
+
+                #             if cancel_btn:
+                #                 cancel_reference_request(token)
+                #                 st.warning(tr('Request cancelled.'))
+                #                 st.rerun()
 
                 elif status == "completed":
                     # ❌ no key here
