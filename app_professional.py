@@ -448,15 +448,22 @@ def flc_disconnect(landlord_id: int, tenant_id: int) -> None:
     """, (landlord_id, tenant_id, now, now))
     conn.commit()
 
+def _user_display_name_column() -> str:
+    # Detect whether users has 'full_name' or 'name'
+    cols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
+    return "full_name" if "full_name" in cols else "name"
+
 def flc_list_connected(landlord_id: int):
-    # Adjust the users/tenants table & fields to your schema if different
-    return conn.execute("""
-        SELECT u.id, u.full_name, u.email
+    name_col = _user_display_name_column()
+    sql = f"""
+        SELECT u.id, u.{name_col} AS display_name, u.email
         FROM future_landlord_connections c
         JOIN users u ON u.id = c.tenant_id
         WHERE c.landlord_id = ? AND c.status='connected'
-        ORDER BY u.full_name COLLATE NOCASE
-    """, (landlord_id,)).fetchall()
+        ORDER BY u.{name_col} COLLATE NOCASE
+    """
+    return conn.execute(sql, (landlord_id,)).fetchall()
+
 
 def _rerun():
     try:
@@ -2992,17 +2999,17 @@ def landlord_dashboard():
     #                 st.caption(tr("No previous landlords added yet."))
 
     # === Future Tenants (connected) ===
+    # === Future Tenants (connected) ===
     st.subheader(tr("Future Tenants"))
 
+    landlord_id = st.session_state.user["id"]
     rows = flc_list_connected(landlord_id)
 
     if not rows:
         st.caption(tr("No connected future tenants yet."))
     else:
         for r in rows:
-            # r is (id, full_name, email) from the helper query
-            tenant_id, full_name, email = r[0], r[1], r[2]
-
+            tenant_id, full_name, email = r  # display_name is in the 2nd position
             with st.container(border=True):
                 c1, c2 = st.columns([4, 1])
                 c1.markdown(f"**{full_name}**  \n{email}")
@@ -3010,8 +3017,6 @@ def landlord_dashboard():
                     flc_disconnect(landlord_id, tenant_id)
                     st.warning(tr("Disconnected."))
                     st.rerun()
-
-        st.divider()
 
     # === Reference requests that were sent to this landlord ===
     st.subheader(tr('Reference Requests Sent To You'))
