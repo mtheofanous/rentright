@@ -879,6 +879,54 @@ def get_user_by_email(email: str):
 
 # Starts here
 
+def _table_has_column(table: str, col: str) -> bool:
+    try:
+        cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+        return col in cols
+    except Exception:
+        return False
+
+def clear_tenant_future_landlord(tenant_id: int, landlord_email: str | None = None):
+    """
+    Clears the 'future landlord' reference from the tenant's profile so:
+      - they no longer appear under Prospective Tenants
+      - their own dashboard no longer shows the future landlord
+    Works defensively: updates only the columns that exist.
+    If landlord_email is provided and a matching email column exists, we match on it.
+    """
+    if not _table_has_column("tenant_profiles", "tenant_id"):
+        return  # nothing to do
+
+    # Candidate columns that might be present in your schema
+    email_cols = ["future_landlord_email", "future_landlord"]      # pick whichever exists
+    extra_cols = ["future_landlord_name", "future_landlord_phone",
+                  "future_landlord_note", "future_landlord_status",
+                  "future_landlord_updated_at"]
+
+    # Build SET clause only for columns that exist
+    set_bits = []
+    for c in email_cols + extra_cols:
+        if _table_has_column("tenant_profiles", c):
+            set_bits.append(f"{c}=NULL")
+
+    if not set_bits:
+        return  # no known columns to clear
+
+    # WHERE clause: by tenant_id; optionally match email if both landlord_email and email column exist
+    where = "tenant_id=?"
+    params = [tenant_id]
+
+    match_col = next((c for c in email_cols if _table_has_column("tenant_profiles", c)), None)
+    if landlord_email and match_col:
+        # only clear if the stored email equals this landlord (protects against accidental clearing)
+        where += f" AND ({match_col} IS NULL OR {match_col} = ?)"
+        params.append(landlord_email)
+
+    sql = f"UPDATE tenant_profiles SET {', '.join(set_bits)} WHERE {where}"
+    conn.execute(sql, tuple(params))
+    conn.commit()
+
+
 def ensure_tenant_profile_row(tenant_id: int):
     """Make sure tenant_profiles has a row for this tenant."""
     cur = conn.cursor()
@@ -913,64 +961,6 @@ def load_open_to_rent_prefs(tenant_id: int) -> dict:
     ]
     return dict(zip(keys, row)) if row else {}
 
-
-# def load_open_to_rent_prefs(tenant_id: int) -> dict:
-#     ensure_tenant_profile_row(tenant_id)
-#     cur = conn.cursor()
-#     row = cur.execute(
-#         """
-#         SELECT open_to_rent, search_city, search_district,
-#                size_min, size_max, rooms_min, rooms_max,
-#                floor_min, floor_max, price_min, price_max, updated_at
-#         FROM tenant_profiles WHERE tenant_id=?
-#         """,
-#         (tenant_id,),
-#     ).fetchone()
-#     keys = ["open_to_rent","search_city","search_district",
-#             "size_min","size_max","rooms_min","rooms_max",
-#             "floor_min","floor_max","price_min","price_max","updated_at"]
-#     return dict(zip(keys, row)) if row else {}
-
-# def save_open_to_rent_prefs(
-#     tenant_id: int,
-#     open_to_rent: bool,
-#     city: str | None,
-#     district: str | None,
-#     size_min: int | None, size_max: int | None,
-#     rooms_min: int | None, rooms_max: int | None,
-#     floor_min: int | None, floor_max: int | None,
-#     price_min: int | None, price_max: int | None,
-#     city_osm_id: int | None = None,
-#     district_osm_id: int | None = None,
-# ):
-#     ensure_tenant_profile_row(tenant_id)
-#     now = datetime.utcnow().isoformat()
-#     cur = conn.cursor()
-#     cur.execute(
-#         """
-#         UPDATE tenant_profiles
-#            SET open_to_rent=?,
-#                search_city=?, search_city_osm_id=?,
-#                search_district=?, search_district_osm_id=?,
-#                size_min=?, size_max=?,
-#                rooms_min=?, rooms_max=?,
-#                floor_min=?, floor_max=?,
-#                price_min=?, price_max=?,
-#                updated_at=?
-#          WHERE tenant_id=?
-#         """,
-#         (
-#             1 if open_to_rent else 0,
-#             (city or "").strip() or None, city_osm_id,
-#             (district or "").strip() or None, district_osm_id,
-#             size_min, size_max,
-#             rooms_min, rooms_max,
-#             floor_min, floor_max,
-#             price_min, price_max,
-#             now, tenant_id
-#         ),
-#     )
-#     conn.commit()
 def save_open_to_rent_prefs(
     tenant_id: int,
     open_to_rent: bool,
@@ -1015,46 +1005,6 @@ def save_open_to_rent_prefs(
     )
     conn.commit()
 
-
-
-# def save_open_to_rent_prefs(
-#     tenant_id: int,
-#     open_to_rent: bool,
-#     city: str | None,
-#     district: str | None,
-#     size_min: int | None, size_max: int | None,
-#     rooms_min: int | None, rooms_max: int | None,
-#     floor_min: int | None, floor_max: int | None,
-#     price_min: int | None, price_max: int | None,
-# ):
-#     ensure_tenant_profile_row(tenant_id)
-#     now = datetime.utcnow().isoformat()
-#     cur = conn.cursor()
-#     cur.execute(
-#         """
-#         UPDATE tenant_profiles
-#            SET open_to_rent=?,
-#                search_city=?,
-#                search_district=?,
-#                size_min=?, size_max=?,
-#                rooms_min=?, rooms_max=?,
-#                floor_min=?, floor_max=?,
-#                price_min=?, price_max=?,
-#                updated_at=?
-#          WHERE tenant_id=?
-#         """,
-#         (
-#             1 if open_to_rent else 0,
-#             (city or "").strip() or None,
-#             (district or "").strip() or None,
-#             size_min, size_max,
-#             rooms_min, rooms_max,
-#             floor_min, floor_max,
-#             price_min, price_max,
-#             now, tenant_id
-#         ),
-#     )
-#     conn.commit()
 
 def tenant_open_to_rent_section():
     st.subheader(tr("Open to Rent"))
@@ -2584,43 +2534,6 @@ def tenant_dashboard():
                                 st.session_state[del_confirm_key] = True
                                 st.rerun()
 
-                    # 👉 Always render history in the no-active path
-                    # if reqs:
-                    #     st.markdown("---")
-                    #     for (tok_i, status_i, created_at_i, score_i) in reqs:
-                    #         final_i = effective_reference_status(status_i, tok_i)
-                    #         contract_i = get_contract_by_token(tok_i)
-                    #         final_i_lower = str(final_i).lower()
-
-                    #         if final_i_lower in ("completed", "cancelled"):
-                    #             if final_i_lower == "completed":
-                    #                 if score_i is not None:
-                    #                     st.write(f"{tr('Score')}: **{score_i}**/10")
-                    #                 if contract_i:
-                    #                     st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract_i['status'])}")
-                    #                     try:
-                    #                         data_plain_i = load_contract_plaintext(tok_i)
-                    #                         if data_plain_i is None:
-                    #                             st.warning(tr('Contract is locked awaiting landlord consent'))
-                    #                         else:
-                    #                             st.download_button(
-                    #                                 tr('Download Contract'),
-                    #                                 data=data_plain_i,
-                    #                                 file_name=contract_i['filename'],
-                    #                                 mime=contract_i.get('content_type') or contract_i.get('mime_type'),
-                    #                                 key=f"dl_hist_{tok_i}",
-                    #                             )
-                    #                     except Exception as e:
-                    #                         st.warning(f"{tr('Unable to read the saved file')}: {e}")
-                    #             else:
-                    #                 details_i = get_reference_request_by_token(tok_i)
-                    #                 # Optionally show cancelled timestamp:
-                    #                 # st.caption(f"Cancelled at: {details_i.get('filled_at') or '—'}")
-                    #         else:
-                    #             if contract_i:
-                    #                 st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract_i['status'])}")
-
-                    # Done with the "no active" branch
                     continue
 
                 # Now we have an active request token we can use for uploads
@@ -2857,15 +2770,19 @@ def landlord_dashboard():
     # === Prospective tenants who listed this landlord ===
     st.subheader(tr('Prospective Tenants (Listed You as Future Landlord)'))
 
-    landlord_id = st.session_state.user["id"]
+    landlord_id = st.session_state.user["id"]   # make sure this is defined in this scope
     prospects = list_prospective_tenants(landlord_email)
 
     if not prospects:
         st.info(tr('No tenants have listed you as a future landlord yet.'))
     else:
         for (tid, tname, temail, updated_at) in prospects:
+            # ➕ NEW — hide already decided invites (connected OR rejected)
+            status = flc_get_status(landlord_id, tid)
+            if status in ("connected", "rejected"):
+                continue
+
             with st.container(border=True):
-                # Header (name + email)
                 st.markdown(f"**{tname}** · {temail}")
 
                 # Connection status for this landlord ↔ tenant
@@ -2882,13 +2799,16 @@ def landlord_dashboard():
                         st.rerun()
                     if c2.button(tr("Reject"), key=f"flc_rej_{tid}"):
                         flc_reject(landlord_id, tid)
+                        clear_tenant_future_landlord(tid, landlord_email)  # << add this line
                         st.info(tr("Rejected."))
                         st.rerun()
+
                 elif status == "connected":
                     c1.success(tr("Connected"))
                     # Allow disconnect here too (in addition to the Future Tenants section)
-                    if c2.button(tr("Disconnect"), key=f"flc_disc_{tid}"):
-                        flc_disconnect(landlord_id, tid)
+                    if c2.button(tr("Disconnect"), key=f"flc_disc_{tenant_id}"):
+                        flc_disconnect(landlord_id, tenant_id)
+                        clear_tenant_future_landlord(tenant_id, landlord_email)  # << add this line
                         st.warning(tr("Disconnected."))
                         st.rerun()
                 else:  # 'rejected'
@@ -2942,63 +2862,7 @@ def landlord_dashboard():
                 else:
                     st.caption(tr("No previous landlords added yet."))
 
-    # # === Prospective tenants who listed this landlord ===
-    # st.subheader(tr('Prospective Tenants (Listed You as Future Landlord)'))
-    # prospects = list_prospective_tenants(landlord_email)
-    # if not prospects:
-    #     st.info(tr('No tenants have listed you as a future landlord yet.'))
-    # else:
-    #     for (tid, tname, temail, updated_at) in prospects:
-    #         with st.container(border=True):
-    #             st.markdown(f"**{tname}** · {temail}")
-                
-    #             # Average score across COMPLETED references (latest per previous landlord)
-    #             refs = list_latest_references_for_tenant(tid) or []
-    #             scores = []
-    #             for r in refs:
-    #                 status = r[6]  # 'status' from list_latest_references_for_tenant
-    #                 score  = r[7]  # 'score'
-    #                 if status == "completed" and score is not None:
-    #                     scores.append(score)
-    #             if len(scores) == 1:
-    #                 st.metric("Score", f"{scores[0]:.1f}/10")
-    #             elif len(scores) >= 2:
-    #                 avg = sum(scores) / len(scores)
-    #                 st.metric("Average score", f"{avg:.1f}/10")
-    #                 st.caption(f"Based on {len(scores)} completed references.")
 
-    #             # Show latest reference status per previous landlord for this tenant
-    #             # --- Show latest reference status per previous landlord for this tenant ---
-    #             refs = list_latest_references_for_tenant_dict(tid) or []
-    #             refs = [r for r in refs if (r.get("status") is None) or (str(r.get("status")).lower() != "cancelled")]
-
-    #             if refs:
-    #                 for r in refs:
-    #                     prev_name  = r.get("prev_name")  or "—"
-    #                     prev_email = r.get("prev_email") or "—"
-    #                     prev_afm   = r.get("prev_afm")   or "—"
-    #                     prev_addr  = r.get("prev_addr")  or "—"
-    #                     status     = r.get("status")
-    #                     score      = r.get("score")
-    #                     paid_on    = r.get("paid_on_time")
-    #                     util_unp   = r.get("utilities_unpaid")
-    #                     good_cond  = r.get("good_condition")
-    #                     comments   = r.get("comments")
-
-    #                     with st.expander(f"{tr('Reference from')} ({prev_email}) — {md_label('Status:')} {display_status_label(status)}"):
-                            
-    #                         if (status or "").lower() == "completed":
-    #                             st.markdown(f"{md_label('Score:')} {score}/10")
-    #                             st.markdown(f"{md_label('Paid on time:')} {tr('Yes') if paid_on else tr('No')}")
-    #                             st.markdown(f"{md_label('Utilities unpaid:')} {tr('Yes') if util_unp else tr('No')}")
-    #                             st.markdown(f"{md_label('Apartment in good condition:')} {tr('Yes') if good_cond else tr('No')}")
-    #                             if comments:
-    #                                 st.markdown(md_label('Comments:'))
-    #                                 st.write(comments)
-    #             else:
-    #                 st.caption(tr("No previous landlords added yet."))
-
-    # === Future Tenants (connected) ===
     # === Future Tenants (connected) ===
     st.subheader(tr("Future Tenants"))
 
