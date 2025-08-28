@@ -1163,12 +1163,12 @@ def tenant_open_to_rent_section():
     state_label = tr("Active") if open_flag else tr("Inactive")
     if loc_txt and details_txt:
         st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {loc_txt} · {details_txt}")
-    elif loc_txt:
-        st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {loc_txt}")
-    elif details_txt:
-        st.caption(f"{tr('Status:')} {state_label} · {details_txt}")
-    else:
-        st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {tr('Anywhere')}")
+    # elif loc_txt:
+    #     st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {loc_txt}")
+    # elif details_txt:
+    #     st.caption(f"{tr('Status:')} {state_label} · {details_txt}")
+    # else:
+    #     st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {tr('Anywhere')}")
 
 
 
