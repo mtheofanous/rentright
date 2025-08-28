@@ -2924,7 +2924,7 @@ def tenant_dashboard():
 
 def landlord_dashboard():
     col_h1, col_h2, col_h3 = st.columns([4,1,2])
-    with col_h1: st.header(tr('Tenant Dashboard'))
+    with col_h1: st.header(tr('Landord Dashboard'))
     with col_h2:
         if st.button("🔄", key="landlord_refresh"):
             st.rerun()
