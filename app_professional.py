@@ -1084,6 +1084,7 @@ def tenant_open_to_rent_section():
                 st.success(tr("Preferences saved!"))
 
     # --- Compact summary (clean formatting) ---
+    # --- Compact summary (clean formatting) ---
     def _fmt_range(lo, hi, suffix=""):
         has_lo = lo not in (None, 0, "0", "")
         has_hi = hi not in (None, 0, "0", "")
@@ -1093,16 +1094,10 @@ def tenant_open_to_rent_section():
         hi_txt = f"{int(hi):,}" if has_hi else "—"
         return f"{lo_txt}–{hi_txt}{suffix}"
 
-    # Use the most recent UI entries if present; fall back to prefs
-    # (These locals exist because we set them above; add guards for first render)
-    try:
-        latest_region = region
-        latest_district = district
-        latest_city = city
-    except Exception:
-        latest_region = ""
-        latest_district = saved_dist
-        latest_city = saved_city
+    # Use the most recent UI entries if present; fall back to saved prefs
+    latest_region = region if "region" in locals() else ""
+    latest_district = district if "district" in locals() else saved_dist
+    latest_city = city if "city" in locals() else saved_city
 
     summary_bits = []
     loc_bits = []
@@ -1127,6 +1122,50 @@ def tenant_open_to_rent_section():
     state_label = tr("Active") if open_flag else tr("Inactive")
     looking = " — ".join(summary_bits) if summary_bits else tr("Anywhere")
     st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {looking}")
+
+    # def _fmt_range(lo, hi, suffix=""):
+    #     has_lo = lo not in (None, 0, "0", "")
+    #     has_hi = hi not in (None, 0, "0", "")
+    #     if not has_lo and not has_hi:
+    #         return None
+    #     lo_txt = f"{int(lo):,}" if has_lo else "—"
+    #     hi_txt = f"{int(hi):,}" if has_hi else "—"
+    #     return f"{lo_txt}–{hi_txt}{suffix}"
+
+    # # Use the most recent UI entries if present; fall back to prefs
+    # # (These locals exist because we set them above; add guards for first render)
+    # try:
+    #     latest_region = region
+    #     latest_district = district
+    #     latest_city = city
+    # except Exception:
+    #     latest_region = ""
+    #     latest_district = saved_dist
+    #     latest_city = saved_city
+
+    # summary_bits = []
+    # loc_bits = []
+    # if latest_region: loc_bits.append(str(latest_region).strip())
+    # if latest_district: loc_bits.append(str(latest_district).strip())
+    # if latest_city: loc_bits.append(str(latest_city).strip())
+    # if loc_bits:
+    #     summary_bits.append(" — ".join(loc_bits))
+
+    # size_txt = _fmt_range((prefs.get("size_min") or size_min), (prefs.get("size_max") or size_max), " m²")
+    # if size_txt: summary_bits.append(size_txt)
+
+    # rooms_txt = _fmt_range((prefs.get("rooms_min") or rooms_min), (prefs.get("rooms_max") or rooms_max), f" {tr('rooms')}")
+    # if rooms_txt: summary_bits.append(rooms_txt)
+
+    # floor_txt = _fmt_range((prefs.get("floor_min") or floor_min), (prefs.get("floor_max") or floor_max))
+    # if floor_txt: summary_bits.append(tr("Floor") + " " + floor_txt)
+
+    # price_txt = _fmt_range((prefs.get("price_min") or price_min), (prefs.get("price_max") or price_max))
+    # if price_txt: summary_bits.append("€" + price_txt.replace("–", "–€"))
+
+    # state_label = tr("Active") if open_flag else tr("Inactive")
+    # looking = " — ".join(summary_bits) if summary_bits else tr("Anywhere")
+    # st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {looking}")
 
 
     # -------- Compact summary --------
