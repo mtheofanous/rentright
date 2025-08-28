@@ -14,6 +14,9 @@ from zoneinfo import ZoneInfo
 from utils_vault import encrypt_bytes, decrypt_bytes, sha256_bytes
 import requests
 from functools import lru_cache
+import json
+from json import JSONDecodeError
+
 
 
 # ⚠️ set_page_config must be the first Streamlit command
@@ -482,66 +485,101 @@ def _rerun():
 def load_ellada_index(json_path: str | None = None):
     """
     Load Region -> Peripheral Unit -> Municipalities from ellada.json.
-    Looks in several common locations, and finally prompts for upload.
+    Tries common repo paths, handles BOM, validates structure,
+    and falls back to a file_uploader if not found / invalid.
     Returns: (data, regions, muni_to_loc)
-    - regions: sorted list of Περιφέρειες
-    - muni_to_loc: dict { Δήμος -> (Περιφέρεια, Περιφερειακή Ενότητα) }
     """
-    # 1) Candidates to search (order matters)
     here = Path(__file__).parent
     candidates: list[Path] = []
+
+    # 1) explicit arg (preferred)
     if json_path:
         candidates.append(Path(json_path))
-    # from secrets (optional)
+
+    # 2) optional path from secrets
     try:
         secret_path = st.secrets.get("ELLADA_JSON_PATH", "")
         if secret_path:
             candidates.append(Path(secret_path))
     except Exception:
         pass
-    # typical repo locations
+
+    # 3) typical repo locations
     candidates += [
-        here / "ellada.json",
         here / "data" / "ellada.json",
-        Path.cwd() / "ellada.json",
+        here / "ellada.json",
         Path.cwd() / "data" / "ellada.json",
-        Path("/mnt/data/ellada.json"),  # last resort if you’re running locally
+        Path.cwd() / "ellada.json",
+        Path("/mnt/data/ellada.json"),  # last resort cache
     ]
 
+    last_error = None
+    data = None
+
+    # Try each candidate; read with utf-8-sig to swallow BOM if present
     for p in candidates:
         if p.exists():
-            with open(p, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            break
-    else:
-        # Last-resort: let the user upload the JSON once
-        uploaded = st.file_uploader("Ανεβάστε το αρχείο ellada.json", type="json", key="ellada_upload")
-        if not uploaded:
-            st.error("Δεν βρέθηκε το αρχείο ellada.json. Προσθέστε το στο repo ή ανεβάστε το εδώ.")
-            st.stop()
-        data = json.load(uploaded)
-        # persist to /mnt/data so subsequent reruns can find it
-        try:
-            Path("/mnt/data").mkdir(parents=True, exist_ok=True)
-            with open("/mnt/data/ellada.json", "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False)
-        except Exception:
-            pass
+            try:
+                with open(p, "r", encoding="utf-8-sig") as f:
+                    data = json.load(f)
+                break
+            except JSONDecodeError as e:
+                last_error = f"JSON parse error in {p}: {e}"
+                continue
+            except Exception as e:
+                last_error = f"Error reading {p}: {e}"
+                continue
 
-    # Build regions list and municipality index
+    # Uploader fallback if not found / not parsed
+    if data is None:
+        uploaded = st.file_uploader("Ανεβάστε το ellada.json", type=["json"], key="ellada_upload")
+        if not uploaded:
+            msg = "Δεν βρέθηκε/διαβάστηκε το ellada.json."
+            if last_error:
+                msg += " " + last_error
+            st.error(msg)
+            st.stop()
+        try:
+            data = json.load(uploaded)
+            # persist a copy so next rerun finds it
+            try:
+                Path("/mnt/data").mkdir(parents=True, exist_ok=True)
+                with open("/mnt/data/ellada.json", "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False)
+            except Exception:
+                pass
+        except JSONDecodeError as e:
+            st.error(f"Το αρχείο που ανεβάσατε δεν είναι έγκυρο JSON: {e}")
+            st.stop()
+
+    # Validate structure
+    if not isinstance(data, dict) or "Περιφέρειες" not in data or not isinstance(data["Περιφέρειες"], list):
+        st.error("Το ellada.json δεν έχει την αναμενόμενη δομή (χρειάζεται κλειδί 'Περιφέρειες' ως λίστα).")
+        st.stop()
+
     regions = []
-    muni_to_loc = {}  # Δήμος -> (Περιφέρεια, Περιφερειακή Ενότητα)
+    muni_to_loc = {}  # Δήμος -> (Περιφέρεια, Π.Ε.)
     for reg in data.get("Περιφέρειες", []):
+        if not isinstance(reg, dict):
+            continue
         rname = reg.get("όνομα")
-        if not rname:
+        units = reg.get("Περιφερειακές Ενότητες") or {}
+        if not rname or not isinstance(units, dict):
             continue
         regions.append(rname)
-        units = reg.get("Περιφερειακές Ενότητες", {}) or {}
         for unit_name, municipalities in units.items():
-            for m in municipalities or []:
-                muni_to_loc[m] = (rname, unit_name)
+            if not isinstance(municipalities, list):
+                continue
+            for m in municipalities:
+                if isinstance(m, str):
+                    muni_to_loc[m] = (rname, unit_name)
 
     regions.sort(key=lambda s: s.casefold())
+
+    if not regions:
+        st.error("Το ellada.json φορτώθηκε, αλλά δεν βρέθηκαν Περιφέρειες με Δήμους.")
+        st.stop()
+
     return data, regions, muni_to_loc
 
 def list_units(data, region_name: str):
@@ -1034,7 +1072,8 @@ def tenant_open_to_rent_section():
         # ---- Load Region → P.E. → Municipality from ellada.json ----
         # If you committed the file to ./data/ellada.json, pass that path;
         # otherwise omit the argument to use the loader's search logic + uploader fallback.
-        data, regions, muni_idx = load_ellada_index()  # or load_ellada_index("data/ellada.json")
+        data, regions, muni_idx = load_ellada_index("ellada.json")
+          # or load_ellada_index("data/ellada.json")
 
         # Infer preselected Region/P.E. from saved values
         pre_region, pre_unit = (None, None)
