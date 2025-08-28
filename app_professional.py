@@ -2942,99 +2942,205 @@ def landlord_dashboard():
     st.caption(f"Logged in as {landlord_email}")
 
     # === Prospective tenants who listed this landlord ===
+    # === Prospective Tenants (Listed You as Future Landlord) ===
     st.subheader(tr('Prospective Tenants (Listed You as Future Landlord)'))
 
-    landlord_id = st.session_state.user["id"]   # make sure this is defined in this scope
+    landlord_id = st.session_state.user["id"]
     prospects = list_prospective_tenants(landlord_email)
 
     if not prospects:
         st.info(tr('No tenants have listed you as a future landlord yet.'))
     else:
         for (tid, tname, temail, updated_at) in prospects:
-            # ➕ NEW — hide already decided invites (connected OR rejected)
-            status = flc_get_status(landlord_id, tid)
-            if status in ("connected", "rejected"):
+            status = flc_get_status(landlord_id, tid)  # None | 'connected' | 'rejected'
+
+            # Hide fully rejected
+            if status == "rejected":
                 continue
 
             with st.container(border=True):
-                st.markdown(f"**{tname}** · {temail}")
+                # Header
+                h1, h2, h3 = st.columns([4, 2, 4])
+                h1.markdown(f"**{tname}** · {temail}")
 
-                # Connection status for this landlord ↔ tenant
-                status = flc_get_status(landlord_id, tid)  # None | 'connected' | 'rejected'
-
-                # Actions
-                c1, c2, c3 = st.columns([2, 2, 6])
-
-                if status is None:
-                    # Pending invite → show Connect / Reject
+                # Status & actions
+                if status == "connected":
+                    h2.success(tr("Connected"))
+                    if h3.button(tr("Disconnect"), key=f"flc_disc_{tid}"):
+                        flc_disconnect(landlord_id, tid)
+                        clear_tenant_future_landlord(tid, landlord_email)  # keep tenant-side clean
+                        try:
+                            st.cache_data.clear()
+                        except Exception:
+                            pass
+                        st.warning(tr("Disconnected."))
+                        st.rerun()
+                else:  # Pending
+                    h2.info(tr("Pending"))
+                    c1, c2 = h3.columns(2)
                     if c1.button(tr("Connect"), key=f"flc_conn_{tid}"):
                         flc_connect(landlord_id, tid)
+                        try:
+                            st.cache_data.clear()
+                        except Exception:
+                            pass
                         st.success(tr("Connected."))
                         st.rerun()
                     if c2.button(tr("Reject"), key=f"flc_rej_{tid}"):
                         flc_reject(landlord_id, tid)
-                        clear_tenant_future_landlord(tid, landlord_email)  # << add this line
+                        clear_tenant_future_landlord(tid, landlord_email)
+                        try:
+                            st.cache_data.clear()
+                        except Exception:
+                            pass
                         st.info(tr("Rejected."))
                         st.rerun()
 
-                elif status == "connected":
-                    c1.success(tr("Connected"))
-                    # Allow disconnect here too (in addition to the Future Tenants section)
-                    if c2.button(tr("Disconnect"), key=f"flc_disc_{tenant_id}"):
-                        flc_disconnect(landlord_id, tenant_id)
-                        clear_tenant_future_landlord(tenant_id, landlord_email)  # << add this line
-                        st.warning(tr("Disconnected."))
-                        st.rerun()
-                else:  # 'rejected'
-                    c1.caption(tr("Invite rejected"))
+                # --- References summary (always visible) ---
+                refs_latest = list_latest_references_for_tenant(tid) or []
+                # Count completed & average score (completed only)
+                completed_scores = []
+                for r in refs_latest:
+                    stt = r[6]   # 'status'
+                    sc  = r[7]   # 'score'
+                    if stt == "completed" and sc is not None:
+                        completed_scores.append(sc)
 
-                # --- Average score across COMPLETED references (latest per previous landlord)
-                refs = list_latest_references_for_tenant(tid) or []
-                scores = []
-                for r in refs:
-                    status_r = r[6]  # 'status' from list_latest_references_for_tenant
-                    score_r  = r[7]  # 'score'
-                    if status_r == "completed" and score_r is not None:
-                        scores.append(score_r)
-
-                if len(scores) == 1:
-                    st.metric("Score", f"{scores[0]:.1f}/10")
-                elif len(scores) >= 2:
-                    avg = sum(scores) / len(scores)
-                    st.metric("Average score", f"{avg:.1f}/10")
-                    st.caption(f"Based on {len(scores)} completed references.")
-
-                # --- Show latest reference status per previous landlord for this tenant ---
-                refs = list_latest_references_for_tenant_dict(tid) or []
-                refs = [
-                    r for r in refs
-                    if (r.get("status") is None) or (str(r.get("status")).lower() != "cancelled")
-                ]
-
-                if refs:
-                    for r in refs:
-                        prev_name  = r.get("prev_name")  or "—"
-                        prev_email = r.get("prev_email") or "—"
-                        prev_afm   = r.get("prev_afm")   or "—"
-                        prev_addr  = r.get("prev_addr")  or "—"
-                        status_lr  = r.get("status")
-                        score_lr   = r.get("score")
-                        paid_on    = r.get("paid_on_time")
-                        util_unp   = r.get("utilities_unpaid")
-                        good_cond  = r.get("good_condition")
-                        comments   = r.get("comments")
-
-                        with st.expander(f"{tr('Reference from')} ({prev_email}) — {md_label('Status:')} {display_status_label(status_lr)}"):
-                            if (status_lr or "").lower() == "completed":
-                                st.markdown(f"{md_label('Score:')} {score_lr}/10")
-                                st.markdown(f"{md_label('Paid on time:')} {tr('Yes') if paid_on else tr('No')}")
-                                st.markdown(f"{md_label('Utilities unpaid:')} {tr('Yes') if util_unp else tr('No')}")
-                                st.markdown(f"{md_label('Apartment in good condition:')} {tr('Yes') if good_cond else tr('No')}")
-                                if comments:
-                                    st.markdown(md_label('Comments:'))
-                                    st.write(comments)
+                total_refs = len(refs_latest)
+                completed_count = len(completed_scores)
+                if total_refs == 0:
+                    st.caption(tr("No references on file yet."))
                 else:
-                    st.caption(tr("No previous landlords added yet."))
+                    # small summary line
+                    if completed_count > 0:
+                        avg_score = sum(completed_scores) / completed_count
+                        st.caption(f"{tr('References on file')}: {total_refs} · {tr('Completed')}: {completed_count} · {tr('Average score')}: {avg_score:.1f}/10")
+                    else:
+                        st.caption(f"{tr('References on file')}: {total_refs} · {tr('Completed')}: 0")
+
+                # --- Reference DETAILS (visible only when connected) ---
+                if status == "connected":
+                    refs = list_latest_references_for_tenant_dict(tid) or []
+                    refs = [r for r in refs if (r.get("status") is None) or (str(r.get("status")).lower() != "cancelled")]
+
+                    if refs:
+                        for r in refs:
+                            prev_email = r.get("prev_email") or "—"
+                            status_lr  = r.get("status")
+                            score_lr   = r.get("score")
+                            paid_on    = r.get("paid_on_time")
+                            util_unp   = r.get("utilities_unpaid")
+                            good_cond  = r.get("good_condition")
+                            comments   = r.get("comments")
+
+                            with st.expander(f"{tr('Reference from')} ({prev_email}) — {md_label('Status:')} {display_status_label(status_lr)}"):
+                                if (status_lr or "").lower() == "completed":
+                                    st.markdown(f"{md_label('Score:')} {score_lr}/10")
+                                    st.markdown(f"{md_label('Paid on time:')} {tr('Yes') if paid_on else tr('No')}")
+                                    st.markdown(f"{md_label('Utilities unpaid:')} {tr('Yes') if util_unp else tr('No')}")
+                                    st.markdown(f"{md_label('Apartment in good condition:')} {tr('Yes') if good_cond else tr('No')}")
+                                    if comments:
+                                        st.markdown(md_label('Comments:'))
+                                        st.write(comments)
+                    else:
+                        st.caption(tr("No previous landlords added yet."))
+                else:
+                    # Not connected: don’t show details
+                    st.caption(tr("Reference details are visible after you connect."))
+
+    # st.subheader(tr('Prospective Tenants (Listed You as Future Landlord)'))
+
+    # landlord_id = st.session_state.user["id"]   # make sure this is defined in this scope
+    # prospects = list_prospective_tenants(landlord_email)
+
+    # if not prospects:
+    #     st.info(tr('No tenants have listed you as a future landlord yet.'))
+    # else:
+    #     for (tid, tname, temail, updated_at) in prospects:
+    #         # ➕ NEW — hide already decided invites (connected OR rejected)
+    #         status = flc_get_status(landlord_id, tid)
+    #         if status in ("connected", "rejected"):
+    #             continue
+
+    #         with st.container(border=True):
+    #             st.markdown(f"**{tname}** · {temail}")
+
+    #             # Connection status for this landlord ↔ tenant
+    #             status = flc_get_status(landlord_id, tid)  # None | 'connected' | 'rejected'
+
+    #             # Actions
+    #             c1, c2, c3 = st.columns([2, 2, 6])
+
+    #             if status is None:
+    #                 # Pending invite → show Connect / Reject
+    #                 if c1.button(tr("Connect"), key=f"flc_conn_{tid}"):
+    #                     flc_connect(landlord_id, tid)
+    #                     st.success(tr("Connected."))
+    #                     st.rerun()
+    #                 if c2.button(tr("Reject"), key=f"flc_rej_{tid}"):
+    #                     flc_reject(landlord_id, tid)
+    #                     clear_tenant_future_landlord(tid, landlord_email)  # << add this line
+    #                     st.info(tr("Rejected."))
+    #                     st.rerun()
+
+    #             elif status == "connected":
+    #                 c1.success(tr("Connected"))
+    #                 # Allow disconnect here too (in addition to the Future Tenants section)
+    #                 if c2.button(tr("Disconnect"), key=f"flc_disc_{tenant_id}"):
+    #                     flc_disconnect(landlord_id, tenant_id)
+    #                     clear_tenant_future_landlord(tenant_id, landlord_email)  # << add this line
+    #                     st.warning(tr("Disconnected."))
+    #                     st.rerun()
+    #             else:  # 'rejected'
+    #                 c1.caption(tr("Invite rejected"))
+
+    #             # --- Average score across COMPLETED references (latest per previous landlord)
+    #             refs = list_latest_references_for_tenant(tid) or []
+    #             scores = []
+    #             for r in refs:
+    #                 status_r = r[6]  # 'status' from list_latest_references_for_tenant
+    #                 score_r  = r[7]  # 'score'
+    #                 if status_r == "completed" and score_r is not None:
+    #                     scores.append(score_r)
+
+    #             if len(scores) == 1:
+    #                 st.metric("Score", f"{scores[0]:.1f}/10")
+    #             elif len(scores) >= 2:
+    #                 avg = sum(scores) / len(scores)
+    #                 st.metric("Average score", f"{avg:.1f}/10")
+    #                 st.caption(f"Based on {len(scores)} completed references.")
+
+    #             # --- Show latest reference status per previous landlord for this tenant ---
+    #             refs = list_latest_references_for_tenant_dict(tid) or []
+    #             refs = [
+    #                 r for r in refs
+    #                 if (r.get("status") is None) or (str(r.get("status")).lower() != "cancelled")
+    #             ]
+
+    #             if refs:
+    #                 for r in refs:
+    #                     prev_name  = r.get("prev_name")  or "—"
+    #                     prev_email = r.get("prev_email") or "—"
+    #                     prev_afm   = r.get("prev_afm")   or "—"
+    #                     prev_addr  = r.get("prev_addr")  or "—"
+    #                     status_lr  = r.get("status")
+    #                     score_lr   = r.get("score")
+    #                     paid_on    = r.get("paid_on_time")
+    #                     util_unp   = r.get("utilities_unpaid")
+    #                     good_cond  = r.get("good_condition")
+    #                     comments   = r.get("comments")
+
+    #                     with st.expander(f"{tr('Reference from')} ({prev_email}) — {md_label('Status:')} {display_status_label(status_lr)}"):
+    #                         if (status_lr or "").lower() == "completed":
+    #                             st.markdown(f"{md_label('Score:')} {score_lr}/10")
+    #                             st.markdown(f"{md_label('Paid on time:')} {tr('Yes') if paid_on else tr('No')}")
+    #                             st.markdown(f"{md_label('Utilities unpaid:')} {tr('Yes') if util_unp else tr('No')}")
+    #                             st.markdown(f"{md_label('Apartment in good condition:')} {tr('Yes') if good_cond else tr('No')}")
+    #                             if comments:
+    #                                 st.markdown(md_label('Comments:'))
+    #                                 st.write(comments)
+    #             else:
+    #                 st.caption(tr("No previous landlords added yet."))
 
 
     landlord_id = st.session_state.user["id"]
