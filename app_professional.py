@@ -3037,9 +3037,6 @@ def landlord_dashboard():
                     st.caption(tr("No previous landlords added yet."))
 
 
-    # === Future Tenants (connected) ===
-    st.subheader(tr("Prospective Tenants (Listed You as Future Landlord)"))
-
     landlord_id = st.session_state.user["id"]
     rows = flc_list_connected(landlord_id)
 
