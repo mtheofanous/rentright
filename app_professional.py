@@ -405,8 +405,65 @@ def ensure_contracts_consent_column(conn):
         cur.execute("ALTER TABLE reference_contracts ADD COLUMN consent_status TEXT NOT NULL DEFAULT 'locked'")
         conn.commit()
         
-import json
-import os
+from datetime import datetime
+
+def _now_iso():
+    return datetime.utcnow().isoformat(timespec="seconds")
+
+def flc_get_status(landlord_id: int, tenant_id: int) -> str | None:
+    row = conn.execute(
+        "SELECT status FROM future_landlord_connections WHERE landlord_id=? AND tenant_id=?",
+        (landlord_id, tenant_id)
+    ).fetchone()
+    return row[0] if row else None
+
+def flc_connect(landlord_id: int, tenant_id: int) -> None:
+    now = _now_iso()
+    conn.execute("""
+        INSERT INTO future_landlord_connections (landlord_id, tenant_id, status, created_at, updated_at)
+        VALUES (?, ?, 'connected', ?, ?)
+        ON CONFLICT(landlord_id, tenant_id)
+        DO UPDATE SET status='connected', updated_at=excluded.updated_at
+    """, (landlord_id, tenant_id, now, now))
+    conn.commit()
+
+def flc_reject(landlord_id: int, tenant_id: int) -> None:
+    now = _now_iso()
+    conn.execute("""
+        INSERT INTO future_landlord_connections (landlord_id, tenant_id, status, created_at, updated_at)
+        VALUES (?, ?, 'rejected', ?, ?)
+        ON CONFLICT(landlord_id, tenant_id)
+        DO UPDATE SET status='rejected', updated_at=excluded.updated_at
+    """, (landlord_id, tenant_id, now, now))
+    conn.commit()
+
+def flc_disconnect(landlord_id: int, tenant_id: int) -> None:
+    # We mark as rejected so it no longer appears in “Future Tenants”
+    now = _now_iso()
+    conn.execute("""
+        INSERT INTO future_landlord_connections (landlord_id, tenant_id, status, created_at, updated_at)
+        VALUES (?, ?, 'rejected', ?, ?)
+        ON CONFLICT(landlord_id, tenant_id)
+        DO UPDATE SET status='rejected', updated_at=excluded.updated_at
+    """, (landlord_id, tenant_id, now, now))
+    conn.commit()
+
+def flc_list_connected(landlord_id: int):
+    # Adjust the users/tenants table & fields to your schema if different
+    return conn.execute("""
+        SELECT u.id, u.full_name, u.email
+        FROM future_landlord_connections c
+        JOIN users u ON u.id = c.tenant_id
+        WHERE c.landlord_id = ? AND c.status='connected'
+        ORDER BY u.full_name COLLATE NOCASE
+    """, (landlord_id,)).fetchall()
+
+def _rerun():
+    try:
+        st.rerun()
+    except Exception:
+        st.experimental_rerun()
+
 
 # ----- Φόρτωμα & ευρετήρια από ellada.json -----
 
@@ -563,6 +620,19 @@ def run_migrations(conn):
     add_column_if_missing(conn, "tenant_profiles", "search_district_osm_id INTEGER")
     add_column_if_missing(conn, "tenant_profiles", "search_city_osm_type TEXT")
     add_column_if_missing(conn, "tenant_profiles", "search_district_osm_type TEXT")
+    
+    # Landlord ↔ Tenant connections (for “future landlord” flow)
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS future_landlord_connections (
+    landlord_id INTEGER NOT NULL,
+    tenant_id   INTEGER NOT NULL,
+    status      TEXT NOT NULL CHECK (status IN ('connected','rejected')),
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL,
+    PRIMARY KEY (landlord_id, tenant_id)
+    )
+    """)
+    conn.commit()
 
 
 
@@ -1086,48 +1156,6 @@ def tenant_open_to_rent_section():
                     )
                 st.success(tr("Preferences saved!"))
 
-    # # ---- Compact summary (no undefined names) ----
-    # def _fmt_range(lo, hi, suffix=""):
-    #     has_lo = lo not in (None, 0, "0", "")
-    #     has_hi = hi not in (None, 0, "0", "")
-    #     if not has_lo and not has_hi:
-    #         return None
-    #     lo_txt = f"{int(lo):,}" if has_lo else "—"
-    #     hi_txt = f"{int(hi):,}" if has_hi else "—"
-    #     return f"{lo_txt}–{hi_txt}{suffix}"
-
-    # latest_region = region if region and region != "—" else ""
-    # latest_district = district if district and district != "—" else saved_dist
-    # latest_city = city if city and city != "—" else saved_city
-
-    # summary_bits = []
-    # loc_bits = []
-    # if latest_region: loc_bits.append(latest_region.strip())
-    # if latest_district: loc_bits.append(latest_district.strip())
-    # if latest_city: loc_bits.append(latest_city.strip())
-    # if loc_bits:
-    #     summary_bits.append(" — ".join(loc_bits))
-
-    # size_txt = _fmt_range((prefs.get("size_min") or size_min), (prefs.get("size_max") or size_max), " m²")
-    # if size_txt: summary_bits.append(size_txt)
-
-    # rooms_txt = _fmt_range((prefs.get("rooms_min") or rooms_min), (prefs.get("rooms_max") or rooms_max), f" {tr('rooms')}")
-    # if rooms_txt: summary_bits.append(rooms_txt)
-
-    # floor_txt = _fmt_range((prefs.get("floor_min") or floor_min), (prefs.get("floor_max") or floor_max))
-    # if floor_txt: summary_bits.append(tr("Floor") + " " + floor_txt)
-
-    # price_txt = _fmt_range((prefs.get("price_min") or price_min), (prefs.get("price_max") or price_max))
-    # if price_txt: summary_bits.append("€" + price_txt.replace("–", "–€"))
-
-    # state_label = tr("Active") if open_flag else tr("Inactive")
-    # looking = " — ".join(summary_bits) if summary_bits else tr("Anywhere")
-    # st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {looking}")
-
-
-    # --- Compact summary (clean formatting) ---
-
-    # --- Compact summary (clean & safe) ---
     # --- Compact summary (adds size, rooms, floor) ---
     def _fmt_range(lo, hi, suffix=""):
         has_lo = lo not in (None, 0, "0", "")
@@ -1169,55 +1197,6 @@ def tenant_open_to_rent_section():
         st.caption(f"{tr('Status:')} {state_label} · {details_txt}")
     else:
         st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {tr('Anywhere')}")
-
-
-
-
-    # # -------- Compact summary --------
-    # def _fmt_range(lo, hi, suffix=""):
-    #     has_lo = lo not in (None, 0, "0", "")
-    #     has_hi = hi not in (None, 0, "0", "")
-    #     if not has_lo and not has_hi:
-    #         return None
-    #     lo_txt = f"{int(lo):,}" if has_lo else "—"
-    #     hi_txt = f"{int(hi):,}" if has_hi else "—"
-    #     return f"{lo_txt}–{hi_txt}{suffix}"
-
-    # # Use most recent UI entries if present; fall back to prefs
-    # summary_bits = []
-    # loc_bits = []
-    # if saved_city or 'city_manual' in st.session_state or '__city_select__' in st.session_state:
-    #     # display the latest chosen/typed city
-    #     latest_city = st.session_state.get('city_manual') or city or saved_city
-    #     if latest_city: loc_bits.append(str(latest_city).strip())
-    # else:
-    #     if saved_city: loc_bits.append(saved_city)
-
-    # latest_dist = st.session_state.get('__district_select__') or district or saved_dist
-    # if isinstance(latest_dist, str):
-    #     # strip the "(place)" decoration if present
-    #     latest_dist = latest_dist.split(" (")[0]
-    # if latest_dist:
-    #     loc_bits.append(str(latest_dist).strip())
-
-    # if loc_bits:
-    #     summary_bits.append(" — ".join(loc_bits))
-
-    # size_txt = _fmt_range((prefs.get("size_min") or size_min), (prefs.get("size_max") or size_max), " m²")
-    # if size_txt: summary_bits.append(size_txt)
-
-    # rooms_txt = _fmt_range((prefs.get("rooms_min") or rooms_min), (prefs.get("rooms_max") or rooms_max), f" {tr('rooms')}")
-    # if rooms_txt: summary_bits.append(rooms_txt)
-
-    # floor_txt = _fmt_range((prefs.get("floor_min") or floor_min), (prefs.get("floor_max") or floor_max))
-    # if floor_txt: summary_bits.append(tr("Floor") + " " + floor_txt)
-
-    # price_txt = _fmt_range((prefs.get("price_min") or price_min), (prefs.get("price_max") or price_max))
-    # if price_txt: summary_bits.append("€" + price_txt.replace("–", "–€"))
-
-    # state_label = tr("Active") if open_flag else tr("Inactive")
-    # looking = " — ".join(summary_bits) if summary_bits else tr("Anywhere")
-    # st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {looking}")
  
 
 def storage_delete(storage_key: str):
@@ -2870,22 +2849,53 @@ def landlord_dashboard():
 
     # === Prospective tenants who listed this landlord ===
     st.subheader(tr('Prospective Tenants (Listed You as Future Landlord)'))
+
+    landlord_id = st.session_state.user["id"]
     prospects = list_prospective_tenants(landlord_email)
+
     if not prospects:
         st.info(tr('No tenants have listed you as a future landlord yet.'))
     else:
         for (tid, tname, temail, updated_at) in prospects:
             with st.container(border=True):
+                # Header (name + email)
                 st.markdown(f"**{tname}** · {temail}")
-                # st.caption(f"Profile last updated: {updated_at}")
-                # Average score across COMPLETED references (latest per previous landlord)
+
+                # Connection status for this landlord ↔ tenant
+                status = flc_get_status(landlord_id, tid)  # None | 'connected' | 'rejected'
+
+                # Actions
+                c1, c2, c3 = st.columns([2, 2, 6])
+
+                if status is None:
+                    # Pending invite → show Connect / Reject
+                    if c1.button(tr("Connect"), key=f"flc_conn_{tid}"):
+                        flc_connect(landlord_id, tid)
+                        st.success(tr("Connected."))
+                        st.rerun()
+                    if c2.button(tr("Reject"), key=f"flc_rej_{tid}"):
+                        flc_reject(landlord_id, tid)
+                        st.info(tr("Rejected."))
+                        st.rerun()
+                elif status == "connected":
+                    c1.success(tr("Connected"))
+                    # Allow disconnect here too (in addition to the Future Tenants section)
+                    if c2.button(tr("Disconnect"), key=f"flc_disc_{tid}"):
+                        flc_disconnect(landlord_id, tid)
+                        st.warning(tr("Disconnected."))
+                        st.rerun()
+                else:  # 'rejected'
+                    c1.caption(tr("Invite rejected"))
+
+                # --- Average score across COMPLETED references (latest per previous landlord)
                 refs = list_latest_references_for_tenant(tid) or []
                 scores = []
                 for r in refs:
-                    status = r[6]  # 'status' from list_latest_references_for_tenant
-                    score  = r[7]  # 'score'
-                    if status == "completed" and score is not None:
-                        scores.append(score)
+                    status_r = r[6]  # 'status' from list_latest_references_for_tenant
+                    score_r  = r[7]  # 'score'
+                    if status_r == "completed" and score_r is not None:
+                        scores.append(score_r)
+
                 if len(scores) == 1:
                     st.metric("Score", f"{scores[0]:.1f}/10")
                 elif len(scores) >= 2:
@@ -2893,10 +2903,12 @@ def landlord_dashboard():
                     st.metric("Average score", f"{avg:.1f}/10")
                     st.caption(f"Based on {len(scores)} completed references.")
 
-                # Show latest reference status per previous landlord for this tenant
                 # --- Show latest reference status per previous landlord for this tenant ---
                 refs = list_latest_references_for_tenant_dict(tid) or []
-                refs = [r for r in refs if (r.get("status") is None) or (str(r.get("status")).lower() != "cancelled")]
+                refs = [
+                    r for r in refs
+                    if (r.get("status") is None) or (str(r.get("status")).lower() != "cancelled")
+                ]
 
                 if refs:
                     for r in refs:
@@ -2904,17 +2916,16 @@ def landlord_dashboard():
                         prev_email = r.get("prev_email") or "—"
                         prev_afm   = r.get("prev_afm")   or "—"
                         prev_addr  = r.get("prev_addr")  or "—"
-                        status     = r.get("status")
-                        score      = r.get("score")
+                        status_lr  = r.get("status")
+                        score_lr   = r.get("score")
                         paid_on    = r.get("paid_on_time")
                         util_unp   = r.get("utilities_unpaid")
                         good_cond  = r.get("good_condition")
                         comments   = r.get("comments")
 
-                        with st.expander(f"{tr('Reference from')} ({prev_email}) — {md_label('Status:')} {display_status_label(status)}"):
-                            
-                            if (status or "").lower() == "completed":
-                                st.markdown(f"{md_label('Score:')} {score}/10")
+                        with st.expander(f"{tr('Reference from')} ({prev_email}) — {md_label('Status:')} {display_status_label(status_lr)}"):
+                            if (status_lr or "").lower() == "completed":
+                                st.markdown(f"{md_label('Score:')} {score_lr}/10")
                                 st.markdown(f"{md_label('Paid on time:')} {tr('Yes') if paid_on else tr('No')}")
                                 st.markdown(f"{md_label('Utilities unpaid:')} {tr('Yes') if util_unp else tr('No')}")
                                 st.markdown(f"{md_label('Apartment in good condition:')} {tr('Yes') if good_cond else tr('No')}")
@@ -2924,9 +2935,83 @@ def landlord_dashboard():
                 else:
                     st.caption(tr("No previous landlords added yet."))
 
+    # # === Prospective tenants who listed this landlord ===
+    # st.subheader(tr('Prospective Tenants (Listed You as Future Landlord)'))
+    # prospects = list_prospective_tenants(landlord_email)
+    # if not prospects:
+    #     st.info(tr('No tenants have listed you as a future landlord yet.'))
+    # else:
+    #     for (tid, tname, temail, updated_at) in prospects:
+    #         with st.container(border=True):
+    #             st.markdown(f"**{tname}** · {temail}")
+                
+    #             # Average score across COMPLETED references (latest per previous landlord)
+    #             refs = list_latest_references_for_tenant(tid) or []
+    #             scores = []
+    #             for r in refs:
+    #                 status = r[6]  # 'status' from list_latest_references_for_tenant
+    #                 score  = r[7]  # 'score'
+    #                 if status == "completed" and score is not None:
+    #                     scores.append(score)
+    #             if len(scores) == 1:
+    #                 st.metric("Score", f"{scores[0]:.1f}/10")
+    #             elif len(scores) >= 2:
+    #                 avg = sum(scores) / len(scores)
+    #                 st.metric("Average score", f"{avg:.1f}/10")
+    #                 st.caption(f"Based on {len(scores)} completed references.")
 
+    #             # Show latest reference status per previous landlord for this tenant
+    #             # --- Show latest reference status per previous landlord for this tenant ---
+    #             refs = list_latest_references_for_tenant_dict(tid) or []
+    #             refs = [r for r in refs if (r.get("status") is None) or (str(r.get("status")).lower() != "cancelled")]
 
-    st.divider()
+    #             if refs:
+    #                 for r in refs:
+    #                     prev_name  = r.get("prev_name")  or "—"
+    #                     prev_email = r.get("prev_email") or "—"
+    #                     prev_afm   = r.get("prev_afm")   or "—"
+    #                     prev_addr  = r.get("prev_addr")  or "—"
+    #                     status     = r.get("status")
+    #                     score      = r.get("score")
+    #                     paid_on    = r.get("paid_on_time")
+    #                     util_unp   = r.get("utilities_unpaid")
+    #                     good_cond  = r.get("good_condition")
+    #                     comments   = r.get("comments")
+
+    #                     with st.expander(f"{tr('Reference from')} ({prev_email}) — {md_label('Status:')} {display_status_label(status)}"):
+                            
+    #                         if (status or "").lower() == "completed":
+    #                             st.markdown(f"{md_label('Score:')} {score}/10")
+    #                             st.markdown(f"{md_label('Paid on time:')} {tr('Yes') if paid_on else tr('No')}")
+    #                             st.markdown(f"{md_label('Utilities unpaid:')} {tr('Yes') if util_unp else tr('No')}")
+    #                             st.markdown(f"{md_label('Apartment in good condition:')} {tr('Yes') if good_cond else tr('No')}")
+    #                             if comments:
+    #                                 st.markdown(md_label('Comments:'))
+    #                                 st.write(comments)
+    #             else:
+    #                 st.caption(tr("No previous landlords added yet."))
+
+    # === Future Tenants (connected) ===
+    st.subheader(tr("Future Tenants"))
+
+    rows = flc_list_connected(landlord_id)
+
+    if not rows:
+        st.caption(tr("No connected future tenants yet."))
+    else:
+        for r in rows:
+            # r is (id, full_name, email) from the helper query
+            tenant_id, full_name, email = r[0], r[1], r[2]
+
+            with st.container(border=True):
+                c1, c2 = st.columns([4, 1])
+                c1.markdown(f"**{full_name}**  \n{email}")
+                if c2.button(tr("Disconnect"), key=f"flc_disc_{tenant_id}"):
+                    flc_disconnect(landlord_id, tenant_id)
+                    st.warning(tr("Disconnected."))
+                    st.rerun()
+
+        st.divider()
 
     # === Reference requests that were sent to this landlord ===
     st.subheader(tr('Reference Requests Sent To You'))
@@ -3011,17 +3096,6 @@ def landlord_dashboard():
                                     if st.session_state.get("privacy_url"):
                                         p += f" {tr('Privacy Notice')}: {st.session_state['privacy_url']}"
                                     st.write(p)
-                        # with st.expander(tr('Respond Now')):
-                        #     with st.form(f"{prefix}_landlord_response_{token}"):
-                        #         # ✅ GDPR-compliant consent text (translatable via tr)
-                        #         confirm = st.checkbox(
-                        #             tr(
-                        #                 "I declare I was the landlord for {tenant_name} at {address}. "
-                        #                 "I consent to RentRight using and disclosing my full name solely to verify this reference. "
-                        #                 "I understand my responses are processed on the basis of legitimate interests and that I may object as described in the Privacy Notice."
-                        #             ).format(tenant_name=tenant_name, address=address)
-                        #         )
-
 
                                 s = st.slider(
                                     tr('Overall tenant score'), 1, 10, 8,
@@ -3068,146 +3142,6 @@ def landlord_dashboard():
                                 cancel_reference_request(token)
                                 st.warning(tr('Request cancelled.'))
                                 st.rerun()
-
-
-    # def render_requests(reqs, prefix: str):
-    #     if not reqs:
-    #         st.info(tr('No requests found.'))
-    #         return
-
-    #     for (token, tenant_id, created_at, status, score) in reqs:
-    #         tenant = get_user_by_id(tenant_id)
-    #         with st.container(border=True):
-    #             cols = st.columns([3,2,3,2])
-    #             tenant_label = tenant["name"] if tenant else f"Tenant #{tenant_id}"
-    #             cols[0].markdown(f"**Tenant:** {tenant_label}")
-    #             cols[1].markdown(f"**Status:** {status}")
-    #             cols[2].markdown(f"**Created:** {created_at}")
-    #             cols[3].markdown(f"**Score:** {score if score is not None else '—'}")
-                
-    #             if status == "pending":
-    #                 details = get_reference_request_by_token(token)
-
-    #                 # If landlord already submitted, show a read-only summary instead of the form
-    #                 if details and details.get("confirm_landlord"):
-    #                     with st.expander(tr('Respond Now'), expanded=True):
-    #                         st.info(tr("Thanks — your response is saved. The request will complete once the tenant’s contract is verified by an admin."))
-    #                         st.write(f"**{tr('Overall tenant score')}:** {details.get('score')}/10")
-    #                         st.write(f"**{tr('Did the tenant pay on time?')}:** {'Yes' if details.get('paid_on_time') else 'No'}")
-    #                         st.write(f"**{tr('Did the tenant leave utilities unpaid?')}:** {'Yes' if details.get('utilities_unpaid') else 'No'}")
-    #                         st.write(f"**{tr('Did the tenant leave the apartment in good condition?')}:** {'Yes' if details.get('good_condition') else 'No'}")
-    #                         if details.get('comments'):
-    #                             st.write("**" + tr('Optional comments') + ":**")
-    #                             st.write(details['comments'])
-    #                 else:
-    #                     with st.expander(tr('Respond Now')):
-    #                         with st.form(f"{prefix}_landlord_response_{token}"):
-    #                             confirm = st.checkbox(
-    #                                 tr('I confirm I was the landlord for this tenant.'),
-    #                                 key=f"{prefix}_confirm_{token}"
-    #                             )
-    #                             s = st.slider(
-    #                                 tr('Overall tenant score'), 1, 10, 8,
-    #                                 key=f"{prefix}_score_{token}"
-    #                             )
-    #                             paid_on_time = st.radio(
-    #                                 tr('Did the tenant pay on time?'), ["Yes","No"],
-    #                                 horizontal=True, key=f"{prefix}_paid_{token}"
-    #                             )
-    #                             utilities_unpaid = st.radio(
-    #                                 tr('Did the tenant leave utilities unpaid?'), ["No","Yes"],
-    #                                 horizontal=True, key=f"{prefix}_utilities_{token}"
-    #                             )
-    #                             good_condition = st.radio(
-    #                                 tr('Did the tenant leave the apartment in good condition?'), ["Yes","No"],
-    #                                 horizontal=True, key=f"{prefix}_condition_{token}"
-    #                             )
-    #                             comments = st.text_area(
-    #                                 tr('Optional comments'),
-    #                                 key=f"{prefix}_comments_{token}"
-    #                             )
-
-    #                             col_a, col_b = st.columns([1,1])
-    #                             submit = col_a.form_submit_button(tr('Submit Reference'))
-    #                             cancel_btn = col_b.form_submit_button(tr('Not My Tenant / Cancel'))
-
-    #                         if submit:
-    #                             if not confirm:
-    #                                 st.error(tr('Please confirm you were the landlord.'))
-    #                             else:
-    #                                 mark_reference_completed(
-    #                                     token,
-    #                                     confirm_landlord=True,
-    #                                     score=int(s),
-    #                                     paid_on_time=(paid_on_time == "Yes"),
-    #                                     utilities_unpaid=(utilities_unpaid == "Yes"),
-    #                                     good_condition=(good_condition == "Yes"),
-    #                                     comments=comments,
-    #                                 )
-    #                                 st.success(tr('Reference submitted successfully.'))
-    #                                 st.rerun()
-
-    #                         if cancel_btn:
-    #                             cancel_reference_request(token)
-    #                             st.warning(tr('Request cancelled.'))
-    #                             st.rerun()
-
-
-                # if status == "pending":
-                #     # ❌ no key here
-                #     with st.expander(tr('Respond Now')):
-                #         # forms use a positional key/name, not key=...
-                #         with st.form(f"{prefix}_landlord_response_{token}"):
-                #             confirm = st.checkbox(
-                #                 tr('I confirm I was the landlord for this tenant.'),
-                #                 key=f"{prefix}_confirm_{token}"
-                #             )
-                #             s = st.slider(
-                #                 tr('Overall tenant score'), 1, 10, 8,
-                #                 key=f"{prefix}_score_{token}"
-                #             )
-                #             paid_on_time = st.radio(
-                #                 tr('Did the tenant pay on time?'), ["Yes","No"],
-                #                 horizontal=True, key=f"{prefix}_paid_{token}"
-                #             )
-                #             utilities_unpaid = st.radio(
-                #                 tr('Did the tenant leave utilities unpaid?'), ["No","Yes"],
-                #                 horizontal=True, key=f"{prefix}_utilities_{token}"
-                #             )
-                #             good_condition = st.radio(
-                #                 tr('Did the tenant leave the apartment in good condition?'), ["Yes","No"],
-                #                 horizontal=True, key=f"{prefix}_condition_{token}"
-                #             )
-                #             comments = st.text_area(
-                #                 tr('Optional comments'),
-                #                 key=f"{prefix}_comments_{token}"
-                #             )
-
-                #             col_a, col_b = st.columns([1,1])
-                #             # ❌ form_submit_button has no key=
-                #             submit = col_a.form_submit_button(tr('Submit Reference'))
-                #             cancel_btn = col_b.form_submit_button(tr('Not My Tenant / Cancel'))
-
-                #         if submit:
-                #             if not confirm:
-                #                 st.error(tr('Please confirm you were the landlord.'))
-                #             else:
-                #                 mark_reference_completed(
-                #                     token,
-                #                     confirm_landlord=True,
-                #                     score=int(s),
-                #                     paid_on_time=(paid_on_time == "Yes"),
-                #                     utilities_unpaid=(utilities_unpaid == "Yes"),
-                #                     good_condition=(good_condition == "Yes"),
-                #                     comments=comments,
-                #                 )
-                #                 st.success(tr('Reference submitted successfully.'))
-                #                 st.rerun()
-
-                #         if cancel_btn:
-                #             cancel_reference_request(token)
-                #             st.warning(tr('Request cancelled.'))
-                #             st.rerun()
 
                 elif status == "completed":
                     # ❌ no key here
