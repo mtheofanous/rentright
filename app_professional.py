@@ -3011,13 +3011,13 @@ def landlord_dashboard():
                 completed_count = len(completed_scores)
                 if total_refs == 0:
                     st.caption(tr("No references on file yet."))
-                else:
-                    # small summary line
-                    if completed_count > 0:
-                        avg_score = sum(completed_scores) / completed_count
-                        st.caption(f"{tr('References on file')}: {total_refs} · {tr('Completed')}: {completed_count} · {tr('Average score')}: {avg_score:.1f}/10")
-                    else:
-                        st.caption(f"{tr('References on file')}: {total_refs} · {tr('Completed')}: 0")
+                # else:
+                #     # small summary line
+                #     if completed_count > 0:
+                #         avg_score = sum(completed_scores) / completed_count
+                #         st.caption(f"{tr('References on file')}: {total_refs} · {tr('Completed')}: {completed_count} · {tr('Average score')}: {avg_score:.1f}/10")
+                #     else:
+                #         st.caption(f"{tr('References on file')}: {total_refs} · {tr('Completed')}: 0")
 
                 # --- Reference DETAILS (visible only when connected) ---
                 if status == "connected":
