@@ -2966,15 +2966,16 @@ def landlord_dashboard():
                 # Status & actions
                 if status == "connected":
                     h2.success(tr("Connected"))
-                    if h3.button(tr("Disconnect"), key=f"flc_disc_{tid}"):
+                    if h3.button(tr("Disconnect"), key=f"flc_disc_prospect_{tid}"):
                         flc_disconnect(landlord_id, tid)
-                        clear_tenant_future_landlord(tid, landlord_email)  # keep tenant-side clean
+                        clear_tenant_future_landlord(tid, landlord_email)
                         try:
                             st.cache_data.clear()
                         except Exception:
                             pass
                         st.warning(tr("Disconnected."))
                         st.rerun()
+
                 else:  # Pending
                     h2.info(tr("Pending"))
                     c1, c2 = h3.columns(2)
@@ -3154,8 +3155,13 @@ def landlord_dashboard():
             with st.container(border=True):
                 c1, c2 = st.columns([4, 1])
                 c1.markdown(f"**{full_name}**  \n{email}")
-                if c2.button(tr("Disconnect"), key=f"flc_disc_{tenant_id}"):
+                if c2.button(tr("Disconnect"), key=f"flc_disc_future_{tenant_id}"):
                     flc_disconnect(landlord_id, tenant_id)
+                    clear_tenant_future_landlord(tenant_id, landlord_email)
+                    try:
+                        st.cache_data.clear()
+                    except Exception:
+                        pass
                     st.warning(tr("Disconnected."))
                     st.rerun()
 
