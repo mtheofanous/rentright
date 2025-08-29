@@ -480,6 +480,100 @@ def _rerun():
 
 
 # ----- Φόρτωμα & ευρετήρια από ellada.json -----
+# --- Greece location pickers (Region → Regional Unit → Municipality) ---
+
+@st.cache_resource
+def load_ellada():
+    """
+    Return structure:
+    {
+      "Region Name": {
+          "Regional Unit Name": ["Municipality 1", "Municipality 2", ...],
+          ...
+      },
+      ...
+    }
+    """
+    import json, os
+    # Adjust this path if your file lives elsewhere
+    candidate_paths = [
+        "ellada.json",
+        "data/ellada.json",
+        "assets/ellada.json",
+        "static/ellada.json",
+        os.path.join(os.path.dirname(__file__), "ellada.json"),
+    ]
+    for p in candidate_paths:
+        if os.path.exists(p):
+            with open(p, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            break
+    else:
+        # Fallback: empty structure -> UI will gracefully degrade
+        raw = {}
+
+    # Normalize to Region -> Regional Unit -> [Municipalities]
+    # Accepts either already-nested format or flat records with keys:
+    #   region, regional_unit, municipality
+    if isinstance(raw, dict) and raw:
+        return raw
+
+    regions = {}
+    if isinstance(raw, list):
+        for row in raw:
+            reg = (row.get("region") or "").strip()
+            ru  = (row.get("regional_unit") or "").strip()
+            mun = (row.get("municipality") or "").strip()
+            if not reg or not ru or not mun:
+                continue
+            regions.setdefault(reg, {}).setdefault(ru, [])
+            if mun not in regions[reg][ru]:
+                regions[reg][ru].append(mun)
+    return regions
+
+
+def greece_location_pickers(prefix: str = "otr"):
+    """
+    Renders 3 linked selectboxes:
+      Region -> Regional Unit -> Municipality
+    Returns (region, regional_unit, municipality) where any can be None
+    """
+    data = load_ellada()
+    if not data:
+        # Graceful fallback – caller can show text inputs instead
+        return None, None, None
+
+    # Region
+    regions = sorted(list(data.keys()))
+    region = st.selectbox(
+        tr("Region"),
+        options=[tr("Any")] + regions,
+        index=0,
+        key=f"{prefix}_region",
+    )
+    region = None if region == tr("Any") else region
+
+    # Regional Unit (depends on Region)
+    rus = sorted(list(data.get(region, {}).keys())) if region else []
+    regional_unit = st.selectbox(
+        tr("Regional unit"),
+        options=[tr("Any")] + rus if rus else [tr("Any")],
+        index=0,
+        key=f"{prefix}_ru",
+    )
+    regional_unit = None if regional_unit == tr("Any") else regional_unit
+
+    # Municipality (depends on Regional Unit)
+    mun_list = sorted(data.get(region, {}).get(regional_unit, [])) if (region and regional_unit) else []
+    municipality = st.selectbox(
+        tr("Municipality"),
+        options=[tr("Any")] + mun_list if mun_list else [tr("Any")],
+        index=0,
+        key=f"{prefix}_mun",
+    )
+    municipality = None if municipality == tr("Any") else municipality
+
+    return region, regional_unit, municipality
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def load_ellada_index(json_path: str | None = None):
@@ -1263,32 +1357,6 @@ def delete_landlord_responses(token: str):
                     pass
     conn.commit()
 
-# def email_reference_cancellation_smtp(
-#     tenant_name: str,
-#     tenant_email: str,
-#     landlord_email: str,
-#     landlord_name: str | None,
-#     landlord_address: str | None,
-#     token: str,
-#     cancelled_at: str | None,
-# ):
-#     subject = "Reference request cancelled — data deleted"
-#     body = f"""Hello {landlord_name or 'there'},
-
-# The tenant {tenant_name} has cancelled their rental reference request.
-
-# What this means:
-# • The reference link for token {token} is now disabled.
-# • The uploaded contract file has been permanently deleted.
-# • Any responses you submitted in the reference form have been permanently deleted.
-
-# Address on file: {landlord_address or '—'}
-# Cancelled at: {cancelled_at or '—'}
-
-# If you have questions, you can reply to {tenant_email}.
-# """
-#     # Uses your existing SMTP helper
-#     return send_email_smtp(landlord_email, subject, body)
 
 def email_reference_cancellation_smtp(
     tenant_name: str,
@@ -1316,8 +1384,6 @@ def email_reference_cancellation_smtp(
 """
     # Χρήση του υπάρχοντος SMTP helper
     return send_email_smtp(landlord_email, subject, body)
-
-
 
 
 def get_user_by_id(uid: int):
@@ -1348,26 +1414,6 @@ def is_valid_afm(s: str) -> bool:
 
 # ---------- Auth UI ----------
 
-# def login_form():
-#     st.subheader(tr('Sign In'))
-#     with st.form("login_form"):
-#         email = st.text_input(tr('Email'))
-#         password = st.text_input(tr('Password'), type="password")
-#         submitted = st.form_submit_button(tr('Sign In'))
-
-#     if submitted:
-#         user = get_user_by_email(email)
-#         if not user or user["password_hash"] != hash_password(password):
-#             st.error(tr('Incorrect email or password. Please try again.'))
-#             st.rerun()
-
-#         # Save session and immediately rerun so main() routes to the dashboard
-#         st.session_state.user = {k: user[k] for k in ["id","email","name","role"]}
-#         # Optional: flash once after rerun (uncomment + handle in dashboard if you want)
-#         st.session_state["flash_welcome"] = f"{tr('Welcome, ')}{user['name']}!"
-#         time.sleep()
-#         st.rerun()
-
 def login_form():
     st.subheader(tr('Sign In'))
     with st.form("login_form", clear_on_submit=False):
@@ -1387,22 +1433,6 @@ def login_form():
     st.session_state.user = {k: user[k] for k in ["id","email","name","role"]}
     st.session_state["just_logged_in"] = True
     st.rerun()
-
-
-# def login_form():
-#     st.subheader(tr('Sign In'))
-#     with st.form("login_form"):
-#         email = st.text_input(tr('Email'))
-#         password = st.text_input(tr('Password'), type="password")
-#         submitted = st.form_submit_button(tr('Sign In'))
-        
-#     if submitted:
-#         user = get_user_by_email(email)
-#         if not user or user["password_hash"] != hash_password(password):
-#             st.error(tr('Incorrect email or password. Please try again.'))
-#             return
-#         st.session_state.user = {k: user[k] for k in ["id","email","name","role"]}
-#         st.success(f"Welcome, {user['name']}!")
 
 
 def signup_form():
@@ -1565,9 +1595,6 @@ def save_contract_upload(token: str, tenant_id: int, uploaded_file) -> tuple[boo
         )
     conn.commit()
     return True, "Uploaded."
-
-
-
 
 def set_contract_status(token: str, status: str, by_email: str) -> tuple[bool, str]:
     status = (status or "").lower().strip()
@@ -2116,6 +2143,86 @@ def cleanup_old_contracts(days_locked: int = 30, days_rejected: int = 30):
         cur.execute("UPDATE reference_contracts SET path='' WHERE token=?", (token,))
 
     conn.commit()
+    
+def search_open_to_rent_tenants(
+    q: str | None = None,
+    city: str | None = None,
+    district: str | None = None,
+    size_min: int | None = None, size_max: int | None = None,
+    rooms_min: int | None = None, rooms_max: int | None = None,
+    floor_min: int | None = None, floor_max: int | None = None,
+    price_min: int | None = None, price_max: int | None = None,
+    limit: int = 100
+):
+    """
+    Return tenants with open_to_rent=1 matching free-text (name/email)
+    and optional filters (city/district + range overlaps for size/rooms/floor/price).
+    """
+    cur = conn.cursor()
+
+    clauses = ["tp.open_to_rent = 1"]
+    params = {}
+
+    # Free-text on users.name / users.email
+    if q:
+        clauses.append("(LOWER(u.name) LIKE LOWER(:q) OR LOWER(u.email) LIKE LOWER(:q))")
+        params["q"] = f"%{q.strip()}%"
+
+    # Exact matches on location preferences (stored strings)
+    if city:
+        clauses.append("LOWER(tp.search_city) = LOWER(:city)")
+        params["city"] = city.strip()
+    if district:
+        clauses.append("LOWER(tp.search_district) = LOWER(:district)")
+        params["district"] = district.strip()
+
+    # Range-overlap logic:
+    # For each dimension, show a tenant if their preferred range overlaps the landlord's filter range.
+    def add_range_overlap(field_min: str, field_max: str, f_min_val, f_max_val):
+        # Only add a WHERE if at least one bound provided
+        if f_min_val is None and f_max_val is None:
+            return
+        # NULLs in tenant prefs mean "no bound" → use huge defaults via COALESCE
+        # Overlap condition: (tenant_max >= filter_min) AND (tenant_min <= filter_max)
+        cmin = f"COALESCE(tp.{field_min}, -9999999)"
+        cmax = f"COALESCE(tp.{field_max},  9999999)"
+
+        if f_min_val is not None:
+            clauses.append(f"{cmax} >= :{field_min}_needs_at_least")
+            params[f"{field_min}_needs_at_least"] = int(f_min_val)
+        if f_max_val is not None:
+            clauses.append(f"{cmin} <= :{field_max}_needs_at_most")
+            params[f"{field_max}_needs_at_most"] = int(f_max_val)
+
+    add_range_overlap("size_min",  "size_max",  size_min,  size_max)
+    add_range_overlap("rooms_min", "rooms_max", rooms_min, rooms_max)
+    add_range_overlap("floor_min", "floor_max", floor_min, floor_max)
+    add_range_overlap("price_min", "price_max", price_min, price_max)
+
+    where_sql = " AND ".join(clauses) if clauses else "1=1"
+
+    sql = f"""
+        SELECT
+            u.id            AS tenant_id,
+            u.name          AS tenant_name,
+            u.email         AS tenant_email,
+            tp.updated_at   AS prefs_updated_at,
+
+            tp.search_city, tp.search_district,
+            tp.size_min, tp.size_max,
+            tp.rooms_min, tp.rooms_max,
+            tp.floor_min, tp.floor_max,
+            tp.price_min, tp.price_max
+        FROM tenant_profiles tp
+        JOIN users u ON u.id = tp.tenant_id
+        WHERE {where_sql}
+        ORDER BY tp.updated_at DESC
+        LIMIT :limit
+    """
+    params["limit"] = int(limit)
+    cur.execute(sql, params)
+    return cur.fetchall()
+
 
 
 def admin_dashboard():
@@ -3023,26 +3130,137 @@ def landlord_dashboard():
                     # Not connected: don’t show details
                     st.caption(tr("Reference details are visible after you connect."))
 
-    # landlord_id = st.session_state.user["id"]
-    # rows = flc_list_connected(landlord_id)
+        # === Find Tenants (Open to Rent) ===
+    st.subheader(tr("Find Tenants (Open to Rent)"))
 
-    # if not rows:
-    #     st.caption(tr("No connected future tenants yet."))
-    # else:
-    #     for r in rows:
-    #         tenant_id, full_name, email = r  # display_name is in the 2nd position
-    #         with st.container(border=True):
-    #             c1, c2 = st.columns([4, 1])
-    #             c1.markdown(f"**{full_name}**  \n{email}")
-    #             if c2.button(tr("Disconnect"), key=f"flc_disc_future_{tenant_id}"):
-    #                 flc_disconnect(landlord_id, tenant_id)
-    #                 clear_tenant_future_landlord(tenant_id, landlord_email)
-    #                 try:
-    #                     st.cache_data.clear()
-    #                 except Exception:
-    #                     pass
-    #                 st.warning(tr("Disconnected."))
-    #                 st.rerun()
+    with st.container(border=True):
+        c1, c2 = st.columns([3, 1])
+        with c1:
+            q = st.text_input(
+                tr("Search by name or email"),
+                placeholder="e.g. Maria, nikos@example.com",
+                key="otr_q",
+            )
+        with c2:
+            limit = st.number_input("Max results", 1, 500, 100, key="otr_limit")
+            
+        with st.expander(tr("Filters (based on tenants' preferences)"), True):
+            # Location pickers (Region → Regional Unit → Municipality)
+            lc1, lc2, lc3 = st.columns(3)
+            with lc1:  # Region
+                region, regional_unit, municipality = greece_location_pickers(prefix="otr")
+
+            # Map to your search fields:
+            #   city     = Municipality (Dimos)
+            #   district = Regional Unit (Perifereiaki Enotita)
+            city = municipality
+            district = regional_unit
+
+            # Ranges (unchanged)
+            r1c1, r1c2 = st.columns(2)
+            size_min = r1c1.number_input(tr("Min size (m²)"), min_value=0, max_value=10000, value=0, step=1, key="otr_size_min")
+            size_max = r1c2.number_input(tr("Max size (m²)"), min_value=0, max_value=10000, value=0, step=1, key="otr_size_max")
+            size_min = size_min or None
+            size_max = size_max or None
+
+            r2c1, r2c2 = st.columns(2)
+            rooms_min = r2c1.number_input(tr("Min rooms"), min_value=0, max_value=50, value=0, step=1, key="otr_rooms_min")
+            rooms_max = r2c2.number_input(tr("Max rooms"), min_value=0, max_value=50, value=0, step=1, key="otr_rooms_max")
+            rooms_min = rooms_min or None
+            rooms_max = rooms_max or None
+
+            r3c1, r3c2 = st.columns(2)
+            floor_min = r3c1.number_input(tr("Min floor"), min_value=-5, max_value=100, value=0, step=1, key="otr_floor_min")
+            floor_max = r3c2.number_input(tr("Max floor"), min_value=-5, max_value=100, value=0, step=1, key="otr_floor_max")
+            floor_min = floor_min if floor_min != 0 else None
+            floor_max = floor_max if floor_max != 0 else None
+
+            r4c1, r4c2 = st.columns(2)
+            price_min = r4c1.number_input(tr("Min price (€)"), min_value=0, max_value=1_000_000, value=0, step=50, key="otr_price_min")
+            price_max = r4c2.number_input(tr("Max price (€)"), min_value=0, max_value=1_000_000, value=0, step=50, key="otr_price_max")
+            price_min = price_min or None
+            price_max = price_max or None
+
+
+        # with st.expander(tr("Filters (based on tenants' preferences)"), True):
+        #     # Location
+        #     lc1, lc2 = st.columns(2)
+        #     city     = lc1.text_input(tr("City"), key="otr_city")
+        #     district = lc2.text_input(tr("District"), key="otr_district")
+
+        #     # Ranges (landlord search envelope)
+        #     r1c1, r1c2 = st.columns(2)
+        #     size_min = r1c1.number_input(tr("Min size (m²)"), min_value=0, max_value=10000, value=0, step=1, key="otr_size_min")
+        #     size_max = r1c2.number_input(tr("Max size (m²)"), min_value=0, max_value=10000, value=0, step=1, key="otr_size_max")
+        #     size_min = size_min or None
+        #     size_max = size_max or None
+
+        #     r2c1, r2c2 = st.columns(2)
+        #     rooms_min = r2c1.number_input(tr("Min rooms"), min_value=0, max_value=50, value=0, step=1, key="otr_rooms_min")
+        #     rooms_max = r2c2.number_input(tr("Max rooms"), min_value=0, max_value=50, value=0, step=1, key="otr_rooms_max")
+        #     rooms_min = rooms_min or None
+        #     rooms_max = rooms_max or None
+
+        #     r3c1, r3c2 = st.columns(2)
+        #     floor_min = r3c1.number_input(tr("Min floor"), min_value=-5, max_value=100, value=0, step=1, key="otr_floor_min")
+        #     floor_max = r3c2.number_input(tr("Max floor"), min_value=-5, max_value=100, value=0, step=1, key="otr_floor_max")
+        #     floor_min = floor_min if floor_min != 0 else None
+        #     floor_max = floor_max if floor_max != 0 else None
+
+        #     r4c1, r4c2 = st.columns(2)
+        #     price_min = r4c1.number_input(tr("Min price (€)"), min_value=0, max_value=1_000_000, value=0, step=50, key="otr_price_min")
+        #     price_max = r4c2.number_input(tr("Max price (€)"), min_value=0, max_value=1_000_000, value=0, step=50, key="otr_price_max")
+        #     price_min = price_min or None
+        #     price_max = price_max or None
+
+        if st.button(tr("Search")):
+            rows = search_open_to_rent_tenants(
+                q=q,
+                city=city,                 # Municipality
+                district=district,         # Regional Unit
+                size_min=size_min, size_max=size_max,
+                rooms_min=rooms_min, rooms_max=rooms_max,
+                floor_min=floor_min, floor_max=floor_max,
+                price_min=price_min, price_max=price_max,
+                limit=limit,
+            )
+
+
+            if not rows:
+                st.info(tr("No matching tenants found."))
+            else:
+                st.caption(f"{len(rows)} {tr('result(s)')}")
+                for r in rows:
+                    (
+                        tenant_id, tenant_name, tenant_email, updated_at,
+                        t_city, t_district,
+                        t_smin, t_smax, t_rmin, t_rmax, t_fmin, t_fmax, t_pmin, t_pmax
+                    ) = r
+
+                    with st.container(border=True):
+                        top = st.columns([4, 2, 2])
+                        top[0].markdown(f"**{tenant_name}** — {tenant_email}")
+                        top[1].markdown(f"{tr('Updated')}: {format_dt(updated_at)}")
+                        # Quick connect if they already listed you
+                        # (optional) You can also show connect/disconnect buttons using your FLC helpers.
+                        # See how you did it above in the Prospective Tenants section. :contentReference[oaicite:4]{index=4}
+
+                        loc = " · ".join([x for x in [t_district or "", t_city or ""] if x])
+                        st.caption(f"{tr('Looking in')}: {loc or tr('Anywhere')}")
+
+                        # concise ranges
+                        def rng(lo, hi, unit=""):
+                            if lo is None and hi is None: return "—"
+                            lo_txt = "—" if (lo is None or lo == 0) else str(int(lo))
+                            hi_txt = "—" if (hi is None or hi == 0) else str(int(hi))
+                            return f"{lo_txt}–{hi_txt}{unit}"
+
+                        st.write(
+                            f"• {tr('Size')}: {rng(t_smin, t_smax, ' m²')}  \n"
+                            f"• {tr('Rooms')}: {rng(t_rmin, t_rmax)}  \n"
+                            f"• {tr('Floor')}: {rng(t_fmin, t_fmax)}  \n"
+                            f"• €{rng(t_pmin, t_pmax)}"
+                        )
 
     # === Reference requests that were sent to this landlord ===
     st.subheader(tr('Reference Requests Sent To You'))
