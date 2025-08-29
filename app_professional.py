@@ -3230,6 +3230,24 @@ def landlord_dashboard():
                         # Quick connect if they already listed you
                         # (optional) You can also show connect/disconnect buttons using your FLC helpers.
                         # See how you did it above in the Prospective Tenants section. :contentReference[oaicite:4]{index=4}
+                        # --- Status / Connect ---
+                        landlord_id = st.session_state.user["id"]
+                        try:
+                            status = flc_get_status(landlord_id, tenant_id)  # expects 'connected' or None/other
+                        except Exception:
+                            status = None
+
+                        if status == "connected":
+                            # simple badge
+                            top[2].markdown("✅ **Connected**")
+                        else:
+                            if top[2].button(tr("Connect"), key=f"otr_connect_{tenant_id}"):
+                                flc_connect(landlord_id, tenant_id)
+                                try:
+                                    st.cache_data.clear()
+                                except Exception:
+                                    pass
+                                st.rerun()
 
                         loc = " · ".join([x for x in [t_district or "", t_city or ""] if x])
                         st.caption(f"{tr('Looking in')}: {loc or tr('Anywhere')}")
