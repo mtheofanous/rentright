@@ -535,45 +535,31 @@ def load_ellada():
 def greece_location_pickers(prefix: str = "otr"):
     """
     Renders 3 linked selectboxes:
-      Region -> Regional Unit -> Municipality
-    Returns (region, regional_unit, municipality) where any can be None
+      Περιφέρεια -> Περιφερειακή Ενότητα -> Δήμος (Πόλη)
+    Returns (region, regional_unit, municipality) where any can be None.
     """
-    data = load_ellada()
-    if not data:
-        # Graceful fallback – caller can show text inputs instead
-        return None, None, None
+    # Load and get a *list* of region names, not top-level keys
+    data, regions, _ = load_ellada_index("ellada.json")  # or omit the arg if you prefer the built-in path search
 
     # Region
-    regions = sorted(list(data.keys()))
-    region = st.selectbox(
-        tr("Region"),
-        options=[tr("Any")] + regions,
-        index=0,
-        key=f"{prefix}_region",
-    )
+    region_options = [tr("Any")] + (regions or [])
+    region = st.selectbox(tr("Region"), options=region_options, key=f"{prefix}_region")
     region = None if region == tr("Any") else region
 
     # Regional Unit (depends on Region)
-    rus = sorted(list(data.get(region, {}).keys())) if region else []
-    regional_unit = st.selectbox(
-        tr("Regional unit"),
-        options=[tr("Any")] + rus if rus else [tr("Any")],
-        index=0,
-        key=f"{prefix}_ru",
-    )
+    units = list_units(data, region) if region else []
+    unit_options = [tr("Any")] + (units or [])
+    regional_unit = st.selectbox(tr("Regional unit"), options=unit_options, key=f"{prefix}_ru")
     regional_unit = None if regional_unit == tr("Any") else regional_unit
 
     # Municipality (depends on Regional Unit)
-    mun_list = sorted(data.get(region, {}).get(regional_unit, [])) if (region and regional_unit) else []
-    municipality = st.selectbox(
-        tr("Municipality"),
-        options=[tr("Any")] + mun_list if mun_list else [tr("Any")],
-        index=0,
-        key=f"{prefix}_mun",
-    )
+    munis = list_municipalities(data, region, regional_unit) if (region and regional_unit) else []
+    mun_options = [tr("Any")] + (munis or [])
+    municipality = st.selectbox(tr("Municipality"), options=mun_options, key=f"{prefix}_mun")
     municipality = None if municipality == tr("Any") else municipality
 
     return region, regional_unit, municipality
+
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def load_ellada_index(json_path: str | None = None):
