@@ -253,6 +253,74 @@ def tr(s: str) -> str:
 
 # === Label & status helpers (i18n-friendly) ===
 
+def flc_request_from_landlord(landlord_id: int, tenant_id: int):
+    """
+    Called when LANDLORD clicks Connect.
+    Create or update a row as 'pending'.
+    """
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO flc (landlord_id, tenant_id, status, updated_at, created_at)
+        VALUES (:lid, :tid, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(landlord_id, tenant_id)
+        DO UPDATE SET status='pending', updated_at=CURRENT_TIMESTAMP
+    """, {"lid": landlord_id, "tid": tenant_id})
+    conn.commit()
+
+
+def flc_tenant_accept(landlord_id: int, tenant_id: int):
+    """Tenant accepts -> status becomes 'connected'."""
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE flc
+        SET status='connected', updated_at=CURRENT_TIMESTAMP
+        WHERE landlord_id=:lid AND tenant_id=:tid
+    """, {"lid": landlord_id, "tid": tenant_id})
+    conn.commit()
+
+
+def flc_tenant_reject(landlord_id: int, tenant_id: int):
+    """Tenant rejects -> status becomes 'rejected'."""
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE flc
+        SET status='rejected', updated_at=CURRENT_TIMESTAMP
+        WHERE landlord_id=:lid AND tenant_id=:tid
+    """, {"lid": landlord_id, "tid": tenant_id})
+    conn.commit()
+
+
+def flc_get_status(landlord_id: int, tenant_id: int) -> str | None:
+    """Return 'pending' | 'connected' | 'rejected' | None."""
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT status FROM flc WHERE landlord_id=:lid AND tenant_id=:tid
+    """, {"lid": landlord_id, "tid": tenant_id})
+    row = cur.fetchone()
+    return row[0] if row else None
+
+
+def flc_list_inbound_for_tenant(tenant_id: int):
+    """
+    Landlords who reached out to this tenant (any status).
+    Returns rows with landlord info + status, newest first.
+    """
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT
+            u.id          AS landlord_id,
+            u.name        AS landlord_name,
+            u.email       AS landlord_email,
+            f.status      AS status,
+            f.updated_at  AS updated_at
+        FROM flc f
+        JOIN users u ON u.id = f.landlord_id
+        WHERE f.tenant_id = :tid
+        ORDER BY f.updated_at DESC
+    """, {"tid": tenant_id})
+    return cur.fetchall()
+
+
 # 3) One status→label mapper (keep raw DB values in English)
 STATUS_LABELS = {
     None: "not requested",
@@ -2457,14 +2525,64 @@ def tenant_dashboard():
     with col_h3: logout_button()
  
 
-    # Header with a visible Sign Out button on the main page
-    # col_h1, col_h2 = st.columns([4, 1])
-    # with col_h1:
-    #     st.header(tr('Tenant Dashboard'))
-    # with col_h2:
-    #     st.write("")
-    #     st.write("")
-    #     logout_button()
+    def tenant_future_landlords_section():
+        st.subheader(tr("Future Landlords (Contacts)"))
+
+        tenant = st.session_state.user
+        tenant_id = tenant["id"]
+
+        rows = flc_list_inbound_for_tenant(tenant_id)
+        if not rows:
+            st.info(tr("No landlords have contacted you yet."))
+            return
+
+        st.caption(f"{len(rows)} {tr('contact(s)')}")
+
+        for (landlord_id, landlord_name, landlord_email, status, updated_at) in rows:
+            with st.container(border=True):
+                c1, c2, c3 = st.columns([4, 2, 2])
+
+                # Identity
+                c1.markdown(f"**{landlord_name}** — {landlord_email}")
+                c2.markdown(f"{tr('Updated')}: {format_dt(updated_at)}")
+
+                # Actions by status
+                status = status or "pending"
+                if status == "connected":
+                    # Already connected: show badge + optional Disconnect
+                    left, right = c3.columns([1,1])
+                    left.markdown("✅ **Connected**")
+                    # Optional:
+                    # if right.button(tr("Disconnect"), key=f"flc_disc_{tenant_id}_{landlord_id}"):
+                    #     flc_tenant_reject(landlord_id, tenant_id)  # or a dedicated disconnect if you have one
+                    #     try: st.cache_data.clear()
+                    #     except Exception: pass
+                    #     st.rerun()
+
+                elif status == "rejected":
+                    c3.markdown("🚫 **Rejected**")
+
+                    # Optional undo:
+                    # if c3.button(tr("Undo"), key=f"flc_undo_{tenant_id}_{landlord_id}"):
+                    #     flc_tenant_accept(landlord_id, tenant_id)
+                    #     try: st.cache_data.clear()
+                    #     except Exception: pass
+                    #     st.rerun()
+
+                else:  # pending
+                    btn_accept, btn_reject = c3.columns(2)
+                    if btn_accept.button(tr("Connect"), key=f"flc_accept_{tenant_id}_{landlord_id}"):
+                        flc_tenant_accept(landlord_id, tenant_id)
+                        try: st.cache_data.clear()
+                        except Exception: pass
+                        st.rerun()
+
+                    if btn_reject.button(tr("Reject"), key=f"flc_reject_{tenant_id}_{landlord_id}"):
+                        flc_tenant_reject(landlord_id, tenant_id)
+                        try: st.cache_data.clear()
+                        except Exception: pass
+                        st.rerun()
+
 
     # === Future landlord email ===
     st.subheader(tr('Future Landlords (Contacts)'))
@@ -2637,6 +2755,8 @@ def tenant_dashboard():
     #     st.caption(tr('No future landlord contacts yet.'))
 
     # st.divider()
+    
+    tenant_future_landlords_section()
     
     tenant_open_to_rent_section()
 
@@ -3242,7 +3362,7 @@ def landlord_dashboard():
                             top[2].markdown("✅ **Connected**")
                         else:
                             if top[2].button(tr("Connect"), key=f"otr_connect_{tenant_id}"):
-                                flc_connect(landlord_id, tenant_id)
+                                flc_request_from_landlord(landlord_id, tenant_id)
                                 try:
                                     st.cache_data.clear()
                                 except Exception:
