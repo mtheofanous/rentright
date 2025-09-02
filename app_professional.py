@@ -1291,6 +1291,48 @@ def flc_list_prospective_for_landlord(landlord_id: int):
 
     return rows or []
 
+def tenant_has_invited(tenant_id: int, landlord_email: str) -> bool:
+    """Did the tenant add this landlord and send an invite? (tenant-origin pending)"""
+    c = get_conn()
+    row = c.execute(
+        "SELECT 1 FROM future_landlord_contacts "
+        "WHERE tenant_id=? AND LOWER(email)=LOWER(?) AND invited=1 LIMIT 1",
+        (tenant_id, landlord_email),
+    ).fetchone()
+    return bool(row)
+
+def flc_relation_status(landlord_id: int, tenant_id: int, landlord_email: str):
+    """
+    Returns a pair: (label, extra)
+      label ∈ {'connected','pending','disconnected', None}
+      extra  ∈ {'outbound','inbound', None}  # for pending
+    Priority: pending (outbound OR inbound) > connected > disconnected > none
+    """
+    # 1) pending?
+    try:
+        outbound = has_inbound_request(tenant_id, landlord_email)  # landlord -> tenant
+    except Exception:
+        outbound = False
+    try:
+        inbound = tenant_has_invited(tenant_id, landlord_email)    # tenant -> landlord
+    except Exception:
+        inbound = False
+    if outbound:
+        return "pending", "outbound"
+    if inbound:
+        return "pending", "inbound"
+
+    # 2) final states from connections table
+    try:
+        st = flc_get_status(landlord_id, tenant_id)  # 'connected'|'rejected'|None
+    except Exception:
+        st = None
+    if st == "connected":
+        return "connected", None
+    if st == "rejected":
+        return "disconnected", None
+
+    return None, None
 
 
 def remove_future_landlord_contact(contact_id: int, tenant_id: int):
@@ -3609,32 +3651,72 @@ def landlord_dashboard():
                             status = flc_get_status(landlord_id, tenant_id)
                         except Exception:
                             status = None
-                        if status in ("connected", "rejected"):
-                            continue
+ 
 
                         # Right: outbound pending logic (landlord -> tenant)
-                        try:
-                            pending_outbound = has_inbound_request(tenant_id, landlord_email)
-                        except Exception:
-                            pending_outbound = False
+                        # --- Status badge + actions (show for all: connected / pending / disconnected / none) ---
+                        status_label, pending_dir = flc_relation_status(landlord_id, tenant_id, landlord_email)
 
-                        if pending_outbound:
-                            top[2].markdown(tr("Pending"))
-                            if top[2].button(tr("Cancel request"), key=f"otr_cancel_{tenant_id}"):
-                                flc_cancel_request(landlord_id, tenant_id)
-                                try:
-                                    st.cache_data.clear()
-                                except Exception:
-                                    pass
-                                st.rerun()
+                        # Middle column: status badge
+                        if status_label == "connected":
+                            top[1].success(tr("Connected"))
+                        elif status_label == "pending":
+                            top[1].info(tr("Pending"))
+                        elif status_label == "disconnected":
+                            top[1].error(tr("Disconnected"))
                         else:
+                            top[1].caption(tr("No relation"))
+
+                        # Right column: actions, depending on status/origin
+                        if status_label == "connected":
+                            if top[2].button(tr("Disconnect"), key=f"otr_disc_{tenant_id}"):
+                                flc_disconnect(landlord_id, tenant_id)
+                                try: st.cache_data.clear()
+                                except Exception: pass
+                                st.warning(tr("Disconnected."))
+                                st.rerun()
+
+                        elif status_label == "pending":
+                            if pending_dir == "outbound":
+                                # You (landlord) already asked — allow cancel
+                                if top[2].button(tr("Cancel request"), key=f"otr_cancel_{tenant_id}"):
+                                    flc_cancel_request(landlord_id, tenant_id)
+                                    try: st.cache_data.clear()
+                                    except Exception: pass
+                                    st.rerun()
+                            else:
+                                # Tenant listed you — allow Connect / Reject directly
+                                c1, c2 = top[2].columns(2)
+                                if c1.button(tr("Connect"), key=f"otr_connect_{tenant_id}"):
+                                    flc_connect(landlord_id, tenant_id)
+                                    try: st.cache_data.clear()
+                                    except Exception: pass
+                                    st.success(tr("Connected."))
+                                    st.rerun()
+                                if c2.button(tr("Reject"), key=f"otr_reject_{tenant_id}"):
+                                    flc_reject(landlord_id, tenant_id)
+                                    try: st.cache_data.clear()
+                                    except Exception: pass
+                                    st.info(tr("Rejected."))
+                                    st.rerun()
+
+                        elif status_label == "disconnected":
+                            # Show the status AND allow sending a new request
                             if top[2].button(tr("Ask to connect"), key=f"otr_req_{tenant_id}"):
                                 flc_request_connect(landlord_id, tenant_id)
-                                try:
-                                    st.cache_data.clear()
-                                except Exception:
-                                    pass
+                                try: st.cache_data.clear()
+                                except Exception: pass
                                 st.rerun()
+
+                        else:
+                            # No relation yet
+                            if top[2].button(tr("Ask to connect"), key=f"otr_req_{tenant_id}"):
+                                flc_request_connect(landlord_id, tenant_id)
+                                try: st.cache_data.clear()
+                                except Exception: pass
+                                st.rerun()
+
+
 
                         # Footer: compact ranges
                         loc = " · ".join([x for x in [t_district or "", t_city or ""] if x])
