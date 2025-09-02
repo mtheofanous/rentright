@@ -2806,22 +2806,24 @@ def tenant_dashboard():
     
     def tenant_future_landlords_section():
         """
-        Tenant dashboard: manage 'Future Landlords (Contacts)' with unique, namespaced widget keys.
+        Tenant dashboard: manage 'Future Landlords (Contacts)'.
+        - Single, clean implementation (remove any legacy section below this function).
+        - Namespaced widget keys to avoid Streamlit duplicate-key errors.
         """
         st.subheader(tr("Future Landlords (Contacts)"))
         tenant_id = st.session_state.user["id"]
 
-        # Unique namespace for all widget keys in this section
+        # Namespace to keep all widget keys in this section unique
         NS = "tfl"  # tenant-future-landlords
-        def k(cid, name):  # convenience to build unique keys
-            return f"{NS}_{name}_{cid}"
+        def k(cid, name):  # convenience key builder
+            return f"{NS}:{name}:{cid}"
 
         # --- Add Contact form ----------------------------------------------------
         with st.container(border=True):
             st.markdown(f"**{tr('Add Contact')}**")
-            with st.form(f"{NS}_add_contact_form", clear_on_submit=True):
-                new_email = st.text_input(tr("Landlord email"), key=f"{NS}_new_email")
-                col_a, col_b = st.columns([1, 6])
+            with st.form(f"{NS}:add_contact_form", clear_on_submit=True):
+                new_email = st.text_input(tr("Landlord email"), key=f"{NS}:new_email")
+                col_a, _ = st.columns([1, 6])
                 submitted = col_a.form_submit_button(tr("Add"))
                 if submitted:
                     email = (new_email or "").strip()
@@ -2865,7 +2867,7 @@ def tenant_dashboard():
                 landlord_user = get_user_by_email(fl_email)
                 landlord_id = landlord_user["id"] if landlord_user and landlord_user.get("role") == "landlord" else None
 
-                # Canonical connection status
+                # Canonical connection status (from future_landlord_connections)
                 try:
                     status = flc_get_status(landlord_id, tenant_id) if landlord_id else None
                 except Exception:
@@ -2883,7 +2885,7 @@ def tenant_dashboard():
                 else:
                     cols[1].caption(tr("Not connected"))
 
-                # Right: actions — all keys namespaced via k(cid, "...")
+                # Right: actions — keys are namespaced via k(cid, "...")
 
                 # 1) Connected -> Disconnect
                 if status == "connected":
@@ -2903,7 +2905,7 @@ def tenant_dashboard():
                     if b1.button(tr("Connect"), key=k(cid, "accept_inbound")):
                         if landlord_id:
                             flc_connect(landlord_id, tenant_id)
-                        # clear pending flag on contact row
+                        # clear pending flag on this contact row
                         c = get_conn()
                         c.execute(
                             "UPDATE future_landlord_contacts "
@@ -2977,384 +2979,7 @@ def tenant_dashboard():
                         st.info(tr("Contact removed."))
                         st.rerun()
 
-    
-    # def tenant_future_landlords_section():
-    #     """
-    #     Tenant dashboard: manage 'Future Landlords (Contacts)'.
-    #     - Add a landlord contact by email
-    #     - See inbound 'Ask to connect' requests (Pending) with Connect / Disconnect
-    #     - See own invited contacts and remove them
-    #     - See connected landlords and disconnect
-    #     """
-    #     st.subheader(tr("Future Landlords (Contacts)"))
-    #     tenant_id = st.session_state.user["id"]
 
-    #     # --- Add Contact form ----------------------------------------------------
-    #     with st.container(border=True):
-    #         st.markdown(f"**{tr('Add Contact')}**")
-    #         with st.form("tenant_add_fl_contact", clear_on_submit=True):
-    #             new_email = st.text_input(tr("Landlord email"), key="tenant_add_fl_email")
-    #             col_a, col_b = st.columns([1, 6])
-    #             submitted = col_a.form_submit_button(tr("Add"))
-    #             if submitted:
-    #                 email = (new_email or "").strip()
-    #                 if not email or "@" not in email:
-    #                     st.error(tr("Please enter a valid email address."))
-    #                 else:
-    #                     try:
-    #                         add_future_landlord_contact(tenant_id, email)
-    #                         try:
-    #                             st.cache_data.clear()
-    #                         except Exception:
-    #                             pass
-    #                         st.success(tr("Contact added."))
-    #                         st.rerun()
-    #                     except Exception as e:
-    #                         st.error(f"{tr('Unable to add contact')}: {e}")
-
-    #     # --- List + actions (inbound/outbound/pending/connected) -----------------
-    #     rows = list_future_landlord_contacts(tenant_id) or []
-
-    #     if not rows:
-    #         st.caption(tr("No future landlord contacts yet."))
-    #         return
-
-    #     for (cid, fl_email, created_at, invited, invited_at, inbound_request, inbound_requested_at) in rows:
-    #         with st.container(border=True):
-    #             cols = st.columns([4, 3, 5])
-
-    #             # Left: identity + meta
-    #             cols[0].markdown(f"**{fl_email}**")
-    #             meta_bits = []
-    #             if created_at:
-    #                 meta_bits.append(tr("Added") + f": {created_at}")
-    #             if invited and invited_at:
-    #                 meta_bits.append(tr("Invited on") + f" {invited_at}")
-    #             if inbound_request and inbound_requested_at:
-    #                 meta_bits.append(tr("Requested on") + f" {inbound_requested_at}")
-    #             if meta_bits:
-    #                 cols[0].caption(" · ".join(meta_bits))
-
-    #             # Try to resolve to an existing landlord user
-    #             landlord_user = get_user_by_email(fl_email)
-    #             landlord_id = landlord_user["id"] if landlord_user and landlord_user.get("role") == "landlord" else None
-
-    #             # Determine canonical connection status (from future_landlord_connections)
-    #             try:
-    #                 status = flc_get_status(landlord_id, tenant_id) if landlord_id else None
-    #             except Exception:
-    #                 status = None
-
-    #             # Middle: status badge
-    #             if status == "connected":
-    #                 cols[1].success(tr("Connected"))
-    #             elif status == "rejected":
-    #                 cols[1].error(tr("Rejected"))
-    #             elif inbound_request:
-    #                 cols[1].info(tr("Pending"))
-    #             elif invited:
-    #                 cols[1].success(tr("Invited"))
-    #             else:
-    #                 cols[1].caption(tr("Not connected"))
-
-    #             # Right: actions
-    #             # 1) Connected -> Disconnect
-    #             if status == "connected":
-    #                 if cols[2].button(tr("Disconnect"), key=f"tenant_disc_{cid}"):
-    #                     if landlord_id:
-    #                         flc_disconnect(landlord_id, tenant_id)
-    #                     try:
-    #                         st.cache_data.clear()
-    #                     except Exception:
-    #                         pass
-    #                     st.warning(tr("Disconnected."))
-    #                     st.rerun()
-
-    #             # 2) Landlord-origin pending -> Connect / Disconnect (accept / decline)
-    #             elif inbound_request:
-    #                 b1, b2 = cols[2].columns(2)
-    #                 if b1.button(tr("Connect"), key=f"tenant_accept_{cid}"):
-    #                     if landlord_id:
-    #                         flc_connect(landlord_id, tenant_id)
-    #                     # clear pending flag on contact row
-    #                     c = get_conn()
-    #                     c.execute(
-    #                         "UPDATE future_landlord_contacts SET inbound_request=0, inbound_requested_at=NULL WHERE id=?",
-    #                         (cid,),
-    #                     )
-    #                     c.commit()
-    #                     try:
-    #                         st.cache_data.clear()
-    #                     except Exception:
-    #                         pass
-    #                     st.success(tr("Connected."))
-    #                     st.rerun()
-
-    #                 if b2.button(tr("Disconnect"), key=f"tenant_decline_{cid}"):
-    #                     if landlord_id:
-    #                         flc_reject(landlord_id, tenant_id)
-    #                     c = get_conn()
-    #                     c.execute(
-    #                         "UPDATE future_landlord_contacts SET inbound_request=0, inbound_requested_at=NULL WHERE id=?",
-    #                         (cid,),
-    #                     )
-    #                     c.commit()
-    #                     try:
-    #                         st.cache_data.clear()
-    #                     except Exception:
-    #                         pass
-    #                     st.info(tr("Disconnected."))
-    #                     st.rerun()
-
-    #             # 3) Tenant-origin invited contact -> Remove
-    #             elif invited:
-    #                 if cols[2].button(tr("Remove"), key=f"tenant_remove_{cid}"):
-    #                     remove_future_landlord_contact(cid, tenant_id)
-    #                     try:
-    #                         st.cache_data.clear()
-    #                     except Exception:
-    #                         pass
-    #                     st.info(tr("Contact removed."))
-    #                     st.rerun()
-
-    #             # 4) Plain contact without invites/requests -> Send Invitation or Remove
-    #             else:
-    #                 b1, b2 = cols[2].columns(2)
-    #                 if b1.button(tr("Send Invitation"), key=f"tenant_invite_{cid}"):
-    #                     ok, msg = invite_future_landlord(
-    #                         tenant_id,
-    #                         fl_email,
-    #                         st.session_state.user.get("name"),
-    #                         st.session_state.user.get("email"),
-    #                     )
-    #                     if ok:
-    #                         try:
-    #                             st.cache_data.clear()
-    #                         except Exception:
-    #                             pass
-    #                         st.success(tr("Invitation sent successfully."))
-    #                         st.rerun()
-    #                     else:
-    #                         st.error(f"{tr('Unable to send invitation')}: {msg}")
-
-    #                 if b2.button(tr("Remove"), key=f"tenant_remove_{cid}_2"):
-    #                     remove_future_landlord_contact(cid, tenant_id)
-    #                     try:
-    #                         st.cache_data.clear()
-    #                     except Exception:
-    #                         pass
-    #                     st.info(tr("Contact removed."))
-    #                     st.rerun()
-
-
-
-
-    # === Future landlord email ===
-    st.subheader(tr('Future Landlords (Contacts)'))
-
-    tenant_id = st.session_state.user["id"]
-
-    # --- Add contact + auto-invite ---
-    with st.form("future_landlords_add_form"):
-        new_fl_email = st.text_input(tr('Enter a landlord’s email address'))
-        add_fl = st.form_submit_button(tr('Add Contact'))
-    if add_fl:
-        if not new_fl_email or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", new_fl_email):
-            st.error(tr('Please enter a valid email address.'))
-        else:
-            try:
-                # 1) Save contact
-                add_future_landlord_contact(tenant_id, new_fl_email)
-                # 2) Auto-send invite
-                ok, msg = invite_future_landlord(
-                    tenant_id,
-                    new_fl_email,
-                    st.session_state.user.get("name"),
-                    st.session_state.user.get("email"),
-                )
-                if ok:
-                    st.success(tr('Contact added and invitation sent successfully.'))
-                    st.rerun()
-                else:
-                    st.warning(f"{tr('Contact added, but the email could not be sent:')} {msg}")
-            except Exception as e:
-                st.warning(f"{tr('Unable to add contact:')} {e}")
-
-    st.divider()
-
-    # --- List + actions ---
-    # --- List + actions (inbound/outbound/pending/connected) ---
-    tenant_id = st.session_state.user["id"]
-
-    fl_rows = list_future_landlord_contacts(tenant_id) or []
-    if fl_rows:
-        for (cid, fl_email, created_at, invited, invited_at, inbound_request, inbound_requested_at) in fl_rows:
-            with st.container(border=True):
-                cols = st.columns([4, 3, 4])
-                cols[0].markdown(f"**{fl_email}**")
-
-                # If the email belongs to a registered landlord, we can show connection state
-                landlord_user = get_user_by_email(fl_email)
-                landlord_id = landlord_user["id"] if landlord_user and landlord_user.get("role") == "landlord" else None
-                status = None
-                try:
-                    status = flc_get_status(landlord_id, tenant_id) if landlord_id else None
-                except Exception:
-                    pass
-
-                if status == "connected":
-                    cols[1].success(tr("Connected"))
-                    if cols[2].button(tr("Disconnect"), key=f"tenant_disc_{cid}"):
-                        flc_disconnect(landlord_id, tenant_id)
-                        try:
-                            st.cache_data.clear()
-                        except Exception:
-                            pass
-                        st.warning(tr("Disconnected."))
-                        st.rerun()
-
-                elif inbound_request:
-                    # Landlord asked to connect -> tenant can accept or decline
-                    cols[1].info(tr("Pending"))
-                    b1, b2 = cols[2].columns(2)
-                    if b1.button(tr("Connect"), key=f"tenant_accept_{cid}"):
-                        flc_connect(landlord_id, tenant_id)
-                        conn.execute(
-                            "UPDATE future_landlord_contacts "
-                            "SET inbound_request=0, inbound_requested_at=NULL WHERE id=?",
-                            (cid,)
-                        )
-                        conn.commit()
-                        try:
-                            st.cache_data.clear()
-                        except Exception:
-                            pass
-                        st.success(tr("Connected."))
-                        st.rerun()
-                    if b2.button(tr("Disconnect"), key=f"tenant_decline_{cid}"):
-                        flc_reject(landlord_id, tenant_id)
-                        conn.execute(
-                            "UPDATE future_landlord_contacts "
-                            "SET inbound_request=0, inbound_requested_at=NULL WHERE id=?",
-                            (cid,)
-                        )
-                        conn.commit()
-                        try:
-                            st.cache_data.clear()
-                        except Exception:
-                            pass
-                        st.info(tr("Disconnected."))
-                        st.rerun()
-
-                else:
-                    # No connection yet, tenant-origin states
-                    if invited:
-                        cols[1].success(tr("Invited"))
-                        if cols[2].button(tr("Remove"), key=f"remove_fl_{cid}"):
-                            remove_future_landlord_contact(cid, tenant_id)
-                            st.info(tr("Contact removed."))
-                            st.rerun()
-                    else:
-                        # Optional: allow sending invite or just removing the contact
-                        b1, b2 = cols[2].columns(2)
-                        if b1.button(tr("Send Invitation"), key=f"invite_fl_{cid}"):
-                            ok, msg = invite_future_landlord(
-                                tenant_id,
-                                fl_email,
-                                st.session_state.user.get("name"),
-                                st.session_state.user.get("email"),
-                            )
-                            if ok:
-                                try:
-                                    st.cache_data.clear()
-                                except Exception:
-                                    pass
-                                st.success(tr("Invitation sent successfully."))
-                                st.rerun()
-                            else:
-                                st.error(f"{tr('Unable to send invitation')}: {msg}")
-                        if b2.button(tr("Remove"), key=f"remove_fl_{cid}_2"):
-                            remove_future_landlord_contact(cid, tenant_id)
-                            st.info(tr("Contact removed."))
-                            st.rerun()
-    else:
-        st.caption(tr("No future landlord contacts yet."))
-
-    # fl_rows = list_future_landlord_contacts(tenant_id) or []
-
-    # if not fl_rows:
-    #     st.caption(tr('No future landlord contacts yet.'))
-    # else:
-    #     for (cid, fl_email, created_at, invited, invited_at) in fl_rows:
-    #         landlord_user_id = get_user_id_by_email(fl_email)
-    #         status = flc_get_status(landlord_user_id, tenant_id) if landlord_user_id else None
-    #         # status ∈ {None, 'connected', 'rejected'}
-
-    #         # 🔴 If landlord has rejected/disconnected, auto-remove this contact and skip rendering
-    #         if status == "rejected":
-    #             try:
-    #                 remove_future_landlord_contact(cid, tenant_id)
-    #             except Exception:
-    #                 pass
-    #             try:
-    #                 st.cache_data.clear()
-    #             except Exception:
-    #                 pass
-    #             continue  # do not render this row
-
-    #         with st.container(border=True):
-    #             cols = st.columns([4, 2, 3, 2])
-
-    #             # Name/Email
-    #             cols[0].markdown(f"**{fl_email}**")
-
-    #             # Status chip
-    #             if status == "connected":
-    #                 cols[1].success(tr('Connected'))
-    #             elif invited:
-    #                 cols[1].info(tr('Invited'))
-    #             else:
-    #                 cols[1].caption(tr('Not invited yet'))
-
-    #             # Actions
-    #             # If connected → allow tenant to disconnect themselves (marks as rejected + clears contact)
-    #             if status == "connected":
-    #                 if cols[2].button(tr('Disconnect'), key=f"tenant_disc_fl_{cid}"):
-    #                     try:
-    #                         flc_disconnect(landlord_user_id, tenant_id)  # mark as rejected server-side
-    #                         remove_future_landlord_contact(cid, tenant_id)  # clear local contact
-    #                     finally:
-    #                         try:
-    #                             st.cache_data.clear()
-    #                         except Exception:
-    #                             pass
-    #                     st.warning(tr("Disconnected."))
-    #                     st.rerun()
-    #             else:
-    #                 # Not connected yet
-    #                 if not invited:
-    #                     if cols[2].button(tr('Send Invitation'), key=f"invite_fl_{cid}"):
-    #                         ok, msg = invite_future_landlord(
-    #                             tenant_id,
-    #                             fl_email,
-    #                             st.session_state.user.get("name"),
-    #                             st.session_state.user.get("email"),
-    #                         )
-    #                         if ok:
-    #                             st.success(tr('Invitation sent successfully.'))
-    #                             st.rerun()
-    #                         else:
-    #                             st.error(f"{tr('Unable to send invitation:')} {msg}")
-
-    #                 # Always let tenant remove their own contact (if not connected)
-    #                 if cols[3].button(tr('Remove'), key=f"remove_fl_{cid}"):
-    #                     remove_future_landlord_contact(cid, tenant_id)
-    #                     try:
-    #                         st.cache_data.clear()
-    #                     except Exception:
-    #                         pass
-    #                     st.info(tr('Contact removed.'))
-    #                     st.rerun()
 
     tenant_future_landlords_section()
     
