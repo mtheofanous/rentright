@@ -3737,7 +3737,7 @@ def landlord_dashboard():
                         sub = " · ".join([", ".join(pref_bits)] + ([" | ".join(range_bits)] if range_bits else []))
                         if sub.strip(", · |"):
                             top[0].caption(sub)
-                        top[1].markdown(f"{tr('Updated')}: {format_dt(updated_at)}")
+                        # top[1].markdown(f"{tr('Updated')}: {format_dt(updated_at)}")
 
                         # Hide only final states, not pending
                         try:
