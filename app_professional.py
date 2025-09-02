@@ -253,6 +253,52 @@ def tr(s: str) -> str:
 
 # === Label & status helpers (i18n-friendly) ===
 
+def quick_reference_summary(tenant_id: int):
+    """
+    Compact reference summary for search results.
+    Returns dict:
+      {
+        "have": bool,            # any non-cancelled references exist
+        "total": int,            # count of non-cancelled references
+        "latest_status": str|None,
+        "latest_score": float|None,  # only if latest is completed
+        "avg_score": float|None,     # average of completed refs, if any
+        "completed_count": int,
+      }
+    """
+    try:
+        refs = list_latest_references_for_tenant_dict(tenant_id) or []
+    except Exception:
+        refs = []
+
+    # Ignore cancelled refs
+    refs = [r for r in refs if (r.get("status") or "").lower() != "cancelled"]
+
+    if not refs:
+        return {
+            "have": False, "total": 0, "latest_status": None,
+            "latest_score": None, "avg_score": None, "completed_count": 0
+        }
+
+    total = len(refs)
+    latest = refs[0]  # list_latest_* should already be latest-first
+    latest_status = (latest.get("status") or "").strip()
+    latest_score = latest.get("score") if (latest_status or "").lower() == "completed" else None
+
+    completed = [r for r in refs if (r.get("status") or "").lower() == "completed"]
+    scores = [r.get("score") for r in completed if r.get("score") is not None]
+    avg_score = round(sum(scores) / len(scores), 1) if scores else None
+
+    return {
+        "have": True,
+        "total": total,
+        "latest_status": latest_status,
+        "latest_score": latest_score,
+        "avg_score": avg_score,
+        "completed_count": len(completed),
+    }
+
+
 def flc_request_from_landlord(landlord_id: int, tenant_id: int):
     """
     Called when LANDLORD clicks Connect.
@@ -3716,6 +3762,32 @@ def landlord_dashboard():
                                 except Exception: pass
                                 st.rerun()
 
+                        # --- References quick summary (ADD THIS) ---
+                        ref = quick_reference_summary(tenant_id)
+
+                        if not ref["have"]:
+                            st.caption(f"📄 {tr('References')}: {tr('None')}")
+                        else:
+                            # Pretty status label if you have the helper; otherwise fall back to the raw string
+                            try:
+                                latest_status_label = display_status_label(ref["latest_status"])
+                            except Exception:
+                                latest_status_label = (ref["latest_status"] or "").title() or "—"
+
+                            # Result priority: latest score (if latest is completed) -> avg completed score -> "—"
+                            if ref["latest_score"] is not None:
+                                result_txt = f"{ref['latest_score']}/10"
+                            elif ref["avg_score"] is not None:
+                                result_txt = f"{ref['avg_score']}/10 {tr('avg')}"
+                            else:
+                                result_txt = "—"
+
+                            st.caption(
+                                "📄 "
+                                + f"{tr('References')}: {ref['total']}  ·  "
+                                + f"{tr('Latest status')}: {latest_status_label}  ·  "
+                                + f"{tr('Result')}: {result_txt}"
+                            )
 
 
                         # Footer: compact ranges
