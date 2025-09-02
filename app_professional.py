@@ -180,7 +180,7 @@ TRANSLATIONS_EL = {
         "No": " Όχι",
         "No previous landlords added yet.": "Δεν έχουν προστεθεί ακόμη προηγούμενοι ιδιοκτήτες.",
         "No active reference request.": "Δεν υπάρχει ενεργό αίτημα σύστασης.",
-        'Reference from': 'Σύσταση από',
+        'Reference from previous landlord': 'Σύσταση από προηγούμενο ιδιοκτήτη',
         # === Reference Portal (info banner + consent) ===
         "Reference for": "Σύσταση για",
         "Address": "Διεύθυνση",
@@ -3531,7 +3531,7 @@ def landlord_dashboard():
                             good_cond  = r.get("good_condition")
                             comments   = r.get("comments")
 
-                            with st.expander(f"{tr('Reference from')} ({prev_email}) — {md_label('Status:')} {display_status_label(status_lr)}"):
+                            with st.expander(f"{tr('Reference from previous landlord')} — {md_label('Status:')} {display_status_label(status_lr)}"):
                                 if (status_lr or "").lower() == "completed":
                                     st.markdown(f"{md_label('Score:')} {score_lr}/10")
                                     st.markdown(f"{md_label('Paid on time:')} {tr('Yes') if paid_on else tr('No')}")
