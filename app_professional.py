@@ -541,6 +541,31 @@ def flc_request_from_landlord(tenant_id: int, landlord_email: str) -> None:
         )
 
     get_conn().commit()
+    
+def flc_list_prospective_for_landlord(landlord_id: int):
+    """
+    Returns rows of tenants that are either:
+      - tenant-origin pending/invited (invited=1), or
+      - landlord-origin pending (inbound_request=1).
+    """
+    c = get_conn()
+    landlord = get_user_by_id(landlord_id)
+    if not landlord:
+        return []
+    email = landlord["email"].lower()
+
+    # Note: we include both invited=1 and inbound_request=1
+    rows = c.execute(
+        """
+        SELECT c.tenant_id, c.invited, c.invited_at, c.inbound_request, c.inbound_requested_at
+        FROM future_landlord_contacts c
+        WHERE LOWER(c.email)=? AND (c.invited=1 OR c.inbound_request=1)
+        ORDER BY COALESCE(c.inbound_requested_at, c.invited_at) DESC
+        """,
+        (email,),
+    ).fetchall()
+    return rows
+
 
 
 def flc_disconnect(landlord_id: int, tenant_id: int) -> None:
@@ -582,20 +607,24 @@ def has_inbound_request(tenant_id: int, landlord_email: str) -> bool:
 
 
 def flc_request_connect(landlord_id: int, tenant_id: int) -> None:
-    """Landlord -> Tenant: create a pending request visible in tenant contacts."""
+    """Landlord -> Tenant: create a pending request visible in tenant contacts and in landlord Prospective list."""
+    c = get_conn()
     landlord = get_user_by_id(landlord_id)
-    if not landlord: 
+    if not landlord:
         return
-    # ensure the landlord appears in tenant's contacts
+    # ensure contact row exists for the tenant with this landlord email
     add_future_landlord_contact(tenant_id, landlord["email"])
     now = _now_iso()
-    conn.execute(
-        "UPDATE future_landlord_contacts "
-        "SET inbound_request=1, inbound_requested_at=? "
-        "WHERE tenant_id=? AND LOWER(email)=LOWER(?)",
-        (now, tenant_id, landlord["email"])
+    c.execute(
+        """
+        UPDATE future_landlord_contacts
+        SET inbound_request=1, inbound_requested_at=?
+        WHERE tenant_id=? AND LOWER(email)=LOWER(?)
+        """,
+        (now, tenant_id, landlord["email"]),
     )
-    conn.commit()
+    c.commit()
+
 
 def flc_cancel_request(landlord_id: int, tenant_id: int) -> None:
     """Landlord cancels a pending request."""
@@ -3262,66 +3291,173 @@ def landlord_dashboard():
 
     # === Prospective tenants who listed this landlord ===
     # === Prospective Tenants (Listed You as Future Landlord) ===
-    st.subheader(tr('Prospective Tenants (Listed You as Future Landlord)'))
+    # st.subheader(tr('Prospective Tenants (Listed You as Future Landlord)'))
+    
+    # --- Prospective Tenants (landlord view): iterate list and render actions ---
+
+    st.subheader(tr("Prospective Tenants"))
 
     landlord_id = st.session_state.user["id"]
-    prospects = list_prospective_tenants(landlord_email)
+    landlord_email = st.session_state.user["email"].lower()
 
-    if not prospects:
-        st.info(tr('No tenants have listed you as a future landlord yet.'))
+    # This must return: [(tenant_id, invited, invited_at, inbound_request, inbound_requested_at), ...]
+    rows = flc_list_prospective_for_landlord(landlord_id)
+
+    if not rows:
+        st.caption(tr("No prospective tenants yet."))
     else:
-        for (tid, tname, temail, updated_at) in prospects:
-            status = flc_get_status(landlord_id, tid)  # None | 'connected' | 'rejected'
-
-            # Hide fully rejected
-            if status == "rejected":
-                continue
+        for (tid, invited, invited_at, inbound_request, inbound_requested_at) in rows:
+            # Gather a bit of display info about the tenant (best-effort)
+            tenant_user = get_user_by_id(tid)
+            tenant_name = (tenant_user.get("name") or "").strip() if tenant_user else ""
+            tenant_email = (tenant_user.get("email") or "").strip() if tenant_user else ""
 
             with st.container(border=True):
-                # Header
-                h1, h2, h3 = st.columns([4, 2, 4])
-                h1.markdown(f"**{tname}** · {temail}")
+                top = st.columns([5, 3, 4])
 
-                # Status & actions
+                # Left: identity
+                title = tenant_name or tenant_email or f"Tenant #{tid}"
+                subtitle_bits = []
+                if tenant_email:
+                    subtitle_bits.append(tenant_email)
+                if invited and invited_at:
+                    subtitle_bits.append(tr("Invited on") + f" {invited_at}")
+                if inbound_request and inbound_requested_at:
+                    subtitle_bits.append(tr("Requested on") + f" {inbound_requested_at}")
+                subtitle = " · ".join(b for b in subtitle_bits if b)
+
+                top[0].markdown(f"**{title}**")
+                if subtitle:
+                    top[0].caption(subtitle)
+
+                # Determine connection status in the canonical table
+                try:
+                    status = flc_get_status(landlord_id, tid)  # 'connected' | 'rejected' | None
+                except Exception:
+                    status = None
+
+                # Middle: status badge
                 if status == "connected":
-                    h2.success(tr("Connected"))
-                    if h3.button(tr("Disconnect"), key=f"flc_disc_prospect_{tid}"):
+                    top[1].success(tr("Connected"))
+                elif status == "rejected":
+                    top[1].error(tr("Rejected"))
+                else:
+                    # Pending; differentiate origin by inbound_request flag
+                    top[1].info(tr("Pending") + (" · " + (tr("You requested") if inbound_request else tr("Tenant listed you"))) )
+
+                # Right: actions
+                # Connected -> offer Disconnect
+                if status == "connected":
+                    if top[2].button(tr("Disconnect"), key=f"prospect_disconnect_{tid}"):
                         flc_disconnect(landlord_id, tid)
-                        clear_tenant_future_landlord(tid, landlord_email)
                         try:
                             st.cache_data.clear()
                         except Exception:
                             pass
                         st.warning(tr("Disconnected."))
                         st.rerun()
-                # pending
-                else:  # Pending
-                    pending_outbound = has_inbound_request(tid, landlord_email)
-                    if pending_outbound:
-                        h2.info(tr("Pending"))
-                        if h3.button(tr("Cancel request"), key=f"flc_cancel_{tid}"):
+
+                # Rejected -> no actions (could offer 'Remove' if you maintain a separate list)
+                elif status == "rejected":
+                    # (Optional) show a subtle caption
+                    top[2].caption(tr("No actions available"))
+
+                # Pending
+                else:
+                    # Landlord-origin pending: show Cancel request
+                    if inbound_request:
+                        if top[2].button(tr("Cancel request"), key=f"prospect_cancel_{tid}"):
                             flc_cancel_request(landlord_id, tid)
-                            try: st.cache_data.clear()
-                            except Exception: pass
+                            try:
+                                st.cache_data.clear()
+                            except Exception:
+                                pass
                             st.info(tr("Request cancelled."))
                             st.rerun()
+                    # Tenant-origin pending: show Connect / Reject
                     else:
-                        # Pending because tenant listed you -> you can connect or reject
-                        h2.info(tr("Pending"))
-                        c1, c2 = h3.columns(2)
-                        if c1.button(tr("Connect"), key=f"flc_conn_{tid}"):
+                        c1, c2 = top[2].columns(2)
+                        if c1.button(tr("Connect"), key=f"prospect_connect_{tid}"):
                             flc_connect(landlord_id, tid)
-                            try: st.cache_data.clear()
-                            except Exception: pass
+                            try:
+                                st.cache_data.clear()
+                            except Exception:
+                                pass
                             st.success(tr("Connected."))
                             st.rerun()
-                        if c2.button(tr("Reject"), key=f"flc_rej_{tid}"):
+                        if c2.button(tr("Reject"), key=f"prospect_reject_{tid}"):
                             flc_reject(landlord_id, tid)
-                            clear_tenant_future_landlord(tid, landlord_email)
-                            try: st.cache_data.clear()
-                            except Exception: pass
+                            # If you have a helper to clear the tenant's contact row, call it:
+                            try:
+                                clear_tenant_future_landlord(tid, landlord_email)  # optional, if defined in your codebase
+                            except Exception:
+                                pass
+                            try:
+                                st.cache_data.clear()
+                            except Exception:
+                                pass
                             st.info(tr("Rejected."))
                             st.rerun()
+
+
+    # landlord_id = st.session_state.user["id"]
+    # prospects = list_prospective_tenants(landlord_email)
+
+    # if not prospects:
+    #     st.info(tr('No tenants have listed you as a future landlord yet.'))
+    # else:
+    #     for (tid, tname, temail, updated_at) in prospects:
+    #         status = flc_get_status(landlord_id, tid)  # None | 'connected' | 'rejected'
+
+    #         # Hide fully rejected
+    #         if status == "rejected":
+    #             continue
+
+    #         with st.container(border=True):
+    #             # Header
+    #             h1, h2, h3 = st.columns([4, 2, 4])
+    #             h1.markdown(f"**{tname}** · {temail}")
+
+    #             # Status & actions
+    #             if status == "connected":
+    #                 h2.success(tr("Connected"))
+    #                 if h3.button(tr("Disconnect"), key=f"flc_disc_prospect_{tid}"):
+    #                     flc_disconnect(landlord_id, tid)
+    #                     clear_tenant_future_landlord(tid, landlord_email)
+    #                     try:
+    #                         st.cache_data.clear()
+    #                     except Exception:
+    #                         pass
+    #                     st.warning(tr("Disconnected."))
+    #                     st.rerun()
+    #             # pending
+    #             else:  # Pending
+    #                 pending_outbound = has_inbound_request(tid, landlord_email)
+    #                 if pending_outbound:
+    #                     h2.info(tr("Pending"))
+    #                     if h3.button(tr("Cancel request"), key=f"flc_cancel_{tid}"):
+    #                         flc_cancel_request(landlord_id, tid)
+    #                         try: st.cache_data.clear()
+    #                         except Exception: pass
+    #                         st.info(tr("Request cancelled."))
+    #                         st.rerun()
+    #                 else:
+    #                     # Pending because tenant listed you -> you can connect or reject
+    #                     h2.info(tr("Pending"))
+    #                     c1, c2 = h3.columns(2)
+    #                     if c1.button(tr("Connect"), key=f"flc_conn_{tid}"):
+    #                         flc_connect(landlord_id, tid)
+    #                         try: st.cache_data.clear()
+    #                         except Exception: pass
+    #                         st.success(tr("Connected."))
+    #                         st.rerun()
+    #                     if c2.button(tr("Reject"), key=f"flc_rej_{tid}"):
+    #                         flc_reject(landlord_id, tid)
+    #                         clear_tenant_future_landlord(tid, landlord_email)
+    #                         try: st.cache_data.clear()
+    #                         except Exception: pass
+    #                         st.info(tr("Rejected."))
+    #                         st.rerun()
 
 
                 # else:  # Pending
@@ -3484,6 +3620,8 @@ def landlord_dashboard():
 
                         try:
                             status = flc_get_status(landlord_id, tenant_id)  # 'connected' | 'rejected' | None
+                            if status in ("connected", "rejected"):
+                                continue
                         except Exception:
                             status = None
 
@@ -3504,6 +3642,21 @@ def landlord_dashboard():
                                     try: st.cache_data.clear()
                                     except Exception: pass
                                     st.rerun()
+
+                            # pending_outbound = has_inbound_request(tenant_id, landlord_email)
+                            # if pending_outbound:
+                            #     top[2].markdown(tr("Pending"))
+                            #     if top[2].button(tr("Cancel request"), key=f"otr_cancel_{tenant_id}"):
+                            #         flc_cancel_request(landlord_id, tenant_id)
+                            #         try: st.cache_data.clear()
+                            #         except Exception: pass
+                            #         st.rerun()
+                            # else:
+                            #     if top[2].button(tr("Ask to connect"), key=f"otr_req_{tenant_id}"):
+                            #         flc_request_connect(landlord_id, tenant_id)
+                            #         try: st.cache_data.clear()
+                            #         except Exception: pass
+                            #         st.rerun()
 
                         # landlord_id = st.session_state.user["id"]
                         # try:
