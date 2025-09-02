@@ -302,23 +302,29 @@ def flc_get_status(landlord_id: int, tenant_id: int) -> str | None:
 
 def flc_list_inbound_for_tenant(tenant_id: int):
     """
-    Landlords who reached out to this tenant (any status).
-    Returns rows with landlord info + status, newest first.
+    Returns rows of (contact_id, landlord_email, inbound_requested_at)
+    for landlord-initiated pending requests targeting this tenant.
     """
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT
-            u.id          AS landlord_id,
-            u.name        AS landlord_name,
-            u.email       AS landlord_email,
-            f.status      AS status,
-            f.updated_at  AS updated_at
-        FROM flc f
-        JOIN users u ON u.id = f.landlord_id
-        WHERE f.tenant_id = :tid
-        ORDER BY f.updated_at DESC
-    """, {"tid": tenant_id})
+    c = get_conn()
+    cur = c.cursor()
+
+    # If the column doesn't exist yet, return empty (or you could call run_migrations(c) then retry)
+    if not _table_has_column(c, "future_landlord_contacts", "inbound_request"):
+        return []
+
+    # Order so non-null timestamps appear first and most recent first
+    cur.execute(
+        """
+        SELECT id, email, inbound_requested_at
+        FROM future_landlord_contacts
+        WHERE tenant_id = ? AND inbound_request = 1
+        ORDER BY (inbound_requested_at IS NULL) ASC,
+                 inbound_requested_at DESC
+        """,
+        (tenant_id,),
+    )
     return cur.fetchall()
+
 
 
 # 3) One status→label mapper (keep raw DB values in English)
@@ -565,11 +571,15 @@ def flc_list_connected(landlord_id: int):
     return conn.execute(sql, (landlord_id,)).fetchall()
 
 def has_inbound_request(tenant_id: int, landlord_email: str) -> bool:
-    row = conn.execute(
+    c = get_conn()
+    if not _table_has_column(c, "future_landlord_contacts", "inbound_request"):
+        return False
+    row = c.execute(
         "SELECT inbound_request FROM future_landlord_contacts WHERE tenant_id=? AND LOWER(email)=LOWER(?)",
         (tenant_id, landlord_email)
     ).fetchone()
     return bool(row and row[0])
+
 
 def flc_request_connect(landlord_id: int, tenant_id: int) -> None:
     """Landlord -> Tenant: create a pending request visible in tenant contacts."""
@@ -883,6 +893,9 @@ def run_migrations(conn):
     add_column_if_missing(conn, "future_landlord_contacts", "inbound_request INTEGER NOT NULL DEFAULT 0")
     add_column_if_missing(conn, "future_landlord_contacts", "inbound_requested_at TEXT")
 
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_flc_tenant_email ON future_landlord_contacts(tenant_id, email)")
+    conn.commit()
+
 
     # Landlord ↔ Tenant connections (for “future landlord” flow)
     conn.execute("""
@@ -1055,13 +1068,35 @@ def add_future_landlord_contact(tenant_id: int, email: str):
 
 
 def list_future_landlord_contacts(tenant_id: int):
-    cur = get_conn().cursor()
-    cur.execute(
-        "SELECT id, email, created_at, invited, invited_at, inbound_request, inbound_requested_at "
-        "FROM future_landlord_contacts WHERE tenant_id = ? ORDER BY id DESC",
-        (tenant_id,),
-    )
-    return cur.fetchall()
+    c = get_conn()
+    cur = c.cursor()
+    has_inbound = _table_has_column(c, "future_landlord_contacts", "inbound_request")
+
+    if has_inbound:
+        cur.execute(
+            """
+            SELECT id, email, created_at, invited, invited_at, inbound_request, inbound_requested_at
+            FROM future_landlord_contacts
+            WHERE tenant_id = ?
+            ORDER BY id DESC
+            """,
+            (tenant_id,),
+        )
+        return cur.fetchall()
+    else:
+        # Old DBs: fabricate the last 2 columns so the UI code keeps working
+        cur.execute(
+            """
+            SELECT id, email, created_at, invited, invited_at
+            FROM future_landlord_contacts
+            WHERE tenant_id = ?
+            ORDER BY id DESC
+            """,
+            (tenant_id,),
+        )
+        base = cur.fetchall()
+        return [(id_, em, cr, inv, inv_at, 0, None) for (id_, em, cr, inv, inv_at) in base]
+
 
 def remove_future_landlord_contact(contact_id: int, tenant_id: int):
     cur = get_conn().cursor()
@@ -2008,6 +2043,9 @@ def list_prospective_tenants(landlord_email: str):
     )
     return cur.fetchall()
 
+def _table_has_column(conn, table: str, column: str) -> bool:
+    cur = conn.execute(f"PRAGMA table_info({table})")
+    return any(row[1].lower() == column.lower() for row in cur.fetchall())
 
 #     pl.afm AS prev_afm,
 def list_latest_references_for_tenant(tenant_id: int):
