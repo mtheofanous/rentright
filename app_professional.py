@@ -253,33 +253,45 @@ def tr(s: str) -> str:
 
 # === Label & status helpers (i18n-friendly) ===
 
+def _to_bool(v):
+    """Convert DB values like 1/0, '1'/'0', 'true'/'false' to Python bool or None."""
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return bool(int(v))
+    if isinstance(v, str):
+        s = v.strip().lower()
+        if s in {"1", "true", "yes", "y", "t"}:
+            return True
+        if s in {"0", "false", "no", "n", "f"}:
+            return False
+        return None
+    # Fallback: Python truthiness, but only for known-ish types
+    try:
+        return bool(v)
+    except Exception:
+        return None
+
+def _yn(v):
+    """Pretty-print Yes/No for booleans; handle None as '—'."""
+    b = _to_bool(v)
+    if b is None:
+        return "—"
+    return tr("Yes") if b else tr("No")
+
+
 def quick_reference_summary(tenant_id: int):
     """
-    Compact reference summary for search results.
-
-    Returns:
-      {
-        "have": bool,            # any non-cancelled references exist
-        "total": int,            # count of non-cancelled refs
-        "latest_status": str|None,
-        "latest_score": float|None,  # only if latest is completed
-        "avg_score": float|None,     # average over completed refs, if any
-        "completed_count": int,
-        "latest_answers": {          # only when latest is 'completed'
-            "paid_on_time": bool|None,
-            "utilities_unpaid": bool|None,
-            "good_condition": bool|None,
-            "comments": str|None,
-            "prev_email": str|None,
-        } | None
-      }
+    Returns compact info for search cards + normalized answers for latest completed ref.
     """
     try:
         refs = list_latest_references_for_tenant_dict(tenant_id) or []
     except Exception:
         refs = []
 
-    # ignore cancelled refs
+    # Ignore cancelled refs
     refs = [r for r in refs if (r.get("status") or "").lower() != "cancelled"]
 
     if not refs:
@@ -302,11 +314,11 @@ def quick_reference_summary(tenant_id: int):
     latest_answers = None
     if latest_is_completed:
         latest_answers = {
-            "paid_on_time": latest.get("paid_on_time"),
-            "utilities_unpaid": latest.get("utilities_unpaid"),
-            "good_condition": latest.get("good_condition"),
-            "comments": latest.get("comments"),
-            "prev_email": latest.get("prev_email"),
+            "paid_on_time":     _to_bool(latest.get("paid_on_time")),
+            "utilities_unpaid": _to_bool(latest.get("utilities_unpaid")),
+            "good_condition":   _to_bool(latest.get("good_condition")),
+            "comments":         latest.get("comments"),
+            "prev_email":       latest.get("prev_email"),
         }
 
     return {
@@ -318,6 +330,9 @@ def quick_reference_summary(tenant_id: int):
         "completed_count": len(completed),
         "latest_answers": latest_answers,
     }
+
+
+
 
 def _yn(val):
     if val is True:  return tr("Yes")
@@ -3823,10 +3838,13 @@ def landlord_dashboard():
                             )
 
                             # If connected, show latest completed answers inline
+                            # ref = quick_reference_summary(tenant_id)
+                            # status_label computed earlier via flc_relation_status(...)
+
                             if status_label == "connected" and ref["latest_answers"]:
                                 ans = ref["latest_answers"]
                                 prev_from = ans.get("prev_email") or "—"
-                                comments  = _truncate(ans.get("comments"), 180) if ' _truncate' in globals() else ans.get("comments")
+                                comments  = ans.get("comments")
                                 with st.expander(tr("Latest reference answers"), expanded=False):
                                     st.write(
                                         f"- {tr('From previous landlord')}: **{prev_from}**  \n"
@@ -3837,6 +3855,7 @@ def landlord_dashboard():
                                     if comments:
                                         st.markdown(f"- {md_label('Comments:')}")
                                         st.write(comments)
+
                             elif status_label != "connected":
                                 # keep privacy consistent with your dashboard: details only after connect
                                 st.caption(f"🔒 {tr('Connect to view full answers')}")
