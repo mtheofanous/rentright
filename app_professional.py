@@ -551,24 +551,30 @@ def flc_list_prospective_for_landlord(landlord_id: int):
     Returns rows of tenants that are either:
       - tenant-origin pending/invited (invited=1), or
       - landlord-origin pending (inbound_request=1).
+    Output: [(tenant_id, invited, invited_at, inbound_request, inbound_requested_at)]
     """
     c = get_conn()
     landlord = get_user_by_id(landlord_id)
     if not landlord:
         return []
-    email = landlord["email"].lower()
 
-    # Note: we include both invited=1 and inbound_request=1
+    email = (landlord.get("email") or "").strip().lower()
+    if not email:
+        return []
+
+    # Include BOTH signals: invited=1 (tenant-origin) OR inbound_request=1 (landlord-origin)
     rows = c.execute(
         """
         SELECT c.tenant_id, c.invited, c.invited_at, c.inbound_request, c.inbound_requested_at
-        FROM future_landlord_contacts c
-        WHERE LOWER(c.email)=? AND (c.invited=1 OR c.inbound_request=1)
+        FROM future_landlord_contacts AS c
+        WHERE LOWER(c.email) = ? AND (c.invited = 1 OR c.inbound_request = 1)
         ORDER BY COALESCE(c.inbound_requested_at, c.invited_at) DESC
         """,
         (email,),
     ).fetchall()
-    return rows
+
+    return rows or []
+
 
 
 
@@ -3333,308 +3339,132 @@ def tenant_dashboard():
 
 
 # ---------- Landlord Dashboard (enhanced) ----------
-
 def landlord_dashboard():
-    col_h1, col_h2, col_h3 = st.columns([4,1,2])
-    with col_h1: st.header(tr('Landlord Dashboard'))
+    # --- Header ---
+    col_h1, col_h2, col_h3 = st.columns([4, 1, 2])
+    with col_h1:
+        st.header(tr("Landlord Dashboard"))
     with col_h2:
         if st.button("🔄", key="landlord_refresh"):
             st.rerun()
-    with col_h3: logout_button()
-    
-    landlord_email = st.session_state.user["email"]
-    st.caption(f"Logged in as {landlord_email}")
-
-    # === Prospective tenants who listed this landlord ===
-    # === Prospective Tenants (Listed You as Future Landlord) ===
-    # st.subheader(tr('Prospective Tenants (Listed You as Future Landlord)'))
-    
-    # --- Prospective Tenants (landlord view) ---
-
-    st.subheader(tr("Prospective Tenants"))
+    with col_h3:
+        logout_button()
 
     landlord_id = st.session_state.user["id"]
-    landlord_email = st.session_state.user["email"].lower()
+    landlord_email = (st.session_state.user.get("email") or "").strip().lower()
+    st.caption(f"{tr('Logged in as')} {landlord_email}")
 
-    rows = flc_list_prospective_for_landlord(landlord_id)
+    # =============================================================================
+    # Prospective Tenants (landlord view)
+    # =============================================================================
+    st.subheader(tr("Prospective Tenants"))
+
+    # unique namespace for widget keys in this section
+    NSP = "prospects"
+    def pk(tid: int, name: str) -> str:
+        return f"{NSP}:{name}:{tid}"
+
+    rows = flc_list_prospective_for_landlord(landlord_id)  # must include invited=1 OR inbound_request=1
 
     if not rows:
         st.caption(tr("No prospective tenants yet."))
     else:
         for (tid, invited, invited_at, inbound_request, inbound_requested_at) in rows:
-            tenant_user = get_user_by_id(tid)
-            tenant_name = (tenant_user.get("name") or "").strip() if tenant_user else ""
-            tenant_email = (tenant_user.get("email") or "").strip() if tenant_user else ""
+            tenant_user = get_user_by_id(tid) or {}
+            tenant_name = (tenant_user.get("name") or "").strip()
+            tenant_email = (tenant_user.get("email") or "").strip()
 
             with st.container(border=True):
                 top = st.columns([5, 3, 4])
 
+                # Left: identity + meta
                 title = tenant_name or tenant_email or f"Tenant #{tid}"
-                subtitle_bits = []
+                meta = []
                 if tenant_email:
-                    subtitle_bits.append(tenant_email)
+                    meta.append(tenant_email)
                 if invited and invited_at:
-                    subtitle_bits.append(tr("Invited on") + f" {invited_at}")
+                    meta.append(tr("Invited on") + f" {invited_at}")
                 if inbound_request and inbound_requested_at:
-                    subtitle_bits.append(tr("Requested on") + f" {inbound_requested_at}")
-                subtitle = " · ".join(b for b in subtitle_bits if b)
+                    meta.append(tr("Requested on") + f" {inbound_requested_at}")
+                subtitle = " · ".join(meta)
 
                 top[0].markdown(f"**{title}**")
                 if subtitle:
                     top[0].caption(subtitle)
 
-                status = flc_get_status(landlord_id, tid)  # 'connected'|'rejected'|None
+                # Canonical connection status
+                try:
+                    status = flc_get_status(landlord_id, tid)  # 'connected' | 'rejected' | None
+                except Exception:
+                    status = None
 
+                # Middle: status badge
                 if status == "connected":
                     top[1].success(tr("Connected"))
-                    if top[2].button(tr("Disconnect"), key=f"prospect_disconnect_{tid}"):
+                elif status == "rejected":
+                    top[1].error(tr("Rejected"))
+                else:
+                    origin = tr("You requested") if inbound_request else tr("Tenant listed you")
+                    top[1].info(tr("Pending") + f" · {origin}")
+
+                # Right: actions
+                if status == "connected":
+                    if top[2].button(tr("Disconnect"), key=pk(tid, "disconnect")):
                         flc_disconnect(landlord_id, tid)
-                        try: st.cache_data.clear()
-                        except Exception: pass
+                        try:
+                            st.cache_data.clear()
+                        except Exception:
+                            pass
                         st.warning(tr("Disconnected."))
                         st.rerun()
 
                 elif status == "rejected":
-                    top[1].error(tr("Rejected"))
                     top[2].caption(tr("No actions available"))
 
                 else:
                     # Pending
-                    top[1].info(tr("Pending") + (" · " + (tr("You requested") if inbound_request else tr("Tenant listed you"))))
                     if inbound_request:
-                        if top[2].button(tr("Cancel request"), key=f"prospect_cancel_{tid}"):
+                        # landlord-origin -> only allow cancel
+                        if top[2].button(tr("Cancel request"), key=pk(tid, "cancel_request")):
                             flc_cancel_request(landlord_id, tid)
-                            try: st.cache_data.clear()
-                            except Exception: pass
+                            try:
+                                st.cache_data.clear()
+                            except Exception:
+                                pass
                             st.info(tr("Request cancelled."))
                             st.rerun()
                     else:
+                        # tenant-origin -> allow connect / reject
                         c1, c2 = top[2].columns(2)
-                        if c1.button(tr("Connect"), key=f"prospect_connect_{tid}"):
+                        if c1.button(tr("Connect"), key=pk(tid, "connect")):
                             flc_connect(landlord_id, tid)
-                            try: st.cache_data.clear()
-                            except Exception: pass
+                            try:
+                                st.cache_data.clear()
+                            except Exception:
+                                pass
                             st.success(tr("Connected."))
                             st.rerun()
-                        if c2.button(tr("Reject"), key=f"prospect_reject_{tid}"):
+                        if c2.button(tr("Reject"), key=pk(tid, "reject")):
                             flc_reject(landlord_id, tid)
-                            try: st.cache_data.clear()
-                            except Exception: pass
+                            try:
+                                st.cache_data.clear()
+                            except Exception:
+                                pass
                             st.info(tr("Rejected."))
                             st.rerun()
 
-
-    # landlord_id = st.session_state.user["id"]
-    # landlord_email = st.session_state.user["email"].lower()
-
-    # # This must return: [(tenant_id, invited, invited_at, inbound_request, inbound_requested_at), ...]
-    # rows = flc_list_prospective_for_landlord(landlord_id)
-
-    # if not rows:
-    #     st.caption(tr("No prospective tenants yet."))
-    # else:
-    #     for (tid, invited, invited_at, inbound_request, inbound_requested_at) in rows:
-    #         # Gather a bit of display info about the tenant (best-effort)
-    #         tenant_user = get_user_by_id(tid)
-    #         tenant_name = (tenant_user.get("name") or "").strip() if tenant_user else ""
-    #         tenant_email = (tenant_user.get("email") or "").strip() if tenant_user else ""
-
-    #         with st.container(border=True):
-    #             top = st.columns([5, 3, 4])
-
-    #             # Left: identity
-    #             title = tenant_name or tenant_email or f"Tenant #{tid}"
-    #             subtitle_bits = []
-    #             if tenant_email:
-    #                 subtitle_bits.append(tenant_email)
-    #             if invited and invited_at:
-    #                 subtitle_bits.append(tr("Invited on") + f" {invited_at}")
-    #             if inbound_request and inbound_requested_at:
-    #                 subtitle_bits.append(tr("Requested on") + f" {inbound_requested_at}")
-    #             subtitle = " · ".join(b for b in subtitle_bits if b)
-
-    #             top[0].markdown(f"**{title}**")
-    #             if subtitle:
-    #                 top[0].caption(subtitle)
-
-    #             # Determine connection status in the canonical table
-    #             try:
-    #                 status = flc_get_status(landlord_id, tid)  # 'connected' | 'rejected' | None
-    #             except Exception:
-    #                 status = None
-
-    #             # Middle: status badge
-    #             if status == "connected":
-    #                 top[1].success(tr("Connected"))
-    #             elif status == "rejected":
-    #                 top[1].error(tr("Rejected"))
-    #             else:
-    #                 # Pending; differentiate origin by inbound_request flag
-    #                 top[1].info(tr("Pending") + (" · " + (tr("You requested") if inbound_request else tr("Tenant listed you"))) )
-
-    #             # Right: actions
-    #             # Connected -> offer Disconnect
-    #             if status == "connected":
-    #                 if top[2].button(tr("Disconnect"), key=f"prospect_disconnect_{tid}"):
-    #                     flc_disconnect(landlord_id, tid)
-    #                     try:
-    #                         st.cache_data.clear()
-    #                     except Exception:
-    #                         pass
-    #                     st.warning(tr("Disconnected."))
-    #                     st.rerun()
-
-    #             # Rejected -> no actions (could offer 'Remove' if you maintain a separate list)
-    #             elif status == "rejected":
-    #                 # (Optional) show a subtle caption
-    #                 top[2].caption(tr("No actions available"))
-
-    #             # Pending
-    #             else:
-    #                 # Landlord-origin pending: show Cancel request
-    #                 if inbound_request:
-    #                     if top[2].button(tr("Cancel request"), key=f"prospect_cancel_{tid}"):
-    #                         flc_cancel_request(landlord_id, tid)
-    #                         try:
-    #                             st.cache_data.clear()
-    #                         except Exception:
-    #                             pass
-    #                         st.info(tr("Request cancelled."))
-    #                         st.rerun()
-    #                 # Tenant-origin pending: show Connect / Reject
-    #                 else:
-    #                     c1, c2 = top[2].columns(2)
-    #                     if c1.button(tr("Connect"), key=f"prospect_connect_{tid}"):
-    #                         flc_connect(landlord_id, tid)
-    #                         try:
-    #                             st.cache_data.clear()
-    #                         except Exception:
-    #                             pass
-    #                         st.success(tr("Connected."))
-    #                         st.rerun()
-    #                     if c2.button(tr("Reject"), key=f"prospect_reject_{tid}"):
-    #                         flc_reject(landlord_id, tid)
-    #                         # If you have a helper to clear the tenant's contact row, call it:
-    #                         try:
-    #                             clear_tenant_future_landlord(tid, landlord_email)  # optional, if defined in your codebase
-    #                         except Exception:
-    #                             pass
-    #                         try:
-    #                             st.cache_data.clear()
-    #                         except Exception:
-    #                             pass
-    #                         st.info(tr("Rejected."))
-    #                         st.rerun()
-
-
-    # landlord_id = st.session_state.user["id"]
-    # prospects = list_prospective_tenants(landlord_email)
-
-    # if not prospects:
-    #     st.info(tr('No tenants have listed you as a future landlord yet.'))
-    # else:
-    #     for (tid, tname, temail, updated_at) in prospects:
-    #         status = flc_get_status(landlord_id, tid)  # None | 'connected' | 'rejected'
-
-    #         # Hide fully rejected
-    #         if status == "rejected":
-    #             continue
-
-    #         with st.container(border=True):
-    #             # Header
-    #             h1, h2, h3 = st.columns([4, 2, 4])
-    #             h1.markdown(f"**{tname}** · {temail}")
-
-    #             # Status & actions
-    #             if status == "connected":
-    #                 h2.success(tr("Connected"))
-    #                 if h3.button(tr("Disconnect"), key=f"flc_disc_prospect_{tid}"):
-    #                     flc_disconnect(landlord_id, tid)
-    #                     clear_tenant_future_landlord(tid, landlord_email)
-    #                     try:
-    #                         st.cache_data.clear()
-    #                     except Exception:
-    #                         pass
-    #                     st.warning(tr("Disconnected."))
-    #                     st.rerun()
-    #             # pending
-    #             else:  # Pending
-    #                 pending_outbound = has_inbound_request(tid, landlord_email)
-    #                 if pending_outbound:
-    #                     h2.info(tr("Pending"))
-    #                     if h3.button(tr("Cancel request"), key=f"flc_cancel_{tid}"):
-    #                         flc_cancel_request(landlord_id, tid)
-    #                         try: st.cache_data.clear()
-    #                         except Exception: pass
-    #                         st.info(tr("Request cancelled."))
-    #                         st.rerun()
-    #                 else:
-    #                     # Pending because tenant listed you -> you can connect or reject
-    #                     h2.info(tr("Pending"))
-    #                     c1, c2 = h3.columns(2)
-    #                     if c1.button(tr("Connect"), key=f"flc_conn_{tid}"):
-    #                         flc_connect(landlord_id, tid)
-    #                         try: st.cache_data.clear()
-    #                         except Exception: pass
-    #                         st.success(tr("Connected."))
-    #                         st.rerun()
-    #                     if c2.button(tr("Reject"), key=f"flc_rej_{tid}"):
-    #                         flc_reject(landlord_id, tid)
-    #                         clear_tenant_future_landlord(tid, landlord_email)
-    #                         try: st.cache_data.clear()
-    #                         except Exception: pass
-    #                         st.info(tr("Rejected."))
-    #                         st.rerun()
-
-
-                # else:  # Pending
-                #     h2.info(tr("Pending"))
-                #     c1, c2 = h3.columns(2)
-                #     if c1.button(tr("Connect"), key=f"flc_conn_{tid}"):
-                #         flc_connect(landlord_id, tid)
-                #         try:
-                #             st.cache_data.clear()
-                #         except Exception:
-                #             pass
-                #         st.success(tr("Connected."))
-                #         st.rerun()
-                #     if c2.button(tr("Reject"), key=f"flc_rej_{tid}"):
-                #         flc_reject(landlord_id, tid)
-                #         clear_tenant_future_landlord(tid, landlord_email)
-                #         try:
-                #             st.cache_data.clear()
-                #         except Exception:
-                #             pass
-                #         st.info(tr("Rejected."))
-                #         st.rerun()
-
-                # --- References summary (always visible) ---
+                # --- References summary / details ---
                 refs_latest = list_latest_references_for_tenant(tid) or []
-                # Count completed & average score (completed only)
                 completed_scores = []
                 for r in refs_latest:
                     stt = r[6]   # 'status'
-                    sc  = r[7]   # 'score'
+                    sc = r[7]    # 'score'
                     if stt == "completed" and sc is not None:
                         completed_scores.append(sc)
 
-                total_refs = len(refs_latest)
-                completed_count = len(completed_scores)
-                if total_refs == 0:
-                    st.caption(tr("No references on file yet."))
-                # else:
-                #     # small summary line
-                #     if completed_count > 0:
-                #         avg_score = sum(completed_scores) / completed_count
-                #         st.caption(f"{tr('References on file')}: {total_refs} · {tr('Completed')}: {completed_count} · {tr('Average score')}: {avg_score:.1f}/10")
-                #     else:
-                #         st.caption(f"{tr('References on file')}: {total_refs} · {tr('Completed')}: 0")
-
-                # --- Reference DETAILS (visible only when connected) ---
                 if status == "connected":
                     refs = list_latest_references_for_tenant_dict(tid) or []
                     refs = [r for r in refs if (r.get("status") is None) or (str(r.get("status")).lower() != "cancelled")]
-
                     if refs:
                         for r in refs:
                             prev_email = r.get("prev_email") or "—"
@@ -3657,10 +3487,11 @@ def landlord_dashboard():
                     else:
                         st.caption(tr("No previous landlords added yet."))
                 else:
-                    # Not connected: don’t show details
                     st.caption(tr("Reference details are visible after you connect."))
 
-        # === Find Tenants (Open to Rent) ===
+    # =============================================================================
+    # Find Tenants (Open to Rent)
+    # =============================================================================
     st.subheader(tr("Find Tenants (Open to Rent)"))
 
     with st.container(border=True):
@@ -3672,68 +3503,55 @@ def landlord_dashboard():
                 key="otr_q",
             )
         with c2:
-            limit = st.number_input("Max results", 1, 500, 100, key="otr_limit")
-            
+            limit = st.number_input(tr("Max results"), 1, 500, 100, key="otr_limit")
+
         with st.expander(tr("Filters (based on tenants' preferences)"), True):
             # Location pickers (Region → Regional Unit → Municipality)
             lc1, lc2, lc3 = st.columns(3)
-            with lc1:  # Region
+            with lc1:
                 region, regional_unit, municipality = greece_location_pickers(prefix="otr")
+            city = municipality            # Municipality (Dimos)
+            district = regional_unit       # Regional Unit (Perifereiaki Enotita)
 
-            # Map to your search fields:
-            #   city     = Municipality (Dimos)
-            #   district = Regional Unit (Perifereiaki Enotita)
-            city = municipality
-            district = regional_unit
-
-            # Ranges (unchanged)
+            # Ranges
             r1c1, r1c2 = st.columns(2)
-            size_min = r1c1.number_input(tr("Min size (m²)"), min_value=0, max_value=10000, value=0, step=1, key="otr_size_min")
-            size_max = r1c2.number_input(tr("Max size (m²)"), min_value=0, max_value=10000, value=0, step=1, key="otr_size_max")
-            size_min = size_min or None
-            size_max = size_max or None
+            size_min = r1c1.number_input(tr("Min size (m²)"), min_value=0, max_value=10000, value=0, step=1, key="otr_size_min") or None
+            size_max = r1c2.number_input(tr("Max size (m²)"), min_value=0, max_value=10000, value=0, step=1, key="otr_size_max") or None
 
             r2c1, r2c2 = st.columns(2)
-            rooms_min = r2c1.number_input(tr("Min rooms"), min_value=0, max_value=50, value=0, step=1, key="otr_rooms_min")
-            rooms_max = r2c2.number_input(tr("Max rooms"), min_value=0, max_value=50, value=0, step=1, key="otr_rooms_max")
-            rooms_min = rooms_min or None
-            rooms_max = rooms_max or None
+            rooms_min = r2c1.number_input(tr("Min rooms"), min_value=0, max_value=50, value=0, step=1, key="otr_rooms_min") or None
+            rooms_max = r2c2.number_input(tr("Max rooms"), min_value=0, max_value=50, value=0, step=1, key="otr_rooms_max") or None
 
             r3c1, r3c2 = st.columns(2)
-            floor_min = r3c1.number_input(tr("Min floor"), min_value=-5, max_value=100, value=0, step=1, key="otr_floor_min")
-            floor_max = r3c2.number_input(tr("Max floor"), min_value=-5, max_value=100, value=0, step=1, key="otr_floor_max")
-            floor_min = floor_min if floor_min != 0 else None
-            floor_max = floor_max if floor_max != 0 else None
+            floor_min_val = r3c1.number_input(tr("Min floor"), min_value=-5, max_value=100, value=0, step=1, key="otr_floor_min")
+            floor_max_val = r3c2.number_input(tr("Max floor"), min_value=-5, max_value=100, value=0, step=1, key="otr_floor_max")
+            floor_min = floor_min_val if floor_min_val != 0 else None
+            floor_max = floor_max_val if floor_max_val != 0 else None
 
             r4c1, r4c2 = st.columns(2)
-            price_min = r4c1.number_input(tr("Min price (€)"), min_value=0, max_value=1_000_000, value=0, step=50, key="otr_price_min")
-            price_max = r4c2.number_input(tr("Max price (€)"), min_value=0, max_value=1_000_000, value=0, step=50, key="otr_price_max")
-            price_min = price_min or None
-            price_max = price_max or None
+            price_min = r4c1.number_input(tr("Min price (€)"), min_value=0, max_value=1_000_000, value=0, step=50, key="otr_price_min") or None
+            price_max = r4c2.number_input(tr("Max price (€)"), min_value=0, max_value=1_000_000, value=0, step=50, key="otr_price_max") or None
 
-        # before the Search button
-        # --- Sticky search flag (so results persist after button clicks) ---
+        # Sticky search flag so results persist after button clicks
         if "otr_do_search" not in st.session_state:
             st.session_state["otr_do_search"] = False
 
-        # Search + (optional) Reset buttons
         cbtn1, cbtn2 = st.columns([1, 1])
-        if cbtn1.button(tr("Search")):
+        if cbtn1.button(tr("Search"), key="otr_search_btn"):
             st.session_state["otr_do_search"] = True
-        if cbtn2.button(tr("Reset")):
+        if cbtn2.button(tr("Reset"), key="otr_reset_btn"):
             st.session_state["otr_do_search"] = False
             try:
                 st.cache_data.clear()
             except Exception:
                 pass
-            st.rerun()  # or st.rerun() if you're on Streamlit >=1.30
+            st.rerun()
 
-        # --- Render results when the flag is on ---
         if st.session_state["otr_do_search"]:
-            rows = search_open_to_rent_tenants(
+            results = search_open_to_rent_tenants(
                 q=q,
-                city=city,                 # Municipality (from your picker)
-                district=district,         # Regional Unit (from your picker)
+                city=city,
+                district=district,
                 size_min=size_min, size_max=size_max,
                 rooms_min=rooms_min, rooms_max=rooms_max,
                 floor_min=floor_min, floor_max=floor_max,
@@ -3741,14 +3559,11 @@ def landlord_dashboard():
                 limit=limit,
             )
 
-            if not rows:
+            if not results:
                 st.info(tr("No matching tenants found."))
             else:
-                st.caption(f"{len(rows)} {tr('result(s)')}")
-                landlord_id = st.session_state.user["id"]
-                landlord_email = st.session_state.user["email"]
-
-                for r in rows:
+                st.caption(f"{len(results)} {tr('result(s)')}")
+                for r in results:
                     (
                         tenant_id, tenant_name, tenant_email, updated_at,
                         t_city, t_district,
@@ -3767,23 +3582,23 @@ def landlord_dashboard():
                         range_bits = []
                         if t_smin or t_smax: range_bits.append(f"{tr('Size')} {t_smin or '—'}–{t_smax or '—'} m²")
                         if t_rmin or t_rmax: range_bits.append(f"{tr('Rooms')} {t_rmin or '—'}–{t_rmax or '—'}")
-                        if t_fmin or t_fmax: range_bits.append(f"{tr('Floor')} {t_fmin if t_fmin is not None else '—'}–{t_fmax if t_fmax is not None else '—'}")
+                        if t_fmin is not None or t_fmax is not None:
+                            range_bits.append(f"{tr('Floor')} {t_fmin if t_fmin is not None else '—'}–{t_fmax if t_fmax is not None else '—'}")
                         if t_pmin or t_pmax: range_bits.append(f"{tr('Price')} €{t_pmin or '—'}–€{t_pmax or '—'}")
-                        sub = " · ".join([", ".join(pref_bits)] + ([ " | ".join(range_bits) ] if range_bits else []))
+                        sub = " · ".join([", ".join(pref_bits)] + ([" | ".join(range_bits)] if range_bits else []))
                         if sub.strip(", · |"):
                             top[0].caption(sub)
                         top[1].markdown(f"{tr('Updated')}: {format_dt(updated_at)}")
 
                         # Hide only final states, not pending
                         try:
-                            status = flc_get_status(landlord_id, tenant_id)  # 'connected' | 'rejected' | None
+                            status = flc_get_status(landlord_id, tenant_id)
                         except Exception:
                             status = None
                         if status in ("connected", "rejected"):
-                            # Already resolved; skip from the "Find" list
                             continue
 
-                        # Right: outbound pending logic
+                        # Right: outbound pending logic (landlord -> tenant)
                         try:
                             pending_outbound = has_inbound_request(tenant_id, landlord_email)
                         except Exception:
@@ -3807,85 +3622,23 @@ def landlord_dashboard():
                                     pass
                                 st.rerun()
 
-        # if "otr_do_search" not in st.session_state:
-        #     st.session_state["otr_do_search"] = False
-
-        # if st.button(tr("Search")):
-        #     st.session_state["otr_do_search"] = True
-
-        # # render results whenever the flag is true
-        # if st.session_state["otr_do_search"]:
-        #     rows = search_open_to_rent_tenants(
-        #         q=q, city=city, district=district,
-        #         size_min=size_min, size_max=size_max,
-        #         rooms_min=rooms_min, rooms_max=rooms_max,
-        #         floor_min=floor_min, floor_max=floor_max,
-        #         price_min=price_min, price_max=price_max,
-        #         limit=limit,
-        #     )
-
-        #     if not rows:
-        #         st.info(tr("No matching tenants found."))
-        #     else:
-        #         st.caption(f"{len(rows)} {tr('result(s)')}")
-        #         for r in rows:
-        #             (
-        #                 tenant_id, tenant_name, tenant_email, updated_at,
-        #                 t_city, t_district,
-        #                 t_smin, t_smax, t_rmin, t_rmax, t_fmin, t_fmax, t_pmin, t_pmax
-        #             ) = r
-
-        #             with st.container(border=True):
-        #                 top = st.columns([4, 2, 2])
-        #                 top[0].markdown(f"**{tenant_name}** — {tenant_email}")
-        #                 top[1].markdown(f"{tr('Updated')}: {format_dt(updated_at)}")
-
-        #                 # --- Status / Connect ---
-        #                 landlord_id = st.session_state.user["id"]
-        #                 landlord_email = st.session_state.user["email"]  # we'll use this to detect pending
-
-        #                 try:
-        #                     status = flc_get_status(landlord_id, tenant_id)  # 'connected' | 'rejected' | None
-        #                     if status in ("connected", "rejected"):
-        #                         continue
-        #                 except Exception:
-        #                     status = None
-
-        #                 if status == "connected":
-        #                     top[2].markdown("✅ **Connected**")
-        #                 else:
-        #                     pending_outbound = has_inbound_request(tenant_id, landlord_email)
-        #                     if pending_outbound:
-        #                         top[2].markdown(tr("Pending"))
-        #                         if top[2].button(tr("Cancel request"), key=f"otr_cancel_{tenant_id}"):
-        #                             flc_cancel_request(landlord_id, tenant_id)
-        #                             try: st.cache_data.clear()
-        #                             except Exception: pass
-        #                             st.rerun()
-        #                     else:
-        #                         if top[2].button(tr("Ask to connect"), key=f"otr_req_{tenant_id}"):
-        #                             flc_request_connect(landlord_id, tenant_id)
-        #                             try: st.cache_data.clear()
-        #                             except Exception: pass
-        #                             st.rerun()
-
-
+                        # Footer: compact ranges
                         loc = " · ".join([x for x in [t_district or "", t_city or ""] if x])
                         st.caption(f"{tr('Looking in')}: {loc or tr('Anywhere')}")
-
-                        # concise ranges
                         def rng(lo, hi, unit=""):
-                            if lo is None and hi is None: return "—"
+                            if lo is None and hi is None:
+                                return "—"
                             lo_txt = "—" if (lo is None or lo == 0) else str(int(lo))
                             hi_txt = "—" if (hi is None or hi == 0) else str(int(hi))
                             return f"{lo_txt}–{hi_txt}{unit}"
-
                         st.write(
                             f"• {tr('Size')}: {rng(t_smin, t_smax, ' m²')}  \n"
                             f"• {tr('Rooms')}: {rng(t_rmin, t_rmax)}  \n"
                             f"• {tr('Floor')}: {rng(t_fmin, t_fmax)}  \n"
                             f"• €{rng(t_pmin, t_pmax)}"
                         )
+
+
 
     # === Reference requests that were sent to this landlord ===
     st.subheader(tr('Reference Requests Sent To You'))
