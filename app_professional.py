@@ -256,14 +256,22 @@ def tr(s: str) -> str:
 def quick_reference_summary(tenant_id: int):
     """
     Compact reference summary for search results.
-    Returns dict:
+
+    Returns:
       {
         "have": bool,            # any non-cancelled references exist
-        "total": int,            # count of non-cancelled references
+        "total": int,            # count of non-cancelled refs
         "latest_status": str|None,
         "latest_score": float|None,  # only if latest is completed
-        "avg_score": float|None,     # average of completed refs, if any
+        "avg_score": float|None,     # average over completed refs, if any
         "completed_count": int,
+        "latest_answers": {          # only when latest is 'completed'
+            "paid_on_time": bool|None,
+            "utilities_unpaid": bool|None,
+            "good_condition": bool|None,
+            "comments": str|None,
+            "prev_email": str|None,
+        } | None
       }
     """
     try:
@@ -271,23 +279,35 @@ def quick_reference_summary(tenant_id: int):
     except Exception:
         refs = []
 
-    # Ignore cancelled refs
+    # ignore cancelled refs
     refs = [r for r in refs if (r.get("status") or "").lower() != "cancelled"]
 
     if not refs:
         return {
             "have": False, "total": 0, "latest_status": None,
-            "latest_score": None, "avg_score": None, "completed_count": 0
+            "latest_score": None, "avg_score": None, "completed_count": 0,
+            "latest_answers": None,
         }
 
     total = len(refs)
-    latest = refs[0]  # list_latest_* should already be latest-first
+    latest = refs[0]  # expected latest-first
     latest_status = (latest.get("status") or "").strip()
-    latest_score = latest.get("score") if (latest_status or "").lower() == "completed" else None
+    latest_is_completed = (latest_status or "").lower() == "completed"
+    latest_score = latest.get("score") if latest_is_completed else None
 
     completed = [r for r in refs if (r.get("status") or "").lower() == "completed"]
     scores = [r.get("score") for r in completed if r.get("score") is not None]
     avg_score = round(sum(scores) / len(scores), 1) if scores else None
+
+    latest_answers = None
+    if latest_is_completed:
+        latest_answers = {
+            "paid_on_time": latest.get("paid_on_time"),
+            "utilities_unpaid": latest.get("utilities_unpaid"),
+            "good_condition": latest.get("good_condition"),
+            "comments": latest.get("comments"),
+            "prev_email": latest.get("prev_email"),
+        }
 
     return {
         "have": True,
@@ -296,7 +316,19 @@ def quick_reference_summary(tenant_id: int):
         "latest_score": latest_score,
         "avg_score": avg_score,
         "completed_count": len(completed),
+        "latest_answers": latest_answers,
     }
+
+def _yn(val):
+    if val is True:  return tr("Yes")
+    if val is False: return tr("No")
+    return "—"
+
+def _truncate(txt, n=140):
+    if not txt: return None
+    if len(txt) <= n: return txt
+    cut = txt[:n].rsplit(" ", 1)[0]
+    return cut + "…"
 
 
 def flc_request_from_landlord(landlord_id: int, tenant_id: int):
@@ -3762,19 +3794,20 @@ def landlord_dashboard():
                                 except Exception: pass
                                 st.rerun()
 
-                        # --- References quick summary (ADD THIS) ---
+
+                        # --- References quick summary + (when connected) answers ---
                         ref = quick_reference_summary(tenant_id)
 
                         if not ref["have"]:
                             st.caption(f"📄 {tr('References')}: {tr('None')}")
                         else:
-                            # Pretty status label if you have the helper; otherwise fall back to the raw string
+                            # Pretty status label if you have a helper; fall back if not.
                             try:
                                 latest_status_label = display_status_label(ref["latest_status"])
                             except Exception:
                                 latest_status_label = (ref["latest_status"] or "").title() or "—"
 
-                            # Result priority: latest score (if latest is completed) -> avg completed score -> "—"
+                            # Result priority: latest score (if latest completed) -> avg completed -> —
                             if ref["latest_score"] is not None:
                                 result_txt = f"{ref['latest_score']}/10"
                             elif ref["avg_score"] is not None:
@@ -3788,6 +3821,26 @@ def landlord_dashboard():
                                 + f"{tr('Latest status')}: {latest_status_label}  ·  "
                                 + f"{tr('Result')}: {result_txt}"
                             )
+
+                            # If connected, show latest completed answers inline
+                            if status_label == "connected" and ref["latest_answers"]:
+                                ans = ref["latest_answers"]
+                                prev_from = ans.get("prev_email") or "—"
+                                comments  = _truncate(ans.get("comments"), 180) if ' _truncate' in globals() else ans.get("comments")
+                                with st.expander(tr("Latest reference answers"), expanded=False):
+                                    st.write(
+                                        f"- {tr('From previous landlord')}: **{prev_from}**  \n"
+                                        f"- {tr('Paid on time')}: **{_yn(ans.get('paid_on_time'))}**  \n"
+                                        f"- {tr('Utilities unpaid')}: **{_yn(ans.get('utilities_unpaid'))}**  \n"
+                                        f"- {tr('Apartment in good condition')}: **{_yn(ans.get('good_condition'))}**"
+                                    )
+                                    if comments:
+                                        st.markdown(f"- {md_label('Comments:')}")
+                                        st.write(comments)
+                            elif status_label != "connected":
+                                # keep privacy consistent with your dashboard: details only after connect
+                                st.caption(f"🔒 {tr('Connect to view full answers')}")
+
 
 
                         # Footer: compact ranges
