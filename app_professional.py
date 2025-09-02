@@ -1257,26 +1257,40 @@ def flc_list_inbound_for_tenant(tenant_id: int):
         """,
         (tenant_id,),
     ).fetchall()
-
+    
 def flc_list_prospective_for_landlord(landlord_id: int):
     """
     Rows = (tenant_id, invited, invited_at, inbound_request, inbound_requested_at)
-    Includes tenant-origin pending (invited=1) and landlord-origin pending (inbound_request=1).
+    Includes:
+      - tenant-origin pending (invited=1)
+      - landlord-origin pending (inbound_request=1)
+      - connected (from future_landlord_connections)
     """
     c = get_conn()
     landlord = get_user_by_id(landlord_id)
     if not landlord:
         return []
-    email = landlord["email"].lower()
-    return c.execute(
+
+    email = (landlord.get("email") or "").strip().lower()
+    if not email:
+        return []
+
+    # Add LEFT JOIN to connections and include x.status='connected'
+    rows = c.execute(
         """
         SELECT c.tenant_id, c.invited, c.invited_at, c.inbound_request, c.inbound_requested_at
-        FROM future_landlord_contacts c
-        WHERE LOWER(c.email)=? AND (c.invited=1 OR c.inbound_request=1)
-        ORDER BY COALESCE(c.inbound_requested_at, c.invited_at) DESC
+        FROM future_landlord_contacts AS c
+        LEFT JOIN future_landlord_connections AS x
+               ON x.landlord_id = ? AND x.tenant_id = c.tenant_id
+        WHERE LOWER(c.email) = ?
+          AND (c.invited = 1 OR c.inbound_request = 1 OR x.status = 'connected')
+        ORDER BY COALESCE(c.inbound_requested_at, c.invited_at, x.updated_at) DESC
         """,
-        (email,),
+        (landlord_id, email),
     ).fetchall()
+
+    return rows or []
+
 
 
 def remove_future_landlord_contact(contact_id: int, tenant_id: int):
