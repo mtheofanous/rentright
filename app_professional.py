@@ -3726,7 +3726,7 @@ def landlord_dashboard():
                 st.cache_data.clear()
             except Exception:
                 pass
-            st.experimental_rerun()  # or st.rerun() if you're on Streamlit >=1.30
+            st.rerun()  # or st.rerun() if you're on Streamlit >=1.30
 
         # --- Render results when the flag is on ---
         if st.session_state["otr_do_search"]:
