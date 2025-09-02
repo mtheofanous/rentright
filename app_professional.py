@@ -3862,21 +3862,21 @@ def landlord_dashboard():
 
 
 
-                        # Footer: compact ranges
-                        loc = " · ".join([x for x in [t_district or "", t_city or ""] if x])
-                        st.caption(f"{tr('Looking in')}: {loc or tr('Anywhere')}")
-                        def rng(lo, hi, unit=""):
-                            if lo is None and hi is None:
-                                return "—"
-                            lo_txt = "—" if (lo is None or lo == 0) else str(int(lo))
-                            hi_txt = "—" if (hi is None or hi == 0) else str(int(hi))
-                            return f"{lo_txt}–{hi_txt}{unit}"
-                        st.write(
-                            f"• {tr('Size')}: {rng(t_smin, t_smax, ' m²')}  \n"
-                            f"• {tr('Rooms')}: {rng(t_rmin, t_rmax)}  \n"
-                            f"• {tr('Floor')}: {rng(t_fmin, t_fmax)}  \n"
-                            f"• €{rng(t_pmin, t_pmax)}"
-                        )
+                        # # Footer: compact ranges
+                        # loc = " · ".join([x for x in [t_district or "", t_city or ""] if x])
+                        # st.caption(f"{tr('Looking in')}: {loc or tr('Anywhere')}")
+                        # def rng(lo, hi, unit=""):
+                        #     if lo is None and hi is None:
+                        #         return "—"
+                        #     lo_txt = "—" if (lo is None or lo == 0) else str(int(lo))
+                        #     hi_txt = "—" if (hi is None or hi == 0) else str(int(hi))
+                        #     return f"{lo_txt}–{hi_txt}{unit}"
+                        # st.write(
+                        #     f"• {tr('Size')}: {rng(t_smin, t_smax, ' m²')}  \n"
+                        #     f"• {tr('Rooms')}: {rng(t_rmin, t_rmax)}  \n"
+                        #     f"• {tr('Floor')}: {rng(t_fmin, t_fmax)}  \n"
+                        #     f"• €{rng(t_pmin, t_pmax)}"
+                        # )
 
 
 
