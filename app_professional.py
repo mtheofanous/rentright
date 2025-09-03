@@ -3487,12 +3487,73 @@ def landlord_dashboard():
     # =============================================================================
     st.subheader(tr("Prospective Tenants"))
 
-    # unique namespace for widget keys in this section
+    # ── Widget key namespace ───────────────────────────────────────────────────────
     NSP = "prospects"
     def pk(tid: int, name: str) -> str:
         return f"{NSP}:{name}:{tid}"
 
-    rows = flc_list_prospective_for_landlord(landlord_id)  # invited=1 OR inbound_request=1 OR connected (if you used the JOIN)
+    # ── Tiny helpers (scoped to this block) ────────────────────────────────────────
+    def _to_bool(v):
+        if v is None: return None
+        if isinstance(v, bool): return v
+        if isinstance(v, (int, float)): return bool(int(v))
+        if isinstance(v, str):
+            s = v.strip().lower()
+            if s in {"1","true","yes","y","t"}: return True
+            if s in {"0","false","no","n","f"}: return False
+        return None
+
+    def _yn(v):
+        b = _to_bool(v)
+        if b is None: return "—"
+        return tr("Yes") if b else tr("No")
+
+    def _fmt_num(x):
+        try:
+            return f"{int(x):,}"
+        except Exception:
+            return str(x) if x is not None else "—"
+
+    def _rng(lo, hi, unit=""):
+        if lo is None and hi is None: return f"—{unit}"
+        return f"{_fmt_num(lo) if lo not in (None,0) else '—'}–{_fmt_num(hi) if hi not in (None,0) else '—'}{unit}"
+
+    def open_to_rent_summary_line(tenant_id: int) -> str | None:
+        """
+        Status: Active · Looking in: Region — District — City · 60–100 m² · 1–3 rooms · Floor 2–4 · €500–€1,000
+        Only if open_to_rent is active. Falls back if some columns are missing.
+        """
+        c = get_conn()
+        cols = {r[1].lower() for r in c.execute("PRAGMA table_info(tenant_profiles)").fetchall()}
+        have = lambda col: col.lower() in cols
+
+        select_cols = ["open_to_rent"]
+        for col in ("search_region","search_district","search_city","size_min","size_max","rooms_min","rooms_max","floor_min","floor_max","price_min","price_max"):
+            if have(col): select_cols.append(col)
+
+        row = c.execute(f"SELECT {', '.join(select_cols)} FROM tenant_profiles WHERE user_id=?", (tenant_id,)).fetchone()
+        if not row: return None
+        data = {select_cols[i]: row[i] for i in range(len(select_cols))}
+
+        o2r = data.get("open_to_rent")
+        active = (o2r == 1) or (isinstance(o2r, str) and o2r.strip() == "1")
+        if not active: return None
+
+        region   = data.get("search_region")
+        district = data.get("search_district")
+        city     = data.get("search_city")
+        where_bits = [p for p in [region, district, city] if p]
+        where_txt = " — ".join(where_bits) if where_bits else tr("Anywhere")
+
+        size_txt  = _rng(data.get("size_min"),  data.get("size_max"),  " m²")
+        rooms_txt = f"{_rng(data.get('rooms_min'), data.get('rooms_max'))} {tr('rooms')}"
+        floor_txt = f"{tr('Floor')} {_rng(data.get('floor_min'), data.get('floor_max'))}"
+        price_txt = f"€{_rng(data.get('price_min'), data.get('price_max'))}"
+
+        return f"{tr('Status')}: {tr('Active')} · {tr('Looking in')}: {where_txt} · {size_txt} · {rooms_txt} · {floor_txt} · {price_txt}"
+
+    # ── Data ───────────────────────────────────────────────────────────────────────
+    rows = flc_list_prospective_for_landlord(landlord_id)  # invited=1 OR inbound_request=1 OR connected (via JOIN)
 
     if not rows:
         st.caption(tr("No prospective tenants yet."))
@@ -3502,31 +3563,27 @@ def landlord_dashboard():
             tenant_name = (tenant_user.get("name") or "").strip()
             tenant_email = (tenant_user.get("email") or "").strip()
 
+            # Card container
             with st.container(border=True):
                 top = st.columns([5, 3, 4])
 
-                # Left: identity + meta
+                # ── Left: identity + meta
                 title = tenant_name or tenant_email or f"Tenant #{tid}"
                 meta = []
-                if tenant_email:
-                    meta.append(tenant_email)
-                if invited and invited_at:
-                    meta.append(tr("Invited on") + f" {invited_at}")
-                if inbound_request and inbound_requested_at:
-                    meta.append(tr("Requested on") + f" {inbound_requested_at}")
+                if tenant_email: meta.append(tenant_email)
+                if invited and invited_at: meta.append(tr("Invited on") + f" {invited_at}")
+                if inbound_request and inbound_requested_at: meta.append(tr("Requested on") + f" {inbound_requested_at}")
                 subtitle = " · ".join(meta)
 
                 top[0].markdown(f"**{title}**")
-                if subtitle:
-                    top[0].caption(subtitle)
+                if subtitle: top[0].caption(subtitle)
 
-                # Canonical connection status
+                # ── Middle: status badge
                 try:
                     status = flc_get_status(landlord_id, tid)  # 'connected' | 'rejected' | None
                 except Exception:
                     status = None
 
-                # Middle: status badge
                 if status == "connected":
                     top[1].success(tr("Connected"))
                 elif status == "rejected":
@@ -3535,7 +3592,7 @@ def landlord_dashboard():
                     origin = tr("You requested") if inbound_request else tr("Tenant listed you")
                     top[1].info(tr("Pending") + f" · {origin}")
 
-                # Right: actions
+                # ── Right: actions
                 if status == "connected":
                     if top[2].button(tr("Disconnect"), key=pk(tid, "disconnect")):
                         flc_disconnect(landlord_id, tid)
@@ -3543,14 +3600,10 @@ def landlord_dashboard():
                         except Exception: pass
                         st.warning(tr("Disconnected."))
                         st.rerun()
-
                 elif status == "rejected":
                     top[2].caption(tr("No actions available"))
-
                 else:
-                    # Pending
                     if inbound_request:
-                        # landlord-origin -> only allow cancel
                         if top[2].button(tr("Cancel request"), key=pk(tid, "cancel_request")):
                             flc_cancel_request(landlord_id, tid)
                             try: st.cache_data.clear()
@@ -3558,7 +3611,6 @@ def landlord_dashboard():
                             st.info(tr("Request cancelled."))
                             st.rerun()
                     else:
-                        # tenant-origin -> allow connect / reject
                         c1, c2 = top[2].columns(2)
                         if c1.button(tr("Connect"), key=pk(tid, "connect")):
                             flc_connect(landlord_id, tid)
@@ -3573,113 +3625,256 @@ def landlord_dashboard():
                             st.info(tr("Rejected."))
                             st.rerun()
 
-                # -----------------------------------------------------------------
-                # References summary (always visible) + details (when connected)
-                # -----------------------------------------------------------------
-                # Load latest refs as dicts, ignore cancelled
+                # ── Open to Rent one-liner (modern, compact)
+                o2r_line = open_to_rent_summary_line(tid)
+                if o2r_line:
+                    st.markdown(f"🟢 *{o2r_line}*")
+
+                # ── References summary (always visible) ───────────────────────────
                 refs = list_latest_references_for_tenant_dict(tid) or []
                 refs = [r for r in refs if (r.get("status") or "").lower() != "cancelled"]
 
                 total_refs = len(refs)
                 latest_status = (refs[0].get("status") if refs else None) or None
-
                 completed = [r for r in refs if (r.get("status") or "").lower() == "completed"]
                 scores = [r.get("score") for r in completed if r.get("score") is not None]
                 avg_score = round(sum(scores) / len(scores), 1) if scores else None
 
-                # Pretty status label if available
                 try:
                     latest_status_label = display_status_label(latest_status)
                 except Exception:
                     latest_status_label = (latest_status or "—").title()
 
-                # Summary line (shown to all)
-                summary_bits = [f"{tr('References')}: {total_refs}"]
-                summary_bits.append(f"{tr('Latest status')}: {latest_status_label}")
-                summary_bits.append(f"{tr('Avg score')}: {f'{avg_score}/10' if avg_score is not None else '—'}")
-                st.caption("📄 " + "  ·  ".join(summary_bits))
+                st.caption(
+                    "📄 "
+                    + f"{tr('References')}: {total_refs}  ·  "
+                    + f"{tr('Latest status')}: {latest_status_label}  ·  "
+                    + f"{tr('Avg score')}: {f'{avg_score}/10' if avg_score is not None else '—'}"
+                )
 
-                # Detailed answers for each (visible only when connected)
+                # ── Reference details (beautiful expander, only when connected) ──
                 if status == "connected" and refs:
-                    for i, r in enumerate(refs):
-                        prev_email = r.get("prev_email") or "—"
-                        status_lr  = r.get("status")
-                        score_lr   = r.get("score")
+                    with st.expander(tr("Reference details"), expanded=False):
+                        for r in refs:
+                            prev_email = r.get("prev_email") or "—"
+                            status_lr  = r.get("status")
+                            score_lr   = r.get("score")
+                            paid_on    = _yn(r.get("paid_on_time"))
+                            util_unp   = _yn(r.get("utilities_unpaid"))
+                            good_cond  = _yn(r.get("good_condition"))
+                            comments   = r.get("comments")
 
-                        # normalize booleans if you have _yn; otherwise fall back
-                        def _to_bool(v):
-                            if v is None: return None
-                            if isinstance(v, bool): return v
-                            if isinstance(v, (int, float)): return bool(int(v))
-                            if isinstance(v, str):
-                                s = v.strip().lower()
-                                if s in {"1","true","yes","y","t"}: return True
-                                if s in {"0","false","no","n","f"}: return False
-                            return None
-                        def _yn(v):
-                            b = _to_bool(v)
-                            if b is None: return "—"
-                            return tr("Yes") if b else tr("No")
-
-                        paid_on    = _yn(r.get("paid_on_time"))
-                        util_unp   = _yn(r.get("utilities_unpaid"))
-                        good_cond  = _yn(r.get("good_condition"))
-                        comments   = r.get("comments")
-
-                        header = f"{tr('Reference from previous landlord')} ({prev_email}) — {md_label('Status:')} {display_status_label(status_lr)}"
-                        with st.expander(header):
-                            if (status_lr or "").lower() == "completed":
+                            st.markdown(f"**{tr('From previous landlord')}:** {prev_email}")
+                            st.markdown(f"{md_label('Status:')} {display_status_label(status_lr)}")
+                            if (status_lr or "").lower() == "completed" and score_lr is not None:
                                 st.markdown(f"{md_label('Score:')} {score_lr}/10")
-                                st.markdown(f"{md_label('Paid on time:')} {paid_on}")
-                                st.markdown(f"{md_label('Utilities unpaid:')} {util_unp}")
-                                st.markdown(f"{md_label('Apartment in good condition:')} {good_cond}")
-                                if comments:
-                                    st.markdown(md_label('Comments:'))
-                                    st.write(comments)
+                            st.write(
+                                f"- {tr('Paid on time')}: **{paid_on}**  \n"
+                                f"- {tr('Utilities unpaid')}: **{util_unp}**  \n"
+                                f"- {tr('Apartment in good condition')}: **{good_cond}**"
+                            )
+                            if comments:
+                                st.markdown(md_label('Comments:'))
+                                st.write(comments)
+                            st.markdown("---")
                 elif status != "connected":
-                    st.caption(tr("Reference details are visible after you connect."))
+                    st.caption("🔒 " + tr("Reference details are visible after you connect."))
 
-                # -----------------------------------------------------------------
-                # Open to Rent (active) — show preferences from tenant_profiles
-                # -----------------------------------------------------------------
-                try:
-                    c = get_conn()
-                    pr = c.execute("""
-                        SELECT open_to_rent, search_city, search_district,
-                            size_min, size_max, rooms_min, rooms_max,
-                            floor_min, floor_max, price_min, price_max
-                        FROM tenant_profiles
-                        WHERE user_id = ?
-                    """, (tid,)).fetchone()
-                except Exception:
-                    pr = None
+    # st.subheader(tr("Prospective Tenants"))
 
-                if pr and (pr[0] == 1 or str(pr[0]).strip() == "1"):
-                    # Helper to print ranges
-                    def rng(lo, hi, unit=""):
-                        if lo is None and hi is None: return "—"
-                        try:
-                            lo_txt = "—" if (lo is None or int(lo) == 0) else str(int(lo))
-                        except Exception:
-                            lo_txt = str(lo) if lo is not None else "—"
-                        try:
-                            hi_txt = "—" if (hi is None or int(hi) == 0) else str(int(hi))
-                        except Exception:
-                            hi_txt = str(hi) if hi is not None else "—"
-                        return f"{lo_txt}–{hi_txt}{unit}"
+    # # unique namespace for widget keys in this section
+    # NSP = "prospects"
+    # def pk(tid: int, name: str) -> str:
+    #     return f"{NSP}:{name}:{tid}"
 
-                    _open, city, district, smin, smax, rmin, rmax, fmin, fmax, pmin, pmax = pr
+    # rows = flc_list_prospective_for_landlord(landlord_id)  # invited=1 OR inbound_request=1 OR connected (if you used the JOIN)
 
-                    st.markdown(f"🟢 **{tr('Open to Rent (active)')}**")
-                    loc = " · ".join([x for x in [district or "", city or ""] if x])
-                    if loc:
-                        st.caption(f"{tr('Location')}: {loc}")
-                    st.write(
-                        f"• {tr('Size')}: {rng(smin, smax, ' m²')}  \n"
-                        f"• {tr('Rooms')}: {rng(rmin, rmax)}  \n"
-                        f"• {tr('Floor')}: {rng(fmin, fmax)}  \n"
-                        f"• €{rng(pmin, pmax)}"
-                    )
+    # if not rows:
+    #     st.caption(tr("No prospective tenants yet."))
+    # else:
+    #     for (tid, invited, invited_at, inbound_request, inbound_requested_at) in rows:
+    #         tenant_user = get_user_by_id(tid) or {}
+    #         tenant_name = (tenant_user.get("name") or "").strip()
+    #         tenant_email = (tenant_user.get("email") or "").strip()
+
+    #         with st.container(border=True):
+    #             top = st.columns([5, 3, 4])
+
+    #             # Left: identity + meta
+    #             title = tenant_name or tenant_email or f"Tenant #{tid}"
+    #             meta = []
+    #             if tenant_email:
+    #                 meta.append(tenant_email)
+    #             if invited and invited_at:
+    #                 meta.append(tr("Invited on") + f" {invited_at}")
+    #             if inbound_request and inbound_requested_at:
+    #                 meta.append(tr("Requested on") + f" {inbound_requested_at}")
+    #             subtitle = " · ".join(meta)
+
+    #             top[0].markdown(f"**{title}**")
+    #             if subtitle:
+    #                 top[0].caption(subtitle)
+
+    #             # Canonical connection status
+    #             try:
+    #                 status = flc_get_status(landlord_id, tid)  # 'connected' | 'rejected' | None
+    #             except Exception:
+    #                 status = None
+
+    #             # Middle: status badge
+    #             if status == "connected":
+    #                 top[1].success(tr("Connected"))
+    #             elif status == "rejected":
+    #                 top[1].error(tr("Rejected"))
+    #             else:
+    #                 origin = tr("You requested") if inbound_request else tr("Tenant listed you")
+    #                 top[1].info(tr("Pending") + f" · {origin}")
+
+    #             # Right: actions
+    #             if status == "connected":
+    #                 if top[2].button(tr("Disconnect"), key=pk(tid, "disconnect")):
+    #                     flc_disconnect(landlord_id, tid)
+    #                     try: st.cache_data.clear()
+    #                     except Exception: pass
+    #                     st.warning(tr("Disconnected."))
+    #                     st.rerun()
+
+    #             elif status == "rejected":
+    #                 top[2].caption(tr("No actions available"))
+
+    #             else:
+    #                 # Pending
+    #                 if inbound_request:
+    #                     # landlord-origin -> only allow cancel
+    #                     if top[2].button(tr("Cancel request"), key=pk(tid, "cancel_request")):
+    #                         flc_cancel_request(landlord_id, tid)
+    #                         try: st.cache_data.clear()
+    #                         except Exception: pass
+    #                         st.info(tr("Request cancelled."))
+    #                         st.rerun()
+    #                 else:
+    #                     # tenant-origin -> allow connect / reject
+    #                     c1, c2 = top[2].columns(2)
+    #                     if c1.button(tr("Connect"), key=pk(tid, "connect")):
+    #                         flc_connect(landlord_id, tid)
+    #                         try: st.cache_data.clear()
+    #                         except Exception: pass
+    #                         st.success(tr("Connected."))
+    #                         st.rerun()
+    #                     if c2.button(tr("Reject"), key=pk(tid, "reject")):
+    #                         flc_reject(landlord_id, tid)
+    #                         try: st.cache_data.clear()
+    #                         except Exception: pass
+    #                         st.info(tr("Rejected."))
+    #                         st.rerun()
+
+    #             # -----------------------------------------------------------------
+    #             # References summary (always visible) + details (when connected)
+    #             # -----------------------------------------------------------------
+    #             # Load latest refs as dicts, ignore cancelled
+    #             refs = list_latest_references_for_tenant_dict(tid) or []
+    #             refs = [r for r in refs if (r.get("status") or "").lower() != "cancelled"]
+
+    #             total_refs = len(refs)
+    #             latest_status = (refs[0].get("status") if refs else None) or None
+
+    #             completed = [r for r in refs if (r.get("status") or "").lower() == "completed"]
+    #             scores = [r.get("score") for r in completed if r.get("score") is not None]
+    #             avg_score = round(sum(scores) / len(scores), 1) if scores else None
+
+    #             # Pretty status label if available
+    #             try:
+    #                 latest_status_label = display_status_label(latest_status)
+    #             except Exception:
+    #                 latest_status_label = (latest_status or "—").title()
+
+    #             # Summary line (shown to all)
+    #             summary_bits = [f"{tr('References')}: {total_refs}"]
+    #             summary_bits.append(f"{tr('Latest status')}: {latest_status_label}")
+    #             summary_bits.append(f"{tr('Avg score')}: {f'{avg_score}/10' if avg_score is not None else '—'}")
+    #             st.caption("📄 " + "  ·  ".join(summary_bits))
+
+    #             # Detailed answers for each (visible only when connected)
+    #             if status == "connected" and refs:
+    #                 for i, r in enumerate(refs):
+    #                     prev_email = r.get("prev_email") or "—"
+    #                     status_lr  = r.get("status")
+    #                     score_lr   = r.get("score")
+
+    #                     # normalize booleans if you have _yn; otherwise fall back
+    #                     def _to_bool(v):
+    #                         if v is None: return None
+    #                         if isinstance(v, bool): return v
+    #                         if isinstance(v, (int, float)): return bool(int(v))
+    #                         if isinstance(v, str):
+    #                             s = v.strip().lower()
+    #                             if s in {"1","true","yes","y","t"}: return True
+    #                             if s in {"0","false","no","n","f"}: return False
+    #                         return None
+    #                     def _yn(v):
+    #                         b = _to_bool(v)
+    #                         if b is None: return "—"
+    #                         return tr("Yes") if b else tr("No")
+
+    #                     paid_on    = _yn(r.get("paid_on_time"))
+    #                     util_unp   = _yn(r.get("utilities_unpaid"))
+    #                     good_cond  = _yn(r.get("good_condition"))
+    #                     comments   = r.get("comments")
+
+    #                     header = f"{tr('Reference from previous landlord')} ({prev_email}) — {md_label('Status:')} {display_status_label(status_lr)}"
+    #                     with st.expander(header):
+    #                         if (status_lr or "").lower() == "completed":
+    #                             st.markdown(f"{md_label('Score:')} {score_lr}/10")
+    #                             st.markdown(f"{md_label('Paid on time:')} {paid_on}")
+    #                             st.markdown(f"{md_label('Utilities unpaid:')} {util_unp}")
+    #                             st.markdown(f"{md_label('Apartment in good condition:')} {good_cond}")
+    #                             if comments:
+    #                                 st.markdown(md_label('Comments:'))
+    #                                 st.write(comments)
+    #             elif status != "connected":
+    #                 st.caption(tr("Reference details are visible after you connect."))
+
+    #             # -----------------------------------------------------------------
+    #             # Open to Rent (active) — show preferences from tenant_profiles
+    #             # -----------------------------------------------------------------
+    #             try:
+    #                 c = get_conn()
+    #                 pr = c.execute("""
+    #                     SELECT open_to_rent, search_city, search_district,
+    #                         size_min, size_max, rooms_min, rooms_max,
+    #                         floor_min, floor_max, price_min, price_max
+    #                     FROM tenant_profiles
+    #                     WHERE user_id = ?
+    #                 """, (tid,)).fetchone()
+    #             except Exception:
+    #                 pr = None
+
+    #             if pr and (pr[0] == 1 or str(pr[0]).strip() == "1"):
+    #                 # Helper to print ranges
+    #                 def rng(lo, hi, unit=""):
+    #                     if lo is None and hi is None: return "—"
+    #                     try:
+    #                         lo_txt = "—" if (lo is None or int(lo) == 0) else str(int(lo))
+    #                     except Exception:
+    #                         lo_txt = str(lo) if lo is not None else "—"
+    #                     try:
+    #                         hi_txt = "—" if (hi is None or int(hi) == 0) else str(int(hi))
+    #                     except Exception:
+    #                         hi_txt = str(hi) if hi is not None else "—"
+    #                     return f"{lo_txt}–{hi_txt}{unit}"
+
+    #                 _open, city, district, smin, smax, rmin, rmax, fmin, fmax, pmin, pmax = pr
+
+    #                 st.markdown(f"🟢 **{tr('Open to Rent (active)')}**")
+    #                 loc = " · ".join([x for x in [district or "", city or ""] if x])
+    #                 if loc:
+    #                     st.caption(f"{tr('Location')}: {loc}")
+    #                 st.write(
+    #                     f"• {tr('Size')}: {rng(smin, smax, ' m²')}  \n"
+    #                     f"• {tr('Rooms')}: {rng(rmin, rmax)}  \n"
+    #                     f"• {tr('Floor')}: {rng(fmin, fmax)}  \n"
+    #                     f"• €{rng(pmin, pmax)}"
+    #                 )
 
     # st.subheader(tr("Prospective Tenants"))
 
