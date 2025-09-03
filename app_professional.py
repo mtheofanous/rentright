@@ -1705,8 +1705,8 @@ def tenant_open_to_rent_section():
 
         # ---- Other filters (unchanged) ----
         c1, c2 = st.columns(2)
-        size_min = c1.number_input(tr("Min size (m²)"), min_value=0, max_value=10000, value=int(prefs.get("size_min") or 0), step=1)
-        size_max = c2.number_input(tr("Max size (m²)"), min_value=0, max_value=10000, value=int(prefs.get("size_max") or 0), step=1)
+        size_min = c1.number_input(tr("Min size (m²)"), min_value=0, max_value=10000, value=int(prefs.get("size_min") or 0), step=10)
+        size_max = c2.number_input(tr("Max size (m²)"), min_value=0, max_value=10000, value=int(prefs.get("size_max") or 0), step=10)
 
         r1, r2 = st.columns(2)
         rooms_min = r1.number_input(tr("Min rooms"), min_value=0, max_value=50, value=int(prefs.get("rooms_min") or 0), step=1)
@@ -2967,6 +2967,12 @@ def tenant_dashboard():
         """
         st.subheader(tr("Future Landlords (Contacts)"))
         tenant_id = st.session_state.user["id"]
+        
+        def _clear_transient_search_flags():
+            # clear any landlord-search leftovers or other transient flags
+            for k in list(st.session_state.keys()):
+                if k.startswith(("ld_otr_", "otr_", "prospects")):
+                    del st.session_state[k]
 
         # Namespace to keep all widget keys in this section unique
         NS = "tfl"  # tenant-future-landlords
@@ -2991,6 +2997,7 @@ def tenant_dashboard():
                                 st.cache_data.clear()
                             except Exception:
                                 pass
+                            _clear_transient_search_flags()
                             st.success(tr("Contact added."))
                             st.rerun()
                         except Exception as e:
@@ -3052,6 +3059,7 @@ def tenant_dashboard():
                         except Exception:
                             pass
                         st.warning(tr("Disconnected."))
+                        _clear_transient_search_flags()
                         st.rerun()
 
                 # 2) Landlord-origin pending -> Connect / Disconnect (accept / decline)
@@ -3073,6 +3081,7 @@ def tenant_dashboard():
                             st.cache_data.clear()
                         except Exception:
                             pass
+                        _clear_transient_search_flags()
                         st.success(tr("Connected."))
                         st.rerun()
 
@@ -3091,6 +3100,7 @@ def tenant_dashboard():
                             st.cache_data.clear()
                         except Exception:
                             pass
+                        _clear_transient_search_flags()
                         st.info(tr("Disconnected."))
                         st.rerun()
 
@@ -3102,6 +3112,7 @@ def tenant_dashboard():
                             st.cache_data.clear()
                         except Exception:
                             pass
+                        _clear_transient_search_flags()
                         st.info(tr("Contact removed."))
                         st.rerun()
 
@@ -3120,6 +3131,7 @@ def tenant_dashboard():
                                 st.cache_data.clear()
                             except Exception:
                                 pass
+                            _clear_transient_search_flags()
                             st.success(tr("Invitation sent successfully."))
                             st.rerun()
                         else:
@@ -3131,6 +3143,7 @@ def tenant_dashboard():
                             st.cache_data.clear()
                         except Exception:
                             pass
+                        _clear_transient_search_flags()
                         st.info(tr("Contact removed."))
                         st.rerun()
 
@@ -3682,21 +3695,19 @@ def landlord_dashboard():
             price_max = r4c2.number_input(tr("Max price (€)"), min_value=0, max_value=1_000_000, value=0, step=50, key="otr_price_max") or None
 
         # Sticky search flag so results persist after button clicks
-        if "otr_do_search" not in st.session_state:
-            st.session_state["otr_do_search"] = False
+        if "ld_otr_do_search" not in st.session_state:
+            st.session_state["ld_otr_do_search"] = False
 
         cbtn1, cbtn2 = st.columns([1, 1])
-        if cbtn1.button(tr("Search"), key="otr_search_btn"):
-            st.session_state["otr_do_search"] = True
-        if cbtn2.button(tr("Reset"), key="otr_reset_btn"):
-            st.session_state["otr_do_search"] = False
-            try:
-                st.cache_data.clear()
-            except Exception:
-                pass
+        if cbtn1.button(tr("Search"), key="ld_otr_search_btn"):
+            st.session_state["ld_otr_do_search"] = True
+        if cbtn2.button(tr("Reset"), key="ld_otr_reset_btn"):
+            st.session_state["ld_otr_do_search"] = False
+            try: st.cache_data.clear()
+            except Exception: pass
             st.rerun()
 
-        if st.session_state["otr_do_search"]:
+        if st.session_state["ld_otr_do_search"]:
             results = search_open_to_rent_tenants(
                 q=q,
                 city=city,
