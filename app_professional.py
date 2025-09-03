@@ -3517,40 +3517,131 @@ def landlord_dashboard():
     def _rng(lo, hi, unit=""):
         if lo is None and hi is None: return f"—{unit}"
         return f"{_fmt_num(lo) if lo not in (None,0) else '—'}–{_fmt_num(hi) if hi not in (None,0) else '—'}{unit}"
-
+    
     def open_to_rent_summary_line(tenant_id: int) -> str | None:
         """
+        One-liner like:
         Status: Active · Looking in: Region — District — City · 60–100 m² · 1–3 rooms · Floor 2–4 · €500–€1,000
-        Only if open_to_rent is active. Falls back if some columns are missing.
+        Shown only when tenant_profiles.open_to_rent == 1. Robust to missing columns.
         """
         c = get_conn()
-        cols = {r[1].lower() for r in c.execute("PRAGMA table_info(tenant_profiles)").fetchall()}
-        have = lambda col: col.lower() in cols
 
-        select_cols = ["open_to_rent"]
-        for col in ("search_region","search_district","search_city","size_min","size_max","rooms_min","rooms_max","floor_min","floor_max","price_min","price_max"):
-            if have(col): select_cols.append(col)
+        # Discover available columns
+        try:
+            cols_info = c.execute("PRAGMA table_info(tenant_profiles)").fetchall()
+        except Exception:
+            return None
+        available = {row[1] for row in cols_info}  # exact case-sensitive names
 
-        row = c.execute(f"SELECT {', '.join(select_cols)} FROM tenant_profiles WHERE user_id=?", (tenant_id,)).fetchone()
-        if not row: return None
-        data = {select_cols[i]: row[i] for i in range(len(select_cols))}
+        if "open_to_rent" not in available:
+            return None  # old DB, no O2R support
 
+        wanted = [
+            "open_to_rent",
+            "search_region", "search_district", "search_city",
+            "size_min", "size_max",
+            "rooms_min", "rooms_max",
+            "floor_min", "floor_max",
+            "price_min", "price_max",
+        ]
+        select_cols = [col for col in wanted if col in available]
+        sql_cols = ", ".join([f'"{col}"' for col in select_cols])  # quote identifiers
+
+        # Read what we can
+        try:
+            row = c.execute(
+                f"SELECT {sql_cols} FROM tenant_profiles WHERE user_id=?",
+                (tenant_id,),
+            ).fetchone()
+        except Exception:
+            # If anything fails, try just open_to_rent
+            try:
+                row = c.execute('SELECT "open_to_rent" FROM tenant_profiles WHERE user_id=?', (tenant_id,)).fetchone()
+            except Exception:
+                return None
+            if not row:
+                return None
+            try:
+                active = int(row[0]) == 1
+            except Exception:
+                active = str(row[0]).strip() == "1"
+            return f"{tr('Status')}: {tr('Active')}" if active else None
+
+        if not row:
+            return None
+
+        data = dict(zip(select_cols, row))
+
+        # Active?
         o2r = data.get("open_to_rent")
-        active = (o2r == 1) or (isinstance(o2r, str) and o2r.strip() == "1")
-        if not active: return None
+        try:
+            active = int(o2r) == 1
+        except Exception:
+            active = str(o2r).strip() == "1"
+        if not active:
+            return None
 
+        # Compose the line
         region   = data.get("search_region")
         district = data.get("search_district")
         city     = data.get("search_city")
-        where_bits = [p for p in [region, district, city] if p]
-        where_txt = " — ".join(where_bits) if where_bits else tr("Anywhere")
+        where_txt = " — ".join([x for x in (region, district, city) if x]) or tr("Anywhere")
 
-        size_txt  = _rng(data.get("size_min"),  data.get("size_max"),  " m²")
-        rooms_txt = f"{_rng(data.get('rooms_min'), data.get('rooms_max'))} {tr('rooms')}"
-        floor_txt = f"{tr('Floor')} {_rng(data.get('floor_min'), data.get('floor_max'))}"
-        price_txt = f"€{_rng(data.get('price_min'), data.get('price_max'))}"
+        def fmt_num(v):
+            if v is None or v == "" or (isinstance(v, (int, float)) and v == 0):
+                return "—"
+            try:
+                return f"{int(v):,}"
+            except Exception:
+                return str(v)
 
-        return f"{tr('Status')}: {tr('Active')} · {tr('Looking in')}: {where_txt} · {size_txt} · {rooms_txt} · {floor_txt} · {price_txt}"
+        def rng(lo, hi, unit=""):
+            return f"{fmt_num(lo)}–{fmt_num(hi)}{unit}"
+
+        size_txt  = rng(data.get("size_min"),  data.get("size_max"),  " m²")
+        rooms_txt = f"{rng(data.get('rooms_min'), data.get('rooms_max'))} {tr('rooms')}"
+        floor_txt = f"{tr('Floor')} {rng(data.get('floor_min'), data.get('floor_max'))}"
+        price_txt = f"€{rng(data.get('price_min'), data.get('price_max'))}"
+
+        return (
+            f"{tr('Status')}: {tr('Active')} · "
+            f"{tr('Looking in')}: {where_txt} · "
+            f"{size_txt} · {rooms_txt} · {floor_txt} · {price_txt}"
+        )
+        
+    # def open_to_rent_summary_line(tenant_id: int) -> str | None:
+    #     """
+    #     Status: Active · Looking in: Region — District — City · 60–100 m² · 1–3 rooms · Floor 2–4 · €500–€1,000
+    #     Only if open_to_rent is active. Falls back if some columns are missing.
+    #     """
+    #     c = get_conn()
+    #     cols = {r[1].lower() for r in c.execute("PRAGMA table_info(tenant_profiles)").fetchall()}
+    #     have = lambda col: col.lower() in cols
+
+    #     select_cols = ["open_to_rent"]
+    #     for col in ("search_region","search_district","search_city","size_min","size_max","rooms_min","rooms_max","floor_min","floor_max","price_min","price_max"):
+    #         if have(col): select_cols.append(col)
+
+    #     row = c.execute(f"SELECT {', '.join(select_cols)} FROM tenant_profiles WHERE user_id=?", (tenant_id,)).fetchone()
+    #     if not row: return None
+    #     data = {select_cols[i]: row[i] for i in range(len(select_cols))}
+
+    #     o2r = data.get("open_to_rent")
+    #     active = (o2r == 1) or (isinstance(o2r, str) and o2r.strip() == "1")
+    #     if not active: return None
+
+    #     region   = data.get("search_region")
+    #     district = data.get("search_district")
+    #     city     = data.get("search_city")
+    #     where_bits = [p for p in [region, district, city] if p]
+    #     where_txt = " — ".join(where_bits) if where_bits else tr("Anywhere")
+
+    #     size_txt  = _rng(data.get("size_min"),  data.get("size_max"),  " m²")
+    #     rooms_txt = f"{_rng(data.get('rooms_min'), data.get('rooms_max'))} {tr('rooms')}"
+    #     floor_txt = f"{tr('Floor')} {_rng(data.get('floor_min'), data.get('floor_max'))}"
+    #     price_txt = f"€{_rng(data.get('price_min'), data.get('price_max'))}"
+
+    #     return f"{tr('Status')}: {tr('Active')} · {tr('Looking in')}: {where_txt} · {size_txt} · {rooms_txt} · {floor_txt} · {price_txt}"
 
     # ── Data ───────────────────────────────────────────────────────────────────────
     rows = flc_list_prospective_for_landlord(landlord_id)  # invited=1 OR inbound_request=1 OR connected (via JOIN)
