@@ -4242,14 +4242,7 @@ def landlord_dashboard():
                 # Left: avatar + name/email + meta
                 display_title = tenant_name or tenant_email or f"Tenant #{tid}"
                 initials = _pt_initials(tenant_name, tenant_email)
-                # meta_bits = []
-                # if tenant_email:
-                #     meta_bits.append(f'<a href="mailto:{tenant_email}">{tenant_email}</a>')
-                # if invited and invited_at:
-                #     meta_bits.append(tr("Invited on") + f" {invited_at}")
-                # if inbound_request and inbound_requested_at:
-                #     meta_bits.append(tr("Requested on") + f" {inbound_requested_at}")
-                # meta_line = " · ".join(meta_bits)
+
 
                 colL.markdown(
                     f"""
@@ -4342,13 +4335,6 @@ def landlord_dashboard():
                 except Exception:
                     latest_status_label = (latest_status or "—").title()
 
-                st.caption(
-                    "📄 "
-                    + f"{tr('References')}: {total_refs}  ·  "
-                    + f"{tr('Latest status')}: {latest_status_label}  ·  "
-                    + f"{tr('Avg score')}: {f'{avg_score}/10' if avg_score is not None else '—'}"
-                )
-
                 # ---- Reference details (tidy, card style) — only when connected ----
                 
                 # ---- Reference details (prettier) — only when connected ----
@@ -4375,6 +4361,11 @@ def landlord_dashboard():
                     return f'<span class="{cls}">{lab}</span>'
 
                 if status == "connected" and refs:
+                    st.caption(
+                        "📄 "
+                        + f"{tr('References')}: {total_refs}  ·  "
+                        + f"{tr('Avg score')}: {f'{avg_score}/10' if avg_score is not None else '—'}"
+                    )
                     with st.expander(tr("Reference details"), expanded=False):
                         for r in refs:
                             prev_email = (r.get("prev_email") or "—").strip()
