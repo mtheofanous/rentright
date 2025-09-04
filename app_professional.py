@@ -4153,7 +4153,7 @@ def tenant_dashboard():
         if st.button(tr("My References"), key="btn_prev_refs", use_container_width=True):
             _go("prev_refs")
 
-    st.divider()
+    # st.divider()
 
     # ---------- FULL-WIDTH PAGE RENDER ----------
     page = st.session_state.tenant_page
