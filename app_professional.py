@@ -4237,7 +4237,7 @@ def landlord_dashboard():
                     status = None
 
                 # Header row: identity • badge • actions
-                colL, colM, colR = st.columns([6, 3, 3])
+                colL, colM, colR = st.columns([6, 3, 5])
 
                 # Left: avatar + name/email + meta
                 display_title = tenant_name or tenant_email or f"Tenant #{tid}"
@@ -4260,7 +4260,6 @@ def landlord_dashboard():
                         <div class="pt-email">{tenant_email}</div>
                     </div>
                     </div>
-                    <div class="pt-meta">{meta_line}</div>
                     """,
                     unsafe_allow_html=True
                 )
