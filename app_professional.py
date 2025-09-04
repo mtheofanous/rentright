@@ -1957,27 +1957,19 @@ def tenant_open_to_rent_section():
         st.session_state["otr_keys_inited"] = True
 
     # Defaults
+    # Defaults for summary
     region = district = city = ""
 
     with st.container(border=True):
-        # ---- Greek admin picks (Region → Regional Unit → Municipality) ----------
         data, regions, muni_idx = load_ellada_index("ellada.json")
-        
-        
 
-        # If we just pressed Reset, skip any preselection from saved prefs
+        # If we just pressed Reset, skip preselect from saved prefs this run
         reset_preselect = st.session_state.pop("otr_reset_preselect", False)
-        
-                # ---- Other filters (use keys so Reset can override) ---------------------
-        open_flag = st.checkbox(
-            tr("I'm currently looking for a place"),
-            key="otr_open_flag",
-        )
-
 
         saved_city = "" if reset_preselect else (prefs.get("search_city") or "").strip()
         saved_dist = "" if reset_preselect else (prefs.get("search_district") or "").strip()
 
+        # Try to infer Region/Unit from saved values
         pre_region, pre_unit = (None, None)
         if saved_city and saved_city in muni_idx:
             pre_region, pre_unit = muni_idx[saved_city]
@@ -1989,25 +1981,30 @@ def tenant_open_to_rent_section():
                     pre_unit = saved_dist
                     break
 
-        # Region select
-        region_options = regions if regions else ["—"]
+        ANY = tr("Any")
+
+        # REGION
+        region_options = [ANY] + (regions or [])
         region_index = (region_options.index(pre_region) if (pre_region in region_options and not reset_preselect) else 0)
-        region = st.selectbox("Περιφέρεια", options=region_options, index=region_index, key="loc_region")
+        region_sel = st.selectbox("Περιφέρεια", options=region_options, index=region_index, key="loc_region")
 
-        # Regional Unit select (depends on Region)
-        units = list_units(data, region) if (region and region != "—") else []
-        unit_options = units if units else ["—"]
+        # REGIONAL UNIT (depends on Region)
+        units = list_units(data, region_sel) if (region_sel and region_sel != ANY) else []
+        unit_options = [ANY] + (units or [])
         unit_index = (unit_options.index(pre_unit) if (pre_unit in unit_options and not reset_preselect) else 0)
-        unit = st.selectbox("Περιφερειακή Ενότητα", options=unit_options, index=unit_index, key="loc_unit")
+        unit_sel = st.selectbox("Περιφερειακή Ενότητα", options=unit_options, index=unit_index, key="loc_unit")
 
-        # Municipality select (depends on Unit)
-        municipalities = list_municipalities(data, region, unit) if (region and region != "—" and unit and unit != "—") else []
-        city_options = municipalities if municipalities else ["—"]
+        # MUNICIPALITY (depends on Unit)
+        municipalities = list_municipalities(data, region_sel, unit_sel) if (region_sel and region_sel != ANY and unit_sel and unit_sel != ANY) else []
+        city_options = [ANY] + (municipalities or [])
         city_index = (city_options.index(saved_city) if (saved_city in city_options and not reset_preselect) else 0)
-        city = st.selectbox("Δήμος (Πόλη)", options=city_options, index=city_index, key="loc_city")
+        city_sel = st.selectbox("Δήμος (Πόλη)", options=city_options, index=city_index, key="loc_city")
 
-        # Map to schema
-        district = unit  # Regional Unit
+        # Map to your schema (don’t save “Any” — treat as empty)
+        region   = "" if region_sel == ANY else region_sel
+        district = "" if unit_sel   == ANY else unit_sel
+        city     = "" if city_sel   == ANY else city_sel
+
 
 
         c1, c2 = st.columns(2)
@@ -2062,25 +2059,19 @@ def tenant_open_to_rent_section():
                 st.success(tr("Preferences saved!"))
 
         if col_reset.button(tr("Reset")):
-            # 1) Clear location pickers to “Any”
-            for k in ("loc_region", "loc_unit", "loc_city"):
+            # Clear pickers & OTR widgets so they re-init to defaults on next run
+            for k in ("loc_region", "loc_unit", "loc_city",
+                      "otr_open_flag",
+                      "otr_size_min","otr_size_max",
+                      "otr_rooms_min","otr_rooms_max",
+                      "otr_floor_min","otr_floor_max",
+                      "otr_price_min","otr_price_max",
+                      "otr_keys_inited"):
                 st.session_state.pop(k, None)
 
-            # 2) Clear all OTR widget keys so they won’t conflict in this run
-            for k in (
-                "otr_open_flag",
-                "otr_size_min", "otr_size_max",
-                "otr_rooms_min", "otr_rooms_max",
-                "otr_floor_min", "otr_floor_max",
-                "otr_price_min", "otr_price_max",
-                "otr_keys_inited",
-            ):
-                st.session_state.pop(k, None)
-
-            # 3) On the next run, initialize to defaults (not prefs) and ignore preselection
+            # Next run: force default zeros/False AND skip saved-preselection → pickers show Any
             st.session_state["otr_force_defaults"]  = True
             st.session_state["otr_reset_preselect"] = True
-
             st.rerun()
 
     # --- Compact summary (uses current widget values) ---------------------------
