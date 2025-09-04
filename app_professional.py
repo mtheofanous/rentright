@@ -1712,6 +1712,28 @@ def lp_delete_property(prop_id: int, landlord_id: int):
     c.execute("DELETE FROM landlord_properties WHERE id = ? AND landlord_id = ?", (prop_id, landlord_id))
     c.commit()
 
+def lp_list_visible_properties(landlord_id: int):
+    """Visible properties for a landlord (address + optional listing URL)."""
+    c = get_conn()
+    rows = c.execute(
+        """
+        SELECT id, address, listing_url, updated_at
+        FROM landlord_properties
+        WHERE landlord_id = ? AND visible_to_tenants = 1
+        ORDER BY updated_at DESC, id DESC
+        """,
+        (landlord_id,),
+    ).fetchall()
+    return rows or []
+
+def _url_domain(u: str | None) -> str | None:
+    if not u:
+        return None
+    try:
+        return u.split("://", 1)[-1].split("/", 1)[0]
+    except Exception:
+        return u
+
 
 def tenant_open_to_rent_section():
     st.subheader(tr("Open to Rent"))
@@ -3181,6 +3203,25 @@ def tenant_dashboard():
                         _clear_transient_search_flags()
                         st.info(tr("Contact removed."))
                         st.rerun()
+                
+                # --- Visible properties from this landlord (shown to tenant) ---
+                if landlord_id:
+                    vprops = lp_list_visible_properties(landlord_id)  # (id, address, listing_url, updated_at)
+                    if vprops:
+                        with st.expander(tr("Visible properties"), expanded=False):
+                            for pid, addr, url, upd in vprops:
+                                if url:
+                                    # derive a neat domain label
+                                    try:
+                                        dom = url.split("://", 1)[-1].split("/", 1)[0]
+                                    except Exception:
+                                        dom = url
+                                    st.markdown(
+                                        f"• **{addr}**  \n"
+                                        f"  🔗 [{dom}]({url})  ·  {tr('Updated')}: {upd}"
+                                    )
+                                else:
+                                    st.markdown(f"• **{addr}**  \n  {tr('Updated')}: {upd}")
 
 
 
