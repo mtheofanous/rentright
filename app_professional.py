@@ -4150,7 +4150,7 @@ def tenant_dashboard():
             _go("open_to_rent")
 
     with nav4:
-        if st.button(tr("Previous Landlord References"), key="btn_prev_refs", use_container_width=True):
+        if st.button(tr("My References"), key="btn_prev_refs", use_container_width=True):
             _go("prev_refs")
 
     st.divider()
