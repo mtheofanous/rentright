@@ -3602,7 +3602,8 @@ def tenant_dashboard():
                                     <div class="prop-card">
                                     <div class="prop-title">• {addr}</div>
                                     <div class="prop-sub">{chips_html}</div>
-                                    <div class="prop-foot">{tr('Updated')}: {format_dt(upd)}{link_html}</div>
+                                    <div class="prop-foot">{tr('Updated')}: {format_dt(upd)}</div>
+                                    <div class="prop-foot">{tr('For more details visit')}: {link_html}</div>
                                     </div>
                                     """,
                                     unsafe_allow_html=True
