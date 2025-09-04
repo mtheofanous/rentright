@@ -4157,17 +4157,17 @@ def tenant_dashboard():
 
     # ---------- FULL-WIDTH PAGE RENDER ----------
     page = st.session_state.tenant_page
-    if page == "find_landlords":
-        tenant_future_landlords_section()
-    elif page == "my_contacts":
+    if page == "my_contacts":
         tenant_contancts()
+    elif page == "find_landlords":
+        tenant_future_landlords_section()
     elif page == "open_to_rent":
         tenant_open_to_rent_section()
     elif page == "prev_refs":
         previous_landlords_references()
     else:
         # fallback (shouldn't happen)
-        tenant_future_landlords_section()
+        tenant_contancts()
 
 
 # ---------- Landlord Dashboard (enhanced) ----------
