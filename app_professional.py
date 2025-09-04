@@ -3890,6 +3890,15 @@ def landlord_dashboard():
         .pt-meta{color:#94a3b8;font-size:.85rem;margin-top:2px}
         .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#f1f5f9;color:#334155;font-size:.8rem;
               margin-right:6px;margin-bottom:4px;border:1px solid #e2e8f0}
+        .pill-score{background:#eef2ff;color:#3730a3;border-color:#c7d2fe}
+        .pill-ok{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
+        .pill-no{background:#fef2f2;color:#7f1d1d;border-color:#fecaca}
+        .pill-na{background:#f1f5f9;color:#334155;border-color:#e2e8f0}
+        .ref-card{border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;margin-bottom:10px;background:#fff}
+        .ref-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+        .ref-title{font-weight:600}
+        .ref-row{display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:8px}
+        .ref-comments{border-left:3px solid #e2e8f0;padding-left:10px;margin-top:8px;color:#334155}
         .ref-card{border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;margin-bottom:8px;background:#fff}
         .ref-title{font-weight:600;margin-bottom:2px}
         .ref-sub{color:#475569;font-size:.9rem;margin:4px 0 6px}
@@ -4229,51 +4238,113 @@ def landlord_dashboard():
                 )
 
                 # ---- Reference details (tidy, card style) — only when connected ----
+                
+                # ---- Reference details (prettier) — only when connected ----
                 def _to_bool(v):
                     if v is None: return None
                     if isinstance(v, bool): return v
-                    if isinstance(v, (int, float)): return bool(int(v))
+                    if isinstance(v, (int,float)): return bool(int(v))
                     if isinstance(v, str):
                         s = v.strip().lower()
                         if s in {"1","true","yes","y","t"}: return True
                         if s in {"0","false","no","n","f"}: return False
                     return None
-                def _yn(v): 
+                def _yn(v):
                     b = _to_bool(v)
                     if b is None: return "—"
                     return tr("Yes") if b else tr("No")
 
+                def _status_badge_html(s):
+                    lab = display_status_label(s) if s else "—"
+                    s_l = (s or "").lower()
+                    cls = "pt-badge pt-badge--info"
+                    if s_l == "completed": cls = "pt-badge pt-badge--ok"
+                    elif s_l in {"rejected","declined"}: cls = "pt-badge pt-badge--err"
+                    return f'<span class="{cls}">{lab}</span>'
+
                 if status == "connected" and refs:
                     with st.expander(tr("Reference details"), expanded=False):
                         for r in refs:
-                            prev_email = r.get("prev_email") or "—"
-                            status_lr  = r.get("status")
+                            prev_email = (r.get("prev_email") or "—").strip()
+                            status_lr  = r.get("status") or ""
                             score_lr   = r.get("score")
-                            paid_on    = _yn(r.get("paid_on_time"))
-                            util_unp   = _yn(r.get("utilities_unpaid"))
-                            good_cond  = _yn(r.get("good_condition"))
+                            paid_on    = _to_bool(r.get("paid_on_time"))
+                            util_unp   = _to_bool(r.get("utilities_unpaid"))
+                            good_cond  = _to_bool(r.get("good_condition"))
                             comments   = r.get("comments")
+
+                            # Build chips
+                            chips = []
+                            if (status_lr or "").lower() == "completed" and score_lr is not None:
+                                chips.append(f'<span class="pill pill-score">{md_label("Score:")} {int(score_lr)}/10</span>')
+                            chips.append(f'<span class="pill {"pill-ok" if paid_on is True else "pill-no" if paid_on is False else "pill-na"}">{tr("Paid on time")}: {_yn(paid_on)}</span>')
+                            chips.append(f'<span class="pill {"pill-no" if util_unp is True else "pill-ok" if util_unp is False else "pill-na"}">{tr("Utilities unpaid")}: {_yn(util_unp)}</span>')
+                            chips.append(f'<span class="pill {"pill-ok" if good_cond is True else "pill-no" if good_cond is False else "pill-na"}">{tr("Apartment in good condition")}: {_yn(good_cond)}</span>')
+                            chips_html = " ".join(chips)
 
                             st.markdown(
                                 f"""
                                 <div class="ref-card">
-                                <div class="ref-title">{tr('From previous landlord')}: {prev_email}</div>
-                                <div class="ref-sub">{md_label('Status:')} {display_status_label(status_lr)}</div>
-                                <div class="ref-foot">
-                                    {'{} {}/10 · '.format(md_label('Score:'), int(score_lr)) if (status_lr or '').lower() == 'completed' and score_lr is not None else ''}
-                                    {tr('Paid on time')}: <b>{paid_on}</b> ·
-                                    {tr('Utilities unpaid')}: <b>{util_unp}</b> ·
-                                    {tr('Apartment in good condition')}: <b>{good_cond}</b>
+                                <div class="ref-header">
+                                    <div class="ref-title">{tr('From previous landlord')}: <a href="mailto:{prev_email}">{prev_email}</a></div>
+                                    <div>{_status_badge_html(status_lr)}</div>
                                 </div>
+                                <div class="ref-row">{chips_html}</div>
                                 </div>
                                 """,
                                 unsafe_allow_html=True
                             )
                             if comments:
-                                st.markdown(md_label('Comments:'))
-                                st.write(comments)
+                                st.markdown(f"**{md_label('Comments:')}**")
+                                st.markdown(f"<div class='ref-comments'>{comments}</div>", unsafe_allow_html=True)
                 elif status != "connected":
                     st.caption("🔒 " + tr("Reference details are visible after you connect."))
+
+                # def _to_bool(v):
+                #     if v is None: return None
+                #     if isinstance(v, bool): return v
+                #     if isinstance(v, (int, float)): return bool(int(v))
+                #     if isinstance(v, str):
+                #         s = v.strip().lower()
+                #         if s in {"1","true","yes","y","t"}: return True
+                #         if s in {"0","false","no","n","f"}: return False
+                #     return None
+                # def _yn(v): 
+                #     b = _to_bool(v)
+                #     if b is None: return "—"
+                #     return tr("Yes") if b else tr("No")
+
+                # if status == "connected" and refs:
+                #     with st.expander(tr("Reference details"), expanded=False):
+                #         for r in refs:
+                #             prev_email = r.get("prev_email") or "—"
+                #             status_lr  = r.get("status")
+                #             score_lr   = r.get("score")
+                #             paid_on    = _yn(r.get("paid_on_time"))
+                #             util_unp   = _yn(r.get("utilities_unpaid"))
+                #             good_cond  = _yn(r.get("good_condition"))
+                #             comments   = r.get("comments")
+
+                #             st.markdown(
+                #                 f"""
+                #                 <div class="ref-card">
+                #                 <div class="ref-title">{tr('From previous landlord')}: {prev_email}</div>
+                #                 <div class="ref-sub">{md_label('Status:')} {display_status_label(status_lr)}</div>
+                #                 <div class="ref-foot">
+                #                     {'{} {}/10 · '.format(md_label('Score:'), int(score_lr)) if (status_lr or '').lower() == 'completed' and score_lr is not None else ''}
+                #                     {tr('Paid on time')}: <b>{paid_on}</b> ·
+                #                     {tr('Utilities unpaid')}: <b>{util_unp}</b> ·
+                #                     {tr('Apartment in good condition')}: <b>{good_cond}</b>
+                #                 </div>
+                #                 </div>
+                #                 """,
+                #                 unsafe_allow_html=True
+                #             )
+                #             if comments:
+                #                 st.markdown(md_label('Comments:'))
+                #                 st.write(comments)
+                # elif status != "connected":
+                #     st.caption("🔒 " + tr("Reference details are visible after you connect."))
 
             # tenant_user = get_user_by_id(tid) or {}
             # tenant_name = (tenant_user.get("name") or "").strip()
