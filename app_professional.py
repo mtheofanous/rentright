@@ -3938,6 +3938,76 @@ def landlord_dashboard():
         if lo is None and hi is None: return f"—{unit}"
         return f"{_fmt_num(lo) if lo not in (None,0) else '—'}–{_fmt_num(hi) if hi not in (None,0) else '—'}{unit}"
     
+    def open_to_rent_tokens(tenant_id: int):
+        """
+        Returns None if not Active.
+        Else returns dict with pretty strings for chips:
+        {"where", "size", "rooms", "floor", "price"}
+        """
+        c = get_conn()
+        try:
+            cols = {r[1] for r in c.execute("PRAGMA table_info(tenant_profiles)").fetchall()}
+        except Exception:
+            return None
+        if "open_to_rent" not in cols:
+            return None
+
+        id_col = "tenant_id" if "tenant_id" in cols else ("user_id" if "user_id" in cols else None)
+        if not id_col:
+            return None
+
+        wanted = [
+            "open_to_rent","search_region","search_district","search_city",
+            "size_min","size_max","rooms_min","rooms_max",
+            "floor_min","floor_max","price_min","price_max",
+        ]
+        select_cols = [cname for cname in wanted if cname in cols]
+        sql_cols = ", ".join([f'"{cname}"' for cname in select_cols])
+
+        row = c.execute(f'SELECT {sql_cols} FROM tenant_profiles WHERE "{id_col}"=?', (tenant_id,)).fetchone()
+        if not row:
+            return None
+        data = dict(zip(select_cols, row))
+
+        # Active?
+        o2r = data.get("open_to_rent")
+        try:
+            active = int(o2r) == 1
+        except Exception:
+            active = str(o2r).strip() == "1"
+        if not active:
+            return None
+
+        # Build pretty parts
+        def fmt_num(v):
+            if v is None or v == "" or (isinstance(v, (int, float)) and v == 0):
+                return None
+            try:
+                return f"{int(v):,}"
+            except Exception:
+                return str(v)
+
+        def rng(lo, hi):
+            lo_f, hi_f = fmt_num(lo), fmt_num(hi)
+            if not lo_f and not hi_f:
+                return None
+            return f"{lo_f or '—'}–{hi_f or '—'}"
+
+        where = " — ".join([x for x in [data.get("search_region"), data.get("search_district"), data.get("search_city")] if x]) or None
+        size  = rng(data.get("size_min"),  data.get("size_max"))
+        rooms = rng(data.get("rooms_min"), data.get("rooms_max"))
+        floor = rng(data.get("floor_min"), data.get("floor_max"))
+        price = rng(data.get("price_min"), data.get("price_max"))
+
+        return {
+            "where": where,
+            "size":  f"{size} m²" if size else None,
+            "rooms": f"{rooms} {tr('rooms')}" if rooms else None,
+            "floor": f"{tr('Floor')} {floor}" if floor else None,
+            "price": f"€{price}" if price else None,
+        }
+
+    
     def open_to_rent_summary_line(tenant_id: int) -> str | None:
         """
         Status: Active · Looking in: Region — District — City · 60–100 m² · 1–3 rooms · Floor 2–4 · €500–€1,000
@@ -4111,12 +4181,30 @@ def landlord_dashboard():
                             st.rerun()
 
                 # ---- Open to Rent one-liner (Active only) ----
-                try:
-                    o2r_line = open_to_rent_summary_line(tid)  # returns None if not Active
-                except Exception:
-                    o2r_line = None
-                if o2r_line:
-                    st.markdown(f"🟢 *{o2r_line}*")
+                o2r = open_to_rent_tokens(tid)
+                if o2r:
+                    chips = []
+                    if o2r["where"]: chips.append(f'<span class="pill">{o2r["where"]}</span>')
+                    if o2r["size"]:  chips.append(f'<span class="pill">{o2r["size"]}</span>')
+                    if o2r["rooms"]: chips.append(f'<span class="pill">{o2r["rooms"]}</span>')
+                    if o2r["floor"]: chips.append(f'<span class="pill">{o2r["floor"]}</span>')
+                    if o2r["price"]: chips.append(f'<span class="pill">{o2r["price"]}</span>')
+                    chips_html = " ".join(chips)
+
+                    st.markdown(
+                        f'<div style="display:flex;align-items:center;gap:10px;margin:6px 0 2px 0">'
+                        f'  <span class="pt-badge pt-badge--ok">{tr("Open to Rent")}</span>'
+                        f'  <div>{chips_html}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
+
+                # try:
+                #     o2r_line = open_to_rent_summary_line(tid)  # returns None if not Active
+                # except Exception:
+                #     o2r_line = None
+                # if o2r_line:
+                #     st.markdown(f"🟢 *{o2r_line}*")
 
                 # ---- References summary ----
                 refs = list_latest_references_for_tenant_dict(tid) or []
