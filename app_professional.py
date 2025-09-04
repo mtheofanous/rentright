@@ -1927,28 +1927,32 @@ def tenant_open_to_rent_section():
     tid = st.session_state.user["id"]
     prefs = load_open_to_rent_prefs(tid)
 
-    # Prefill (stored values)
-    saved_city = (prefs.get("search_city") or "").strip()        # Δήμος
-    saved_dist = (prefs.get("search_district") or "").strip()    # Περιφερειακή Ενότητα
+    # --- One-time init of widget state from saved prefs (NOT on reset) ----------
+    if "otr_keys_inited" not in st.session_state:
+        st.session_state["otr_open_flag"]  = bool(prefs.get("open_to_rent"))
+        st.session_state["otr_size_min"]   = int(prefs.get("size_min")  or 0)
+        st.session_state["otr_size_max"]   = int(prefs.get("size_max")  or 0)
+        st.session_state["otr_rooms_min"]  = int(prefs.get("rooms_min") or 0)
+        st.session_state["otr_rooms_max"]  = int(prefs.get("rooms_max") or 0)
+        st.session_state["otr_floor_min"]  = int(prefs.get("floor_min") or 0)
+        st.session_state["otr_floor_max"]  = int(prefs.get("floor_max") or 0)
+        st.session_state["otr_price_min"]  = int(prefs.get("price_min") or 0)
+        st.session_state["otr_price_max"]  = int(prefs.get("price_max") or 0)
+        st.session_state["otr_keys_inited"] = True
 
-    open_flag = st.checkbox(
-        tr("I'm currently looking for a place"),
-        value=bool(prefs.get("open_to_rent")),
-    )
-
-    # Defaults to avoid NameError even on early returns
-    region = ""
-    district = ""
-    city = ""
+    # Defaults
+    region = district = city = ""
 
     with st.container(border=True):
-        # ---- Load Region → P.E. → Municipality from ellada.json ----
-        # If you committed the file to ./data/ellada.json, pass that path;
-        # otherwise omit the argument to use the loader's search logic + uploader fallback.
+        # ---- Greek admin picks (Region → Regional Unit → Municipality) ----------
         data, regions, muni_idx = load_ellada_index("ellada.json")
-          # or load_ellada_index("data/ellada.json")
 
-        # Infer preselected Region/P.E. from saved values
+        # If we just pressed Reset, skip any preselection from saved prefs
+        reset_preselect = st.session_state.pop("otr_reset_preselect", False)
+
+        saved_city = "" if reset_preselect else (prefs.get("search_city") or "").strip()
+        saved_dist = "" if reset_preselect else (prefs.get("search_district") or "").strip()
+
         pre_region, pre_unit = (None, None)
         if saved_city and saved_city in muni_idx:
             pre_region, pre_unit = muni_idx[saved_city]
@@ -1962,42 +1966,47 @@ def tenant_open_to_rent_section():
 
         # Region select
         region_options = regions if regions else ["—"]
-        region_index = region_options.index(pre_region) if pre_region in region_options else 0
+        region_index = (region_options.index(pre_region) if (pre_region in region_options and not reset_preselect) else 0)
         region = st.selectbox("Περιφέρεια", options=region_options, index=region_index, key="loc_region")
 
-        # P.E. select (depends on Region)
+        # Regional Unit select (depends on Region)
         units = list_units(data, region) if (region and region != "—") else []
         unit_options = units if units else ["—"]
-        unit_index = unit_options.index(pre_unit) if pre_unit in unit_options else 0
+        unit_index = (unit_options.index(pre_unit) if (pre_unit in unit_options and not reset_preselect) else 0)
         unit = st.selectbox("Περιφερειακή Ενότητα", options=unit_options, index=unit_index, key="loc_unit")
 
-        # Municipality select (depends on P.E.)
+        # Municipality select (depends on Unit)
         municipalities = list_municipalities(data, region, unit) if (region and region != "—" and unit and unit != "—") else []
         city_options = municipalities if municipalities else ["—"]
-        city_index = city_options.index(saved_city) if saved_city in city_options else 0
+        city_index = (city_options.index(saved_city) if (saved_city in city_options and not reset_preselect) else 0)
         city = st.selectbox("Δήμος (Πόλη)", options=city_options, index=city_index, key="loc_city")
 
-        # Map to your schema
-        district = unit
+        # Map to schema
+        district = unit  # Regional Unit
 
-        # ---- Other filters (unchanged) ----
+        # ---- Other filters (use keys so Reset can override) ---------------------
+        open_flag = st.checkbox(
+            tr("I'm currently looking for a place"),
+            key="otr_open_flag",
+        )
+
         c1, c2 = st.columns(2)
-        size_min = c1.number_input(tr("Min size (m²)"), min_value=0, max_value=10000, value=int(prefs.get("size_min") or 0), step=10)
-        size_max = c2.number_input(tr("Max size (m²)"), min_value=0, max_value=10000, value=int(prefs.get("size_max") or 0), step=10)
+        size_min = c1.number_input(tr("Min size (m²)"), 0, 10000, key="otr_size_min")
+        size_max = c2.number_input(tr("Max size (m²)"), 0, 10000, key="otr_size_max")
 
         r1, r2 = st.columns(2)
-        rooms_min = r1.number_input(tr("Min rooms"), min_value=0, max_value=50, value=int(prefs.get("rooms_min") or 0), step=1)
-        rooms_max = r2.number_input(tr("Max rooms"), min_value=0, max_value=50, value=int(prefs.get("rooms_max") or 0), step=1)
+        rooms_min = r1.number_input(tr("Min rooms"), 0, 50, key="otr_rooms_min")
+        rooms_max = r2.number_input(tr("Max rooms"), 0, 50, key="otr_rooms_max")
 
         f1, f2 = st.columns(2)
-        floor_min = f1.number_input(tr("Min floor"), min_value=-5, max_value=100, value=int(prefs.get("floor_min") or 0), step=1)
-        floor_max = f2.number_input(tr("Max floor"), min_value=-5, max_value=100, value=int(prefs.get("floor_max") or 0), step=1)
+        floor_min = f1.number_input(tr("Min floor"), -5, 100, key="otr_floor_min")
+        floor_max = f2.number_input(tr("Max floor"), -5, 100, key="otr_floor_max")
 
         p1, p2 = st.columns(2)
-        price_min = p1.number_input(tr("Min price (€)"), min_value=0, max_value=1_000_000, value=int(prefs.get("price_min") or 0), step=50)
-        price_max = p2.number_input(tr("Max price (€)"), min_value=0, max_value=1_000_000, value=int(prefs.get("price_max") or 0), step=50)
+        price_min = p1.number_input(tr("Min price (€)"), 0, 1_000_000, key="otr_price_min")
+        price_max = p2.number_input(tr("Max price (€)"), 0, 1_000_000, key="otr_price_max")
 
-        # ---- Save / Reset ----
+        # ---- Save / Reset -------------------------------------------------------
         col_save, col_reset = st.columns([1, 1])
 
         if col_save.button(tr("Save")):
@@ -2007,26 +2016,24 @@ def tenant_open_to_rent_section():
                 st.warning(tr("Please enter at least a city or a district."))
             else:
                 try:
-                    # If your saver accepts OSM args
                     save_open_to_rent_prefs(
-                        tid, open_flag,
+                        tid, bool(st.session_state["otr_open_flag"]),
                         city_clean, district_clean,
-                        size_min, size_max,
-                        rooms_min, rooms_max,
-                        floor_min, floor_max,
-                        price_min, price_max,
+                        int(st.session_state["otr_size_min"]), int(st.session_state["otr_size_max"]),
+                        int(st.session_state["otr_rooms_min"]), int(st.session_state["otr_rooms_max"]),
+                        int(st.session_state["otr_floor_min"]), int(st.session_state["otr_floor_max"]),
+                        int(st.session_state["otr_price_min"]), int(st.session_state["otr_price_max"]),
                         city_osm_id=None, city_osm_type=None,
                         district_osm_id=None, district_osm_type=None,
                     )
                 except TypeError:
-                    # Old signature without OSM args
                     save_open_to_rent_prefs(
-                        tid, open_flag,
+                        tid, bool(st.session_state["otr_open_flag"]),
                         city_clean, district_clean,
-                        size_min, size_max,
-                        rooms_min, rooms_max,
-                        floor_min, floor_max,
-                        price_min, price_max,
+                        int(st.session_state["otr_size_min"]), int(st.session_state["otr_size_max"]),
+                        int(st.session_state["otr_rooms_min"]), int(st.session_state["otr_rooms_max"]),
+                        int(st.session_state["otr_floor_min"]), int(st.session_state["otr_floor_max"]),
+                        int(st.session_state["otr_price_min"]), int(st.session_state["otr_price_max"]),
                     )
                 try:
                     st.cache_data.clear()
@@ -2035,43 +2042,60 @@ def tenant_open_to_rent_section():
                 st.success(tr("Preferences saved!"))
 
         if col_reset.button(tr("Reset")):
-            # Discard unsaved edits: clear the pickers so they re-infer from saved prefs on rerun
+            # 1) Clear Greek pickers to "Any" (—)
             for k in ("loc_region", "loc_unit", "loc_city"):
                 st.session_state.pop(k, None)
-            # number_inputs reinitialize from `prefs` on rerun (their 'value=' comes from prefs)
+            # 2) Force default values for all OTR fields
+            st.session_state["otr_open_flag"] = False
+            st.session_state["otr_size_min"]  = 0
+            st.session_state["otr_size_max"]  = 0
+            st.session_state["otr_rooms_min"] = 0
+            st.session_state["otr_rooms_max"] = 0
+            st.session_state["otr_floor_min"] = 0
+            st.session_state["otr_floor_max"] = 0
+            st.session_state["otr_price_min"] = 0
+            st.session_state["otr_price_max"] = 0
+            # 3) Tell the picker preselection logic to IGNORE saved prefs on next run
+            st.session_state["otr_reset_preselect"] = True
             st.rerun()
 
-        # col_save, _ = st.columns([1,3])
-        # if col_save.button(tr("Save")):
-        #     city_clean = "" if (city == "—") else (city or "")
-        #     district_clean = "" if (district == "—") else (district or "")
-        #     if not city_clean and not district_clean:
-        #         st.warning(tr("Please enter at least a city or a district."))
-        #     else:
-        #         try:
-        #             # If your saver accepts OSM args
-        #             save_open_to_rent_prefs(
-        #                 tid, open_flag,
-        #                 city_clean, district_clean,
-        #                 size_min, size_max,
-        #                 rooms_min, rooms_max,
-        #                 floor_min, floor_max,
-        #                 price_min, price_max,
-        #                 city_osm_id=None, city_osm_type=None,
-        #                 district_osm_id=None, district_osm_type=None,
-        #             )
-        #         except TypeError:
-        #             # Old signature without OSM args
-        #             save_open_to_rent_prefs(
-        #                 tid, open_flag,
-        #                 city_clean, district_clean,
-        #                 size_min, size_max,
-        #                 rooms_min, rooms_max,
-        #                 floor_min, floor_max,
-        #                 price_min, price_max,
-        #             )
-        #         st.success(tr("Preferences saved!"))
+    # --- Compact summary (uses current widget values) ---------------------------
+    def _fmt_range(lo, hi, suffix=""):
+        has_lo = lo not in (None, 0, "0", "")
+        has_hi = hi not in (None, 0, "0", "")
+        if not has_lo and not has_hi:
+            return None
+        lo_txt = f"{int(lo):,}" if has_lo else "—"
+        hi_txt = f"{int(hi):,}" if has_hi else "—"
+        return f"{lo_txt}–{hi_txt}{suffix}"
 
+    latest_region = region if (region and region != "—") else ""
+    latest_district = district if (district and district != "—") else ""
+    latest_city = city if (city and city != "—") else ""
+    loc_txt = " — ".join([x.strip() for x in [latest_region, latest_district, latest_city] if x])
+
+    size_txt  = _fmt_range(st.session_state["otr_size_min"],  st.session_state["otr_size_max"],  " m²")
+    rooms_txt = _fmt_range(st.session_state["otr_rooms_min"], st.session_state["otr_rooms_max"], f" {tr('rooms')}")
+    floor_txt = _fmt_range(st.session_state["otr_floor_min"], st.session_state["otr_floor_max"])
+    price_txt = _fmt_range(st.session_state["otr_price_min"], st.session_state["otr_price_max"])
+
+    bits = []
+    if size_txt:  bits.append(size_txt)
+    if rooms_txt: bits.append(rooms_txt)
+    if floor_txt: bits.append(tr("Floor") + " " + floor_txt)
+    if price_txt: bits.append("€" + price_txt.replace("–", "–€"))
+
+    details_txt = " · ".join(bits)
+    state_label = tr("Active") if st.session_state["otr_open_flag"] else tr("Inactive")
+
+    if loc_txt and details_txt:
+        st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {loc_txt} · {details_txt}")
+    elif loc_txt:
+        st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {loc_txt}")
+    elif details_txt:
+        st.caption(f"{tr('Status:')} {state_label} · {details_txt}")
+    else:
+        st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {tr('Anywhere')}")
 
 
     # --- Compact summary (adds size, rooms, floor) ---
