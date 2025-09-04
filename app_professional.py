@@ -3345,33 +3345,34 @@ def tenant_dashboard():
 
         # Friendly hint between search and add-by-email
         st.caption(tr("If you can’t find the landlord above, send a request to connect by email."))
+        
+        with st.expander("send a request to connect by email", expanded=False):
+            # --- Add Contact (request to connect by email) ------------------------------
+            with st.container(border=True):
+                with st.form(f"{NS}:add_contact_form", clear_on_submit=True):
+                    new_email = st.text_input(
+                        tr("Landlord email"),
+                        key=f"{NS}:new_email",
+                        placeholder="name@example.com",
+                    )
+                    col_a, _ = st.columns([1, 6])
+                    submitted = col_a.form_submit_button(tr("Add Contact"))
+                    if submitted:
+                        email = (new_email or "").strip()
+                        if not email or "@" not in email:
+                            st.error(tr("Please enter a valid email address."))
+                        else:
+                            try:
+                                add_future_landlord_contact(tenant_id, email)
+                                try: st.cache_data.clear()
+                                except Exception: pass
+                                _clear_transient_search_flags()
+                                st.success(tr("Contact added."))
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"{tr('Unable to add contact')}: {e}")
 
-        # --- Add Contact (request to connect by email) ------------------------------
-        with st.container(border=False):
-            with st.form(f"{NS}:add_contact_form", clear_on_submit=True):
-                new_email = st.text_input(
-                    tr("Landlord email"),
-                    key=f"{NS}:new_email",
-                    placeholder="name@example.com",
-                )
-                col_a, _ = st.columns([1, 6])
-                submitted = col_a.form_submit_button(tr("Add Contact"))
-                if submitted:
-                    email = (new_email or "").strip()
-                    if not email or "@" not in email:
-                        st.error(tr("Please enter a valid email address."))
-                    else:
-                        try:
-                            add_future_landlord_contact(tenant_id, email)
-                            try: st.cache_data.clear()
-                            except Exception: pass
-                            _clear_transient_search_flags()
-                            st.success(tr("Contact added."))
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"{tr('Unable to add contact')}: {e}")
-
-        st.divider()
+            st.divider()
 
     def tenant_contancts():
         st.subheader(tr('Contacts'))
