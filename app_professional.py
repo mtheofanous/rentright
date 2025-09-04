@@ -4379,7 +4379,7 @@ def landlord_dashboard():
                         ]
                         avg_score = round(sum(completed_scores) / len(completed_scores), 1) if completed_scores else None
 
-                        st.caption(
+                        st.markdown(
                             f"{tr('Avg score')}: {f'{avg_score}/10' if avg_score is not None else '—'}"
                         )
 
