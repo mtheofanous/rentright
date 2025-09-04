@@ -4329,6 +4329,11 @@ def landlord_dashboard():
                 completed = [r for r in refs if (r.get("status") or "").lower() == "completed"]
                 scores = [r.get("score") for r in completed if r.get("score") is not None]
                 avg_score = round(sum(scores) / len(scores), 1) if scores else None
+                
+                st.caption(
+                            "📄 "
+                            + f"{tr('References')}: {len(refs)}"
+                        )
 
                 try:
                     latest_status_label = display_status_label(latest_status)
