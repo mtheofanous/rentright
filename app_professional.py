@@ -4994,36 +4994,11 @@ def landlord_dashboard():
                         # Right column: actions, depending on status/origin
                         if status_label == "connected":
                             pass
-                            # if top[2].button(tr("Disconnect"), key=f"otr_disc_{tenant_id}"):
-                            #     flc_disconnect(landlord_id, tenant_id)
-                            #     try: st.cache_data.clear()
-                            #     except Exception: pass
-                            #     st.warning(tr("Disconnected."))
-                            #     st.rerun()
+
 
                         elif status_label == "pending":
-                            if pending_dir == "outbound":
-                                # You (landlord) already asked — allow cancel
-                                if top[2].button(tr("Cancel request"), key=f"otr_cancel_{tenant_id}"):
-                                    flc_cancel_request(landlord_id, tenant_id)
-                                    try: st.cache_data.clear()
-                                    except Exception: pass
-                                    st.rerun()
-                            else:
-                                # Tenant listed you — allow Connect / Reject directly
-                                c1, c2 = top[2].columns(2)
-                                if c1.button(tr("Connect"), key=f"otr_connect_{tenant_id}"):
-                                    flc_connect(landlord_id, tenant_id)
-                                    try: st.cache_data.clear()
-                                    except Exception: pass
-                                    st.success(tr("Connected."))
-                                    st.rerun()
-                                if c2.button(tr("Reject"), key=f"otr_reject_{tenant_id}"):
-                                    flc_reject(landlord_id, tenant_id)
-                                    try: st.cache_data.clear()
-                                    except Exception: pass
-                                    st.info(tr("Rejected."))
-                                    st.rerun()
+                            pass
+
 
                         elif status_label == "disconnected":
                             # Show the status AND allow sending a new request
