@@ -5233,7 +5233,7 @@ def landlord_dashboard():
     # st.divider()
 
     # ---------- FULL-WIDTH PAGE RENDER ----------
-    page = st.session_state.tenant_page
+    page = st.session_state.landlord_page
     if page == "my_contacts":
         my_tenants()
     elif page == "my_properties":
