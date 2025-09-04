@@ -4,7 +4,6 @@ import re
 import hashlib
 import smtplib
 from email.mime.text import MIMEText
-from datetime import datetime
 from uuid import uuid4
 import os
 from pathlib import Path
@@ -13,8 +12,8 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo 
 import requests
 from functools import lru_cache
-import json
 from json import JSONDecodeError
+import json
 
 # Safe import: utils_vault may rely on missing secrets (KeyError)
 VAULT_OK = True
@@ -596,7 +595,6 @@ def ensure_contracts_consent_column(conn):
         cur.execute("ALTER TABLE reference_contracts ADD COLUMN consent_status TEXT NOT NULL DEFAULT 'locked'")
         conn.commit()
         
-from datetime import datetime
 
 def _now_iso():
     return datetime.utcnow().isoformat(timespec="seconds")
@@ -4431,173 +4429,6 @@ def landlord_dashboard():
                     except Exception:
                         pass
 
-
-                # def _to_bool(v):
-                #     if v is None: return None
-                #     if isinstance(v, bool): return v
-                #     if isinstance(v, (int, float)): return bool(int(v))
-                #     if isinstance(v, str):
-                #         s = v.strip().lower()
-                #         if s in {"1","true","yes","y","t"}: return True
-                #         if s in {"0","false","no","n","f"}: return False
-                #     return None
-                # def _yn(v): 
-                #     b = _to_bool(v)
-                #     if b is None: return "—"
-                #     return tr("Yes") if b else tr("No")
-
-                # if status == "connected" and refs:
-                #     with st.expander(tr("Reference details"), expanded=False):
-                #         for r in refs:
-                #             prev_email = r.get("prev_email") or "—"
-                #             status_lr  = r.get("status")
-                #             score_lr   = r.get("score")
-                #             paid_on    = _yn(r.get("paid_on_time"))
-                #             util_unp   = _yn(r.get("utilities_unpaid"))
-                #             good_cond  = _yn(r.get("good_condition"))
-                #             comments   = r.get("comments")
-
-                #             st.markdown(
-                #                 f"""
-                #                 <div class="ref-card">
-                #                 <div class="ref-title">{tr('From previous landlord')}: {prev_email}</div>
-                #                 <div class="ref-sub">{md_label('Status:')} {display_status_label(status_lr)}</div>
-                #                 <div class="ref-foot">
-                #                     {'{} {}/10 · '.format(md_label('Score:'), int(score_lr)) if (status_lr or '').lower() == 'completed' and score_lr is not None else ''}
-                #                     {tr('Paid on time')}: <b>{paid_on}</b> ·
-                #                     {tr('Utilities unpaid')}: <b>{util_unp}</b> ·
-                #                     {tr('Apartment in good condition')}: <b>{good_cond}</b>
-                #                 </div>
-                #                 </div>
-                #                 """,
-                #                 unsafe_allow_html=True
-                #             )
-                #             if comments:
-                #                 st.markdown(md_label('Comments:'))
-                #                 st.write(comments)
-                # elif status != "connected":
-                #     st.caption("🔒 " + tr("Reference details are visible after you connect."))
-
-            # tenant_user = get_user_by_id(tid) or {}
-            # tenant_name = (tenant_user.get("name") or "").strip()
-            # tenant_email = (tenant_user.get("email") or "").strip()
-
-            # # Card container
-            # with st.container(border=True):
-            #     top = st.columns([5, 3, 4])
-
-            #     # ── Left: identity + meta
-            #     title = tenant_name or tenant_email or f"Tenant #{tid}"
-            #     meta = []
-            #     if tenant_email: meta.append(tenant_email)
-            #     if invited and invited_at: meta.append(tr("Invited on") + f" {invited_at}")
-            #     if inbound_request and inbound_requested_at: meta.append(tr("Requested on") + f" {inbound_requested_at}")
-            #     subtitle = " · ".join(meta)
-
-            #     top[0].markdown(f"**{title}**")
-            #     if subtitle: top[0].caption(subtitle)
-
-            #     # ── Middle: status badge
-            #     try:
-            #         status = flc_get_status(landlord_id, tid)  # 'connected' | 'rejected' | None
-            #     except Exception:
-            #         status = None
-
-            #     if status == "connected":
-            #         top[1].success(tr("Connected"))
-            #     elif status == "rejected":
-            #         top[1].error(tr("Rejected"))
-            #     else:
-            #         origin = tr("You requested") if inbound_request else tr("Tenant listed you")
-            #         top[1].info(tr("Pending") + f" · {origin}")
-
-            #     # ── Right: actions
-            #     if status == "connected":
-            #         if top[2].button(tr("Disconnect"), key=pk(tid, "disconnect")):
-            #             flc_disconnect(landlord_id, tid)
-            #             try: st.cache_data.clear()
-            #             except Exception: pass
-            #             st.warning(tr("Disconnected."))
-            #             st.rerun()
-            #     elif status == "rejected":
-            #         top[2].caption(tr("No actions available"))
-            #     else:
-            #         if inbound_request:
-            #             if top[2].button(tr("Cancel request"), key=pk(tid, "cancel_request")):
-            #                 flc_cancel_request(landlord_id, tid)
-            #                 try: st.cache_data.clear()
-            #                 except Exception: pass
-            #                 st.info(tr("Request cancelled."))
-            #                 st.rerun()
-            #         else:
-            #             c1, c2 = top[2].columns(2)
-            #             if c1.button(tr("Connect"), key=pk(tid, "connect")):
-            #                 flc_connect(landlord_id, tid)
-            #                 try: st.cache_data.clear()
-            #                 except Exception: pass
-            #                 st.success(tr("Connected."))
-            #                 st.rerun()
-            #             if c2.button(tr("Reject"), key=pk(tid, "reject")):
-            #                 flc_reject(landlord_id, tid)
-            #                 try: st.cache_data.clear()
-            #                 except Exception: pass
-            #                 st.info(tr("Rejected."))
-            #                 st.rerun()
-
-            #     # ── Open to Rent one-liner (modern, compact)
-            #     o2r_line = open_to_rent_summary_line(tid)
-            #     if o2r_line:
-            #         st.markdown(f"🟢 *{o2r_line}*")
-
-            #     # ── References summary (always visible) ───────────────────────────
-            #     refs = list_latest_references_for_tenant_dict(tid) or []
-            #     refs = [r for r in refs if (r.get("status") or "").lower() != "cancelled"]
-
-            #     total_refs = len(refs)
-            #     latest_status = (refs[0].get("status") if refs else None) or None
-            #     completed = [r for r in refs if (r.get("status") or "").lower() == "completed"]
-            #     scores = [r.get("score") for r in completed if r.get("score") is not None]
-            #     avg_score = round(sum(scores) / len(scores), 1) if scores else None
-
-            #     try:
-            #         latest_status_label = display_status_label(latest_status)
-            #     except Exception:
-            #         latest_status_label = (latest_status or "—").title()
-
-            #     st.caption(
-            #         "📄 "
-            #         + f"{tr('References')}: {total_refs}  ·  "
-            #         + f"{tr('Latest status')}: {latest_status_label}  ·  "
-            #         + f"{tr('Avg score')}: {f'{avg_score}/10' if avg_score is not None else '—'}"
-            #     )
-
-            #     # ── Reference details (beautiful expander, only when connected) ──
-            #     if status == "connected" and refs:
-            #         with st.expander(tr("Reference details"), expanded=False):
-            #             for r in refs:
-            #                 prev_email = r.get("prev_email") or "—"
-            #                 status_lr  = r.get("status")
-            #                 score_lr   = r.get("score")
-            #                 paid_on    = _yn(r.get("paid_on_time"))
-            #                 util_unp   = _yn(r.get("utilities_unpaid"))
-            #                 good_cond  = _yn(r.get("good_condition"))
-            #                 comments   = r.get("comments")
-
-            #                 st.markdown(f"**{tr('From previous landlord')}:** {prev_email}")
-            #                 st.markdown(f"{md_label('Status:')} {display_status_label(status_lr)}")
-            #                 if (status_lr or "").lower() == "completed" and score_lr is not None:
-            #                     st.markdown(f"{md_label('Score:')} {score_lr}/10")
-            #                 st.write(
-            #                     f"- {tr('Paid on time')}: **{paid_on}**  \n"
-            #                     f"- {tr('Utilities unpaid')}: **{util_unp}**  \n"
-            #                     f"- {tr('Apartment in good condition')}: **{good_cond}**"
-            #                 )
-            #                 if comments:
-            #                     st.markdown(md_label('Comments:'))
-            #                     st.write(comments)
-            #                 st.markdown("---")
-            #     elif status != "connected":
-            #         st.caption("🔒 " + tr("Reference details are visible after you connect."))
                     
     # =============================================================================
     # My Properties
@@ -4787,7 +4618,7 @@ def landlord_dashboard():
                         except Exception as e:
                             st.error(f"{tr('Unable to save changes')}: {e}")
 
-                st.caption(f"{tr('Updated')}: {updated_at} · {tr('Created')}: {created_at}")
+                st.caption(f"{tr('Updated')}: {format_dt(updated_at)}")
 
     # st.subheader(tr("My Properties"))
 
