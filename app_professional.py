@@ -3873,6 +3873,41 @@ def landlord_dashboard():
     # Prospective Tenants (landlord view)
     # =============================================================================
     st.subheader(tr("Prospective Tenants"))
+    
+        # ---- minimal CSS for Prospective Tenants cards ----
+    def _ensure_pt_css():
+        if st.session_state.get("_pt_css_done"):
+            return
+        st.markdown("""
+        <style>
+        .pt-title{display:flex;align-items:center;gap:12px;margin-bottom:4px}
+        .pt-avatar{width:40px;height:40px;border-radius:999px;display:flex;align-items:center;justify-content:center;
+                   font-weight:700;color:#111;border:1px solid #e5e7eb;background:linear-gradient(135deg,#f8fafc,#e2e8f0)}
+        .pt-name{font-weight:700;font-size:1.05rem;margin:0}
+        .pt-email{color:#64748b;font-size:.9rem;margin-top:2px}
+        .pt-badge{padding:4px 10px;border-radius:999px;font-size:.85rem;font-weight:600;border:1px solid;display:inline-block}
+        .pt-badge--ok{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
+        .pt-badge--info{background:#eff6ff;color:#1e40af;border-color:#bfdbfe}
+        .pt-badge--err{background:#fef2f2;color:#7f1d1d;border-color:#fecaca}
+        .pt-meta{color:#94a3b8;font-size:.85rem;margin-top:2px}
+        .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#f1f5f9;color:#334155;font-size:.8rem;
+              margin-right:6px;margin-bottom:4px;border:1px solid #e2e8f0}
+        .ref-card{border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;margin-bottom:8px;background:#fff}
+        .ref-title{font-weight:600;margin-bottom:2px}
+        .ref-sub{color:#475569;font-size:.9rem;margin:4px 0 6px}
+        .ref-foot{color:#64748b;font-size:.85rem}
+        </style>
+        """, unsafe_allow_html=True)
+        st.session_state["_pt_css_done"] = True
+
+    def _pt_initials(name, email):
+        base = (name or "").strip() or (email or "").split("@")[0]
+        parts = [p for p in base.replace(".", " ").split() if p]
+        if len(parts) >= 2: return (parts[0][0]+parts[1][0]).upper()
+        if parts: return parts[0][:2].upper()
+        return "?"
+    _ensure_pt_css()
+
 
     # ── Widget key namespace ───────────────────────────────────────────────────────
     NSP = "prospects"
@@ -3992,59 +4027,78 @@ def landlord_dashboard():
         st.caption(tr("No prospective tenants yet."))
     else:
         for (tid, invited, invited_at, inbound_request, inbound_requested_at) in rows:
-            tenant_user = get_user_by_id(tid) or {}
-            tenant_name = (tenant_user.get("name") or "").strip()
-            tenant_email = (tenant_user.get("email") or "").strip()
-
-            # Card container
             with st.container(border=True):
-                top = st.columns([5, 3, 4])
+                # Resolve tenant before rendering identity
+                tenant_user = get_user_by_id(tid) or {}
+                tenant_name  = (tenant_user.get("name")  or "").strip()
+                tenant_email = (tenant_user.get("email") or "").strip()
 
-                # ── Left: identity + meta
-                title = tenant_name or tenant_email or f"Tenant #{tid}"
-                meta = []
-                if tenant_email: meta.append(tenant_email)
-                if invited and invited_at: meta.append(tr("Invited on") + f" {invited_at}")
-                if inbound_request and inbound_requested_at: meta.append(tr("Requested on") + f" {inbound_requested_at}")
-                subtitle = " · ".join(meta)
-
-                top[0].markdown(f"**{title}**")
-                if subtitle: top[0].caption(subtitle)
-
-                # ── Middle: status badge
+                # Canonical connection status
                 try:
                     status = flc_get_status(landlord_id, tid)  # 'connected' | 'rejected' | None
                 except Exception:
                     status = None
 
+                # Header row: identity • badge • actions
+                colL, colM, colR = st.columns([6, 3, 3])
+
+                # Left: avatar + name/email + meta
+                display_title = tenant_name or tenant_email or f"Tenant #{tid}"
+                initials = _pt_initials(tenant_name, tenant_email)
+                meta_bits = []
+                if tenant_email:
+                    meta_bits.append(f'<a href="mailto:{tenant_email}">{tenant_email}</a>')
+                if invited and invited_at:
+                    meta_bits.append(tr("Invited on") + f" {invited_at}")
+                if inbound_request and inbound_requested_at:
+                    meta_bits.append(tr("Requested on") + f" {inbound_requested_at}")
+                meta_line = " · ".join(meta_bits)
+
+                colL.markdown(
+                    f"""
+                    <div class="pt-title">
+                    <div class="pt-avatar">{initials}</div>
+                    <div>
+                        <div class="pt-name">{display_title}</div>
+                        <div class="pt-email">{tenant_email}</div>
+                    </div>
+                    </div>
+                    <div class="pt-meta">{meta_line}</div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+                # Middle: status badge
                 if status == "connected":
-                    top[1].success(tr("Connected"))
+                    colM.markdown(f'<span class="pt-badge pt-badge--ok">{tr("Connected")}</span>', unsafe_allow_html=True)
                 elif status == "rejected":
-                    top[1].error(tr("Rejected"))
+                    colM.markdown(f'<span class="pt-badge pt-badge--err">{tr("Rejected")}</span>', unsafe_allow_html=True)
                 else:
                     origin = tr("You requested") if inbound_request else tr("Tenant listed you")
-                    top[1].info(tr("Pending") + f" · {origin}")
+                    colM.markdown(f'<span class="pt-badge pt-badge--info">{tr("Pending")} · {origin}</span>', unsafe_allow_html=True)
 
-                # ── Right: actions
+                # Right: actions (same logic as before)
                 if status == "connected":
-                    if top[2].button(tr("Disconnect"), key=pk(tid, "disconnect")):
+                    if colR.button(tr("Disconnect"), key=pk(tid, "disconnect")):
                         flc_disconnect(landlord_id, tid)
                         try: st.cache_data.clear()
                         except Exception: pass
                         st.warning(tr("Disconnected."))
                         st.rerun()
+
                 elif status == "rejected":
-                    top[2].caption(tr("No actions available"))
+                    colR.caption(tr("No actions available"))
+
                 else:
                     if inbound_request:
-                        if top[2].button(tr("Cancel request"), key=pk(tid, "cancel_request")):
+                        if colR.button(tr("Cancel request"), key=pk(tid, "cancel_request")):
                             flc_cancel_request(landlord_id, tid)
                             try: st.cache_data.clear()
                             except Exception: pass
                             st.info(tr("Request cancelled."))
                             st.rerun()
                     else:
-                        c1, c2 = top[2].columns(2)
+                        c1, c2 = colR.columns(2)
                         if c1.button(tr("Connect"), key=pk(tid, "connect")):
                             flc_connect(landlord_id, tid)
                             try: st.cache_data.clear()
@@ -4058,12 +4112,15 @@ def landlord_dashboard():
                             st.info(tr("Rejected."))
                             st.rerun()
 
-                # ── Open to Rent one-liner (modern, compact)
-                o2r_line = open_to_rent_summary_line(tid)
+                # ---- Open to Rent one-liner (Active only) ----
+                try:
+                    o2r_line = open_to_rent_summary_line(tid)  # returns None if not Active
+                except Exception:
+                    o2r_line = None
                 if o2r_line:
                     st.markdown(f"🟢 *{o2r_line}*")
 
-                # ── References summary (always visible) ───────────────────────────
+                # ---- References summary ----
                 refs = list_latest_references_for_tenant_dict(tid) or []
                 refs = [r for r in refs if (r.get("status") or "").lower() != "cancelled"]
 
@@ -4085,7 +4142,21 @@ def landlord_dashboard():
                     + f"{tr('Avg score')}: {f'{avg_score}/10' if avg_score is not None else '—'}"
                 )
 
-                # ── Reference details (beautiful expander, only when connected) ──
+                # ---- Reference details (tidy, card style) — only when connected ----
+                def _to_bool(v):
+                    if v is None: return None
+                    if isinstance(v, bool): return v
+                    if isinstance(v, (int, float)): return bool(int(v))
+                    if isinstance(v, str):
+                        s = v.strip().lower()
+                        if s in {"1","true","yes","y","t"}: return True
+                        if s in {"0","false","no","n","f"}: return False
+                    return None
+                def _yn(v): 
+                    b = _to_bool(v)
+                    if b is None: return "—"
+                    return tr("Yes") if b else tr("No")
+
                 if status == "connected" and refs:
                     with st.expander(tr("Reference details"), expanded=False):
                         for r in refs:
@@ -4097,21 +4168,147 @@ def landlord_dashboard():
                             good_cond  = _yn(r.get("good_condition"))
                             comments   = r.get("comments")
 
-                            st.markdown(f"**{tr('From previous landlord')}:** {prev_email}")
-                            st.markdown(f"{md_label('Status:')} {display_status_label(status_lr)}")
-                            if (status_lr or "").lower() == "completed" and score_lr is not None:
-                                st.markdown(f"{md_label('Score:')} {score_lr}/10")
-                            st.write(
-                                f"- {tr('Paid on time')}: **{paid_on}**  \n"
-                                f"- {tr('Utilities unpaid')}: **{util_unp}**  \n"
-                                f"- {tr('Apartment in good condition')}: **{good_cond}**"
+                            st.markdown(
+                                f"""
+                                <div class="ref-card">
+                                <div class="ref-title">{tr('From previous landlord')}: {prev_email}</div>
+                                <div class="ref-sub">{md_label('Status:')} {display_status_label(status_lr)}</div>
+                                <div class="ref-foot">
+                                    {'{} {}/10 · '.format(md_label('Score:'), int(score_lr)) if (status_lr or '').lower() == 'completed' and score_lr is not None else ''}
+                                    {tr('Paid on time')}: <b>{paid_on}</b> ·
+                                    {tr('Utilities unpaid')}: <b>{util_unp}</b> ·
+                                    {tr('Apartment in good condition')}: <b>{good_cond}</b>
+                                </div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
                             )
                             if comments:
                                 st.markdown(md_label('Comments:'))
                                 st.write(comments)
-                            st.markdown("---")
                 elif status != "connected":
                     st.caption("🔒 " + tr("Reference details are visible after you connect."))
+
+            # tenant_user = get_user_by_id(tid) or {}
+            # tenant_name = (tenant_user.get("name") or "").strip()
+            # tenant_email = (tenant_user.get("email") or "").strip()
+
+            # # Card container
+            # with st.container(border=True):
+            #     top = st.columns([5, 3, 4])
+
+            #     # ── Left: identity + meta
+            #     title = tenant_name or tenant_email or f"Tenant #{tid}"
+            #     meta = []
+            #     if tenant_email: meta.append(tenant_email)
+            #     if invited and invited_at: meta.append(tr("Invited on") + f" {invited_at}")
+            #     if inbound_request and inbound_requested_at: meta.append(tr("Requested on") + f" {inbound_requested_at}")
+            #     subtitle = " · ".join(meta)
+
+            #     top[0].markdown(f"**{title}**")
+            #     if subtitle: top[0].caption(subtitle)
+
+            #     # ── Middle: status badge
+            #     try:
+            #         status = flc_get_status(landlord_id, tid)  # 'connected' | 'rejected' | None
+            #     except Exception:
+            #         status = None
+
+            #     if status == "connected":
+            #         top[1].success(tr("Connected"))
+            #     elif status == "rejected":
+            #         top[1].error(tr("Rejected"))
+            #     else:
+            #         origin = tr("You requested") if inbound_request else tr("Tenant listed you")
+            #         top[1].info(tr("Pending") + f" · {origin}")
+
+            #     # ── Right: actions
+            #     if status == "connected":
+            #         if top[2].button(tr("Disconnect"), key=pk(tid, "disconnect")):
+            #             flc_disconnect(landlord_id, tid)
+            #             try: st.cache_data.clear()
+            #             except Exception: pass
+            #             st.warning(tr("Disconnected."))
+            #             st.rerun()
+            #     elif status == "rejected":
+            #         top[2].caption(tr("No actions available"))
+            #     else:
+            #         if inbound_request:
+            #             if top[2].button(tr("Cancel request"), key=pk(tid, "cancel_request")):
+            #                 flc_cancel_request(landlord_id, tid)
+            #                 try: st.cache_data.clear()
+            #                 except Exception: pass
+            #                 st.info(tr("Request cancelled."))
+            #                 st.rerun()
+            #         else:
+            #             c1, c2 = top[2].columns(2)
+            #             if c1.button(tr("Connect"), key=pk(tid, "connect")):
+            #                 flc_connect(landlord_id, tid)
+            #                 try: st.cache_data.clear()
+            #                 except Exception: pass
+            #                 st.success(tr("Connected."))
+            #                 st.rerun()
+            #             if c2.button(tr("Reject"), key=pk(tid, "reject")):
+            #                 flc_reject(landlord_id, tid)
+            #                 try: st.cache_data.clear()
+            #                 except Exception: pass
+            #                 st.info(tr("Rejected."))
+            #                 st.rerun()
+
+            #     # ── Open to Rent one-liner (modern, compact)
+            #     o2r_line = open_to_rent_summary_line(tid)
+            #     if o2r_line:
+            #         st.markdown(f"🟢 *{o2r_line}*")
+
+            #     # ── References summary (always visible) ───────────────────────────
+            #     refs = list_latest_references_for_tenant_dict(tid) or []
+            #     refs = [r for r in refs if (r.get("status") or "").lower() != "cancelled"]
+
+            #     total_refs = len(refs)
+            #     latest_status = (refs[0].get("status") if refs else None) or None
+            #     completed = [r for r in refs if (r.get("status") or "").lower() == "completed"]
+            #     scores = [r.get("score") for r in completed if r.get("score") is not None]
+            #     avg_score = round(sum(scores) / len(scores), 1) if scores else None
+
+            #     try:
+            #         latest_status_label = display_status_label(latest_status)
+            #     except Exception:
+            #         latest_status_label = (latest_status or "—").title()
+
+            #     st.caption(
+            #         "📄 "
+            #         + f"{tr('References')}: {total_refs}  ·  "
+            #         + f"{tr('Latest status')}: {latest_status_label}  ·  "
+            #         + f"{tr('Avg score')}: {f'{avg_score}/10' if avg_score is not None else '—'}"
+            #     )
+
+            #     # ── Reference details (beautiful expander, only when connected) ──
+            #     if status == "connected" and refs:
+            #         with st.expander(tr("Reference details"), expanded=False):
+            #             for r in refs:
+            #                 prev_email = r.get("prev_email") or "—"
+            #                 status_lr  = r.get("status")
+            #                 score_lr   = r.get("score")
+            #                 paid_on    = _yn(r.get("paid_on_time"))
+            #                 util_unp   = _yn(r.get("utilities_unpaid"))
+            #                 good_cond  = _yn(r.get("good_condition"))
+            #                 comments   = r.get("comments")
+
+            #                 st.markdown(f"**{tr('From previous landlord')}:** {prev_email}")
+            #                 st.markdown(f"{md_label('Status:')} {display_status_label(status_lr)}")
+            #                 if (status_lr or "").lower() == "completed" and score_lr is not None:
+            #                     st.markdown(f"{md_label('Score:')} {score_lr}/10")
+            #                 st.write(
+            #                     f"- {tr('Paid on time')}: **{paid_on}**  \n"
+            #                     f"- {tr('Utilities unpaid')}: **{util_unp}**  \n"
+            #                     f"- {tr('Apartment in good condition')}: **{good_cond}**"
+            #                 )
+            #                 if comments:
+            #                     st.markdown(md_label('Comments:'))
+            #                     st.write(comments)
+            #                 st.markdown("---")
+            #     elif status != "connected":
+            #         st.caption("🔒 " + tr("Reference details are visible after you connect."))
                     
     # =============================================================================
     # My Properties
