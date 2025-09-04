@@ -3104,8 +3104,7 @@ def tenant_dashboard():
         
             # Inject minimal CSS once
         def _ensure_tfl_css():
-            if st.session_state.get("_tfl_css_done"):
-                return
+       
             st.markdown("""
             <style>
             .tfl-title{display:flex;align-items:center;gap:12px;margin-bottom:4px}
@@ -3126,7 +3125,7 @@ def tenant_dashboard():
             .prop-foot{color:#64748b;font-size:.85rem}
             </style>
             """, unsafe_allow_html=True)
-            st.session_state["_tfl_css_done"] = True
+            
 
         def _initials(name, email):
             base = (name or "").strip() or (email or "").split("@")[0]
@@ -3876,8 +3875,7 @@ def landlord_dashboard():
     
         # ---- minimal CSS for Prospective Tenants cards ----
     def _ensure_pt_css():
-        if st.session_state.get("_pt_css_done"):
-            return
+ 
         st.markdown("""
         <style>
         .pt-title{display:flex;align-items:center;gap:12px;margin-bottom:4px}
@@ -3898,7 +3896,7 @@ def landlord_dashboard():
         .ref-foot{color:#64748b;font-size:.85rem}
         </style>
         """, unsafe_allow_html=True)
-        st.session_state["_pt_css_done"] = True
+    
 
     def _pt_initials(name, email):
         base = (name or "").strip() or (email or "").split("@")[0]
