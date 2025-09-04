@@ -3295,19 +3295,18 @@ def admin_dashboard():
 
     
 def tenant_dashboard():
-    # --- Header ---
-    col_h1, col_h2, col_h3 = st.columns([5, 1, 2])
-    with col_h1:
-        st.header(tr("Tenant Dashboard"))
+    col_h1, col_h2, col_h3 = st.columns([5,1,2])
+    with col_h1: 
+        st.header(tr('Tenant Dashboard'))
     with col_h2:
         if st.button("🔄", key="tenant_refresh"):
             st.rerun()
-    with col_h3:
+    with col_h3: 
         logout_button()
-
+    
     tenant_id = st.session_state.user["id"]
     tenant_email = (st.session_state.user.get("email") or "").strip().lower()
-    tenant_name = (st.session_state.user.get("name") or "").strip()
+    tenant_name = (st.session_state.user.get("name") or "").strip()  # fallback if name in session
 
     # Try DB lookup if name not in session
     if not tenant_name:
@@ -3322,50 +3321,60 @@ def tenant_dashboard():
         st.subheader(tr("Welcome"))
 
     st.caption(f"{tr('Logged in with email')}: {tenant_email}")
+    
+    # ---------- NAVIGATION ----------
+    nav1, nav2, nav3, nav4 = st.columns(4)
 
-    # ---------- NAVIGATION (safe, no duplicate keys) ----------
+    # default page
     if "tenant_page" not in st.session_state:
         st.session_state.tenant_page = "find_landlords"
 
-    nav_labels = [
-        f"🔍 {tr('Find Landlords')}",
-        f"👤 {tr('My Contacts')}",
-        f"🏠 {tr('Open to Rent')}",
-        f"📄 {tr('Previous Landlord References')}",
-    ]
-    nav_values = ["find_landlords", "my_contacts", "open_to_rent", "prev_refs"]
-
-    # Modern, pill-like control (horizontal radio)
-    selection = st.radio(
-        label=tr("Navigate"),
-        options=nav_values,
-        index=nav_values.index(st.session_state.tenant_page),
-        format_func=lambda v: nav_labels[nav_values.index(v)],
-        horizontal=True,
-        key="tenant_nav_radio",
-    )
-
-    # When switching pages, clear transient per-page flags
-    if selection != st.session_state.tenant_page:
+    def _go(page_key: str):
+        # optional: clear transient UI flags when switching
         for k in list(st.session_state.keys()):
             if k.startswith(("tfl:", "tfl_", "tfl_contacts:", "ld_otr_", "otr_", "prospects")):
                 st.session_state.pop(k, None)
-        st.session_state.tenant_page = selection
+        st.session_state.tenant_page = page_key
 
-    st.divider()
+    # --- Inject modern nav styles ---
+    st.markdown("""
+    <style>
+    .nav-btn {
+        display: block;
+        padding: 12px 18px;
+        margin: 4px 0;
+        border-radius: 25px;
+        text-align: center;
+        font-weight: 600;
+        background: #f8fafc;
+        color: #1e293b;
+        border: 2px solid transparent;
+        transition: all 0.2s ease-in-out;
+    }
+    .nav-btn:hover {
+        background: #e2e8f0;
+        cursor: pointer;
+    }
+    .nav-btn.active {
+        background: #2563eb;
+        color: white;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-    # ---------- PAGE CONTENT (render only ONE section -> no duplicate widget keys) ----------
-    page = st.session_state.tenant_page
-    if page == "find_landlords":
-        tenant_future_landlords_section()  # contains the 'tfl:search_q' input
-    elif page == "my_contacts":
-        tenant_contancts()
-    elif page == "open_to_rent":
-        tenant_open_to_rent_section()
-    elif page == "prev_refs":
-        previous_landlords_references()
-    else:
-        tenant_future_landlords_section()
+    def nav_button(label, key, page_key, icon=""):
+        active = st.session_state.get("tenant_page") == page_key
+        button_html = f"""
+        <div class="nav-btn {'active' if active else ''}" 
+             onclick="window.parent.streamlitSend({{'type':'streamlit:setSessionState','data':{{'{key}':True}}}})">
+            {icon} {tr(label)}
+        </div>
+        """
+        st.markdown(button_html, unsafe_allow_html=True)
+        if st.session_state.get(key):
+            st.session_state[key] = False
+            _go(page_key)
+            
 
     
     def tenant_future_landlords_section():
@@ -4159,18 +4168,16 @@ def tenant_dashboard():
             st.info(tr('No previous landlords added yet.'))
         st.divider()
 
-    # ---------- PAGE CONTENT (render only ONE section -> no duplicate widget keys) ----------
-    page = st.session_state.tenant_page
-    if page == "find_landlords":
-        tenant_future_landlords_section()  # contains the 'tfl:search_q' input
-    elif page == "my_contacts":
-        tenant_contancts()
-    elif page == "open_to_rent":
-        tenant_open_to_rent_section()
-    elif page == "prev_refs":
-        previous_landlords_references()
-    else:
-        tenant_future_landlords_section()
+    # --- Render nav buttons ---
+    with nav1:
+        nav_button("Find Landlords", "find_landlords_btn", "find_landlords", "🔍")
+    with nav2:
+        nav_button("My Contacts", "my_contacts_btn", "my_contacts", "👤")
+    with nav3:
+        nav_button("Open to Rent", "open_to_rent_btn", "open_to_rent", "🏠")
+    with nav4:
+        nav_button("Previous Landlord References", "prev_refs_btn", "prev_refs", "📄")
+
     st.divider()
 
     # ---------- PAGE CONTENT ----------
