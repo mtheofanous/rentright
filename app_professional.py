@@ -3019,21 +3019,20 @@ def tenant_dashboard():
     def tenant_future_landlords_section():
         """
         Tenant dashboard: manage 'Future Landlords (Contacts)'.
-        - Single, clean implementation (remove any legacy section below this function).
         - Namespaced widget keys to avoid Streamlit duplicate-key errors.
+        - Shows landlord name (if available) + email.
         """
         st.subheader(tr("Future Landlords (Contacts)"))
         tenant_id = st.session_state.user["id"]
         
         def _clear_transient_search_flags():
-            # clear any landlord-search leftovers or other transient flags
             for k in list(st.session_state.keys()):
                 if k.startswith(("ld_otr_", "otr_", "prospects")):
                     del st.session_state[k]
 
-        # Namespace to keep all widget keys in this section unique
-        NS = "tfl"  # tenant-future-landlords
-        def k(cid, name):  # convenience key builder
+        # Namespace for widget keys in this section
+        NS = "tfl"
+        def k(cid, name):
             return f"{NS}:{name}:{cid}"
 
         # --- Add Contact form ----------------------------------------------------
@@ -3050,10 +3049,8 @@ def tenant_dashboard():
                     else:
                         try:
                             add_future_landlord_contact(tenant_id, email)
-                            try:
-                                st.cache_data.clear()
-                            except Exception:
-                                pass
+                            try: st.cache_data.clear()
+                            except Exception: pass
                             _clear_transient_search_flags()
                             st.success(tr("Contact added."))
                             st.rerun()
@@ -3070,9 +3067,17 @@ def tenant_dashboard():
             with st.container(border=True):
                 cols = st.columns([4, 3, 5])
 
-                # Left: identity + meta
-                cols[0].markdown(f"**{fl_email}**")
+                # Resolve to an existing landlord user (if any) — we need this before rendering identity
+                landlord_user = get_user_by_email(fl_email)
+                landlord_id = landlord_user["id"] if landlord_user and landlord_user.get("role") == "landlord" else None
+                landlord_name = (landlord_user.get("name") or "").strip() if landlord_user else ""
+
+                # Left: identity + meta (show name if available; show email as subtitle when name exists)
+                display_title = landlord_name or fl_email
+                cols[0].markdown(f"**{display_title}**")
                 meta_bits = []
+                if landlord_name and fl_email:
+                    meta_bits.append(fl_email)  # show email only if we already show a name as title
                 if created_at:
                     meta_bits.append(tr("Added") + f": {created_at}")
                 if invited and invited_at:
@@ -3081,10 +3086,6 @@ def tenant_dashboard():
                     meta_bits.append(tr("Requested on") + f" {inbound_requested_at}")
                 if meta_bits:
                     cols[0].caption(" · ".join(meta_bits))
-
-                # Resolve to an existing landlord user (if any)
-                landlord_user = get_user_by_email(fl_email)
-                landlord_id = landlord_user["id"] if landlord_user and landlord_user.get("role") == "landlord" else None
 
                 # Canonical connection status (from future_landlord_connections)
                 try:
@@ -3104,28 +3105,22 @@ def tenant_dashboard():
                 else:
                     cols[1].caption(tr("Not connected"))
 
-                # Right: actions — keys are namespaced via k(cid, "...")
-
-                # 1) Connected -> Disconnect
+                # Right: actions — namespaced keys
                 if status == "connected":
                     if cols[2].button(tr("Disconnect"), key=k(cid, "disconnect_connected")):
                         if landlord_id:
                             flc_disconnect(landlord_id, tenant_id)
-                        try:
-                            st.cache_data.clear()
-                        except Exception:
-                            pass
+                        try: st.cache_data.clear()
+                        except Exception: pass
                         st.warning(tr("Disconnected."))
                         _clear_transient_search_flags()
                         st.rerun()
 
-                # 2) Landlord-origin pending -> Connect / Disconnect (accept / decline)
                 elif inbound_request:
                     b1, b2 = cols[2].columns(2)
                     if b1.button(tr("Connect"), key=k(cid, "accept_inbound")):
                         if landlord_id:
                             flc_connect(landlord_id, tenant_id)
-                        # clear pending flag on this contact row
                         c = get_conn()
                         c.execute(
                             "UPDATE future_landlord_contacts "
@@ -3134,10 +3129,8 @@ def tenant_dashboard():
                             (cid,),
                         )
                         c.commit()
-                        try:
-                            st.cache_data.clear()
-                        except Exception:
-                            pass
+                        try: st.cache_data.clear()
+                        except Exception: pass
                         _clear_transient_search_flags()
                         st.success(tr("Connected."))
                         st.rerun()
@@ -3153,27 +3146,21 @@ def tenant_dashboard():
                             (cid,),
                         )
                         c.commit()
-                        try:
-                            st.cache_data.clear()
-                        except Exception:
-                            pass
+                        try: st.cache_data.clear()
+                        except Exception: pass
                         _clear_transient_search_flags()
                         st.info(tr("Disconnected."))
                         st.rerun()
 
-                # 3) Tenant-origin invited contact -> Remove
                 elif invited:
                     if cols[2].button(tr("Remove"), key=k(cid, "remove_invited")):
                         remove_future_landlord_contact(cid, tenant_id)
-                        try:
-                            st.cache_data.clear()
-                        except Exception:
-                            pass
+                        try: st.cache_data.clear()
+                        except Exception: pass
                         _clear_transient_search_flags()
                         st.info(tr("Contact removed."))
                         st.rerun()
 
-                # 4) Plain contact without invites/requests -> Send Invitation or Remove
                 else:
                     b1, b2 = cols[2].columns(2)
                     if b1.button(tr("Send Invitation"), key=k(cid, "send_invite_plain")):
@@ -3184,10 +3171,8 @@ def tenant_dashboard():
                             st.session_state.user.get("email"),
                         )
                         if ok:
-                            try:
-                                st.cache_data.clear()
-                            except Exception:
-                                pass
+                            try: st.cache_data.clear()
+                            except Exception: pass
                             _clear_transient_search_flags()
                             st.success(tr("Invitation sent successfully."))
                             st.rerun()
@@ -3196,14 +3181,12 @@ def tenant_dashboard():
 
                     if b2.button(tr("Remove"), key=k(cid, "remove_plain")):
                         remove_future_landlord_contact(cid, tenant_id)
-                        try:
-                            st.cache_data.clear()
-                        except Exception:
-                            pass
+                        try: st.cache_data.clear()
+                        except Exception: pass
                         _clear_transient_search_flags()
                         st.info(tr("Contact removed."))
                         st.rerun()
-                
+
                 # --- Visible properties from this landlord (shown to tenant) ---
                 if landlord_id:
                     vprops = lp_list_visible_properties(landlord_id)  # (id, address, listing_url, updated_at)
@@ -3211,7 +3194,6 @@ def tenant_dashboard():
                         with st.expander(tr("Visible properties"), expanded=False):
                             for pid, addr, url, upd in vprops:
                                 if url:
-                                    # derive a neat domain label
                                     try:
                                         dom = url.split("://", 1)[-1].split("/", 1)[0]
                                     except Exception:
@@ -3222,6 +3204,214 @@ def tenant_dashboard():
                                     )
                                 else:
                                     st.markdown(f"• **{addr}**  \n  {tr('Updated')}: {upd}")
+
+    
+    # def tenant_future_landlords_section():
+    #     """
+    #     Tenant dashboard: manage 'Future Landlords (Contacts)'.
+    #     - Single, clean implementation (remove any legacy section below this function).
+    #     - Namespaced widget keys to avoid Streamlit duplicate-key errors.
+    #     """
+    #     st.subheader(tr("Future Landlords (Contacts)"))
+    #     tenant_id = st.session_state.user["id"]
+        
+    #     def _clear_transient_search_flags():
+    #         # clear any landlord-search leftovers or other transient flags
+    #         for k in list(st.session_state.keys()):
+    #             if k.startswith(("ld_otr_", "otr_", "prospects")):
+    #                 del st.session_state[k]
+
+    #     # Namespace to keep all widget keys in this section unique
+    #     NS = "tfl"  # tenant-future-landlords
+    #     def k(cid, name):  # convenience key builder
+    #         return f"{NS}:{name}:{cid}"
+
+    #     # --- Add Contact form ----------------------------------------------------
+    #     with st.container(border=True):
+    #         st.markdown(f"**{tr('Add Contact')}**")
+    #         with st.form(f"{NS}:add_contact_form", clear_on_submit=True):
+    #             new_email = st.text_input(tr("Landlord email"), key=f"{NS}:new_email")
+    #             col_a, _ = st.columns([1, 6])
+    #             submitted = col_a.form_submit_button(tr("Add"))
+    #             if submitted:
+    #                 email = (new_email or "").strip()
+    #                 if not email or "@" not in email:
+    #                     st.error(tr("Please enter a valid email address."))
+    #                 else:
+    #                     try:
+    #                         add_future_landlord_contact(tenant_id, email)
+    #                         try:
+    #                             st.cache_data.clear()
+    #                         except Exception:
+    #                             pass
+    #                         _clear_transient_search_flags()
+    #                         st.success(tr("Contact added."))
+    #                         st.rerun()
+    #                     except Exception as e:
+    #                         st.error(f"{tr('Unable to add contact')}: {e}")
+
+    #     # --- List + actions (inbound/outbound/pending/connected) -----------------
+    #     rows = list_future_landlord_contacts(tenant_id) or []
+    #     if not rows:
+    #         st.caption(tr("No future landlord contacts yet."))
+    #         return
+
+    #     for (cid, fl_email, created_at, invited, invited_at, inbound_request, inbound_requested_at) in rows:
+    #         with st.container(border=True):
+    #             cols = st.columns([4, 3, 5])
+
+    #             # Left: identity + meta
+    #             cols[0].markdown(f"**{fl_email}**")
+    #             meta_bits = []
+    #             if created_at:
+    #                 meta_bits.append(tr("Added") + f": {created_at}")
+    #             if invited and invited_at:
+    #                 meta_bits.append(tr("Invited on") + f" {invited_at}")
+    #             if inbound_request and inbound_requested_at:
+    #                 meta_bits.append(tr("Requested on") + f" {inbound_requested_at}")
+    #             if meta_bits:
+    #                 cols[0].caption(" · ".join(meta_bits))
+
+    #             # Resolve to an existing landlord user (if any)
+    #             landlord_user = get_user_by_email(fl_email)
+    #             landlord_id = landlord_user["id"] if landlord_user and landlord_user.get("role") == "landlord" else None
+
+    #             # Canonical connection status (from future_landlord_connections)
+    #             try:
+    #                 status = flc_get_status(landlord_id, tenant_id) if landlord_id else None
+    #             except Exception:
+    #                 status = None
+
+    #             # Middle: status badge
+    #             if status == "connected":
+    #                 cols[1].success(tr("Connected"))
+    #             elif status == "rejected":
+    #                 cols[1].error(tr("Rejected"))
+    #             elif inbound_request:
+    #                 cols[1].info(tr("Pending"))
+    #             elif invited:
+    #                 cols[1].success(tr("Invited"))
+    #             else:
+    #                 cols[1].caption(tr("Not connected"))
+
+    #             # Right: actions — keys are namespaced via k(cid, "...")
+
+    #             # 1) Connected -> Disconnect
+    #             if status == "connected":
+    #                 if cols[2].button(tr("Disconnect"), key=k(cid, "disconnect_connected")):
+    #                     if landlord_id:
+    #                         flc_disconnect(landlord_id, tenant_id)
+    #                     try:
+    #                         st.cache_data.clear()
+    #                     except Exception:
+    #                         pass
+    #                     st.warning(tr("Disconnected."))
+    #                     _clear_transient_search_flags()
+    #                     st.rerun()
+
+    #             # 2) Landlord-origin pending -> Connect / Disconnect (accept / decline)
+    #             elif inbound_request:
+    #                 b1, b2 = cols[2].columns(2)
+    #                 if b1.button(tr("Connect"), key=k(cid, "accept_inbound")):
+    #                     if landlord_id:
+    #                         flc_connect(landlord_id, tenant_id)
+    #                     # clear pending flag on this contact row
+    #                     c = get_conn()
+    #                     c.execute(
+    #                         "UPDATE future_landlord_contacts "
+    #                         "SET inbound_request=0, inbound_requested_at=NULL "
+    #                         "WHERE id=?",
+    #                         (cid,),
+    #                     )
+    #                     c.commit()
+    #                     try:
+    #                         st.cache_data.clear()
+    #                     except Exception:
+    #                         pass
+    #                     _clear_transient_search_flags()
+    #                     st.success(tr("Connected."))
+    #                     st.rerun()
+
+    #                 if b2.button(tr("Disconnect"), key=k(cid, "decline_inbound")):
+    #                     if landlord_id:
+    #                         flc_reject(landlord_id, tenant_id)
+    #                     c = get_conn()
+    #                     c.execute(
+    #                         "UPDATE future_landlord_contacts "
+    #                         "SET inbound_request=0, inbound_requested_at=NULL "
+    #                         "WHERE id=?",
+    #                         (cid,),
+    #                     )
+    #                     c.commit()
+    #                     try:
+    #                         st.cache_data.clear()
+    #                     except Exception:
+    #                         pass
+    #                     _clear_transient_search_flags()
+    #                     st.info(tr("Disconnected."))
+    #                     st.rerun()
+
+    #             # 3) Tenant-origin invited contact -> Remove
+    #             elif invited:
+    #                 if cols[2].button(tr("Remove"), key=k(cid, "remove_invited")):
+    #                     remove_future_landlord_contact(cid, tenant_id)
+    #                     try:
+    #                         st.cache_data.clear()
+    #                     except Exception:
+    #                         pass
+    #                     _clear_transient_search_flags()
+    #                     st.info(tr("Contact removed."))
+    #                     st.rerun()
+
+    #             # 4) Plain contact without invites/requests -> Send Invitation or Remove
+    #             else:
+    #                 b1, b2 = cols[2].columns(2)
+    #                 if b1.button(tr("Send Invitation"), key=k(cid, "send_invite_plain")):
+    #                     ok, msg = invite_future_landlord(
+    #                         tenant_id,
+    #                         fl_email,
+    #                         st.session_state.user.get("name"),
+    #                         st.session_state.user.get("email"),
+    #                     )
+    #                     if ok:
+    #                         try:
+    #                             st.cache_data.clear()
+    #                         except Exception:
+    #                             pass
+    #                         _clear_transient_search_flags()
+    #                         st.success(tr("Invitation sent successfully."))
+    #                         st.rerun()
+    #                     else:
+    #                         st.error(f"{tr('Unable to send invitation')}: {msg}")
+
+    #                 if b2.button(tr("Remove"), key=k(cid, "remove_plain")):
+    #                     remove_future_landlord_contact(cid, tenant_id)
+    #                     try:
+    #                         st.cache_data.clear()
+    #                     except Exception:
+    #                         pass
+    #                     _clear_transient_search_flags()
+    #                     st.info(tr("Contact removed."))
+    #                     st.rerun()
+                
+    #             # --- Visible properties from this landlord (shown to tenant) ---
+    #             if landlord_id:
+    #                 vprops = lp_list_visible_properties(landlord_id)  # (id, address, listing_url, updated_at)
+    #                 if vprops:
+    #                     with st.expander(tr("Visible properties"), expanded=False):
+    #                         for pid, addr, url, upd in vprops:
+    #                             if url:
+    #                                 # derive a neat domain label
+    #                                 try:
+    #                                     dom = url.split("://", 1)[-1].split("/", 1)[0]
+    #                                 except Exception:
+    #                                     dom = url
+    #                                 st.markdown(
+    #                                     f"• **{addr}**  \n"
+    #                                     f"  🔗 [{dom}]({url})  ·  {tr('Updated')}: {upd}"
+    #                                 )
+    #                             else:
+    #                                 st.markdown(f"• **{addr}**  \n  {tr('Updated')}: {upd}")
 
 
 
