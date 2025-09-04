@@ -1923,12 +1923,6 @@ def search_landlords_by_property_location(
 
 def tenant_open_to_rent_section():
     st.subheader(tr("Open to Rent"))
-    
-        # ---- Other filters (use keys so Reset can override) ---------------------
-    open_flag = st.checkbox(
-        tr("I'm currently looking for a place"),
-        key="otr_open_flag",
-    )
 
     tid = st.session_state.user["id"]
     prefs = load_open_to_rent_prefs(tid)
@@ -1968,9 +1962,18 @@ def tenant_open_to_rent_section():
     with st.container(border=True):
         # ---- Greek admin picks (Region → Regional Unit → Municipality) ----------
         data, regions, muni_idx = load_ellada_index("ellada.json")
+        
+        
 
         # If we just pressed Reset, skip any preselection from saved prefs
         reset_preselect = st.session_state.pop("otr_reset_preselect", False)
+        
+                # ---- Other filters (use keys so Reset can override) ---------------------
+        open_flag = st.checkbox(
+            tr("I'm currently looking for a place"),
+            key="otr_open_flag",
+        )
+
 
         saved_city = "" if reset_preselect else (prefs.get("search_city") or "").strip()
         saved_dist = "" if reset_preselect else (prefs.get("search_district") or "").strip()
@@ -2005,6 +2008,7 @@ def tenant_open_to_rent_section():
 
         # Map to schema
         district = unit  # Regional Unit
+
 
         c1, c2 = st.columns(2)
         size_min = c1.number_input(tr("Min size (m²)"), 0, 10000, key="otr_size_min")
