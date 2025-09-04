@@ -3336,37 +3336,7 @@ def tenant_dashboard():
         st.session_state.tenant_page = page_key
         # no immediate st.rerun() needed; Streamlit reruns automatically after button click
 
-    with nav1:
-        if st.button(tr("Find Landlords"), key="btn_find_landlords", use_container_width=True):
-            _go("find_landlords")
 
-    with nav2:
-        if st.button(tr("My Contacts"), key="btn_my_contacts", use_container_width=True):
-            _go("my_contacts")
-
-    with nav3:
-        if st.button(tr("Open to Rent"), key="btn_open_to_rent", use_container_width=True):
-            _go("open_to_rent")
-
-    with nav4:
-        if st.button(tr("Previous Landlord References"), key="btn_prev_refs", use_container_width=True):
-            _go("prev_refs")
-
-    st.divider()
-
-    # ---------- FULL-WIDTH PAGE RENDER ----------
-    page = st.session_state.tenant_page
-    if page == "find_landlords":
-        tenant_future_landlords_section()
-    elif page == "my_contacts":
-        tenant_contancts()
-    elif page == "open_to_rent":
-        tenant_open_to_rent_section()
-    elif page == "prev_refs":
-        previous_landlords_references()
-    else:
-        # fallback (shouldn't happen)
-        tenant_future_landlords_section()
     
     def tenant_future_landlords_section():
         """
@@ -4166,7 +4136,37 @@ def tenant_dashboard():
             st.info(tr('No previous landlords added yet.'))
         st.divider()
 
+    with nav1:
+        if st.button(tr("Find Landlords"), key="btn_find_landlords", use_container_width=True):
+            _go("find_landlords")
 
+    with nav2:
+        if st.button(tr("My Contacts"), key="btn_my_contacts", use_container_width=True):
+            _go("my_contacts")
+
+    with nav3:
+        if st.button(tr("Open to Rent"), key="btn_open_to_rent", use_container_width=True):
+            _go("open_to_rent")
+
+    with nav4:
+        if st.button(tr("Previous Landlord References"), key="btn_prev_refs", use_container_width=True):
+            _go("prev_refs")
+
+    st.divider()
+
+    # ---------- FULL-WIDTH PAGE RENDER ----------
+    page = st.session_state.tenant_page
+    if page == "find_landlords":
+        tenant_future_landlords_section()
+    elif page == "my_contacts":
+        tenant_contancts()
+    elif page == "open_to_rent":
+        tenant_open_to_rent_section()
+    elif page == "prev_refs":
+        previous_landlords_references()
+    else:
+        # fallback (shouldn't happen)
+        tenant_future_landlords_section()
 
 
 # ---------- Landlord Dashboard (enhanced) ----------
