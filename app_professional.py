@@ -1023,6 +1023,8 @@ def run_migrations(conn):
     # --- Landlord->Tenant pending request flags on contacts
     add_column_if_missing(conn, "future_landlord_contacts", "inbound_request INTEGER NOT NULL DEFAULT 0")
     add_column_if_missing(conn, "future_landlord_contacts", "inbound_requested_at TEXT")
+    
+
 
     conn.execute("CREATE INDEX IF NOT EXISTS idx_flc_tenant_email ON future_landlord_contacts(tenant_id, email)")
     conn.commit()
@@ -1055,6 +1057,17 @@ def run_migrations(conn):
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_landlord_properties_landlord ON landlord_properties(landlord_id)")
     conn.commit()
+    
+    # --- Landlord properties: extra metadata ---
+    add_column_if_missing(conn, "landlord_properties", "region TEXT")
+    add_column_if_missing(conn, "landlord_properties", "district TEXT")
+    add_column_if_missing(conn, "landlord_properties", "city TEXT")
+    add_column_if_missing(conn, "landlord_properties", "size_m2 INTEGER")
+    add_column_if_missing(conn, "landlord_properties", "rooms INTEGER")
+    add_column_if_missing(conn, "landlord_properties", "floor INTEGER")
+    add_column_if_missing(conn, "landlord_properties", "price INTEGER")
+    conn.commit()
+
 
 
 
@@ -1639,28 +1652,63 @@ def save_open_to_rent_prefs(
     )
     conn.commit()
 
+# properties helpers
+# Start here-------------------------------------------------------
 def _norm_url(u: str | None) -> str | None:
     if not u: 
         return None
     u = u.strip()
     if not u:
         return None
-    # add scheme if missing
     if not (u.startswith("http://") or u.startswith("https://")):
         u = "https://" + u
     return u
 
-def lp_add_property(landlord_id: int, address: str, listing_url: str | None, visible: bool) -> int:
+def _none_if_blank_num(x):
+    # Treat "", None, 0 as None for optional numeric fields
+    if x in (None, ""):
+        return None
+    try:
+        xi = int(x)
+        return xi if xi != 0 else None
+    except Exception:
+        return None
+
+def lp_add_property(
+    landlord_id: int,
+    address: str,
+    listing_url: str | None,
+    visible: bool,
+    region: str | None = None,
+    district: str | None = None,
+    city: str | None = None,
+    size_m2: int | None = None,
+    rooms: int | None = None,
+    floor: int | None = None,
+    price: int | None = None,
+) -> int:
     c = get_conn()
     now = _now_iso()
     listing_url = _norm_url(listing_url)
     vis = 1 if visible else 0
+    size_m2 = _none_if_blank_num(size_m2)
+    rooms   = _none_if_blank_num(rooms)
+    floor   = _none_if_blank_num(floor)
+    price   = _none_if_blank_num(price)
     cur = c.execute(
         """
-        INSERT INTO landlord_properties (landlord_id, address, listing_url, visible_to_tenants, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO landlord_properties
+        (landlord_id, address, listing_url, visible_to_tenants,
+         region, district, city, size_m2, rooms, floor, price,
+         created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (landlord_id, address.strip(), listing_url, vis, now, now),
+        (
+            landlord_id, address.strip(), listing_url, vis,
+            (region or None), (district or None), (city or None),
+            size_m2, rooms, floor, price,
+            now, now,
+        ),
     )
     c.commit()
     return cur.lastrowid
@@ -1669,7 +1717,9 @@ def lp_list_properties(landlord_id: int):
     c = get_conn()
     rows = c.execute(
         """
-        SELECT id, address, listing_url, visible_to_tenants, created_at, updated_at
+        SELECT id, address, listing_url, visible_to_tenants,
+               created_at, updated_at,
+               region, district, city, size_m2, rooms, floor, price
         FROM landlord_properties
         WHERE landlord_id = ?
         ORDER BY updated_at DESC, id DESC
@@ -1678,18 +1728,42 @@ def lp_list_properties(landlord_id: int):
     ).fetchall()
     return rows or []
 
-def lp_update_property(prop_id: int, landlord_id: int, address: str, listing_url: str | None, visible: bool):
+def lp_update_property(
+    prop_id: int,
+    landlord_id: int,
+    address: str,
+    listing_url: str | None,
+    visible: bool,
+    region: str | None,
+    district: str | None,
+    city: str | None,
+    size_m2: int | None,
+    rooms: int | None,
+    floor: int | None,
+    price: int | None,
+):
     c = get_conn()
     now = _now_iso()
     listing_url = _norm_url(listing_url)
     vis = 1 if visible else 0
+    size_m2 = _none_if_blank_num(size_m2)
+    rooms   = _none_if_blank_num(rooms)
+    floor   = _none_if_blank_num(floor)
+    price   = _none_if_blank_num(price)
     c.execute(
         """
         UPDATE landlord_properties
-        SET address = ?, listing_url = ?, visible_to_tenants = ?, updated_at = ?
-        WHERE id = ? AND landlord_id = ?
+        SET address=?, listing_url=?, visible_to_tenants=?,
+            region=?, district=?, city=?, size_m2=?, rooms=?, floor=?, price=?,
+            updated_at=?
+        WHERE id=? AND landlord_id=?
         """,
-        (address.strip(), listing_url, vis, now, prop_id, landlord_id),
+        (
+            address.strip(), listing_url, vis,
+            (region or None), (district or None), (city or None),
+            size_m2, rooms, floor, price,
+            now, prop_id, landlord_id,
+        ),
     )
     c.commit()
 
@@ -1700,8 +1774,8 @@ def lp_toggle_visibility(prop_id: int, landlord_id: int, visible: bool):
     c.execute(
         """
         UPDATE landlord_properties
-        SET visible_to_tenants = ?, updated_at = ?
-        WHERE id = ? AND landlord_id = ?
+        SET visible_to_tenants=?, updated_at=?
+        WHERE id=? AND landlord_id=?
         """,
         (vis, now, prop_id, landlord_id),
     )
@@ -1709,22 +1783,9 @@ def lp_toggle_visibility(prop_id: int, landlord_id: int, visible: bool):
 
 def lp_delete_property(prop_id: int, landlord_id: int):
     c = get_conn()
-    c.execute("DELETE FROM landlord_properties WHERE id = ? AND landlord_id = ?", (prop_id, landlord_id))
+    c.execute("DELETE FROM landlord_properties WHERE id=? AND landlord_id=?", (prop_id, landlord_id))
     c.commit()
 
-def lp_list_visible_properties(landlord_id: int):
-    """Visible properties for a landlord (address + optional listing URL)."""
-    c = get_conn()
-    rows = c.execute(
-        """
-        SELECT id, address, listing_url, updated_at
-        FROM landlord_properties
-        WHERE landlord_id = ? AND visible_to_tenants = 1
-        ORDER BY updated_at DESC, id DESC
-        """,
-        (landlord_id,),
-    ).fetchall()
-    return rows or []
 
 def _url_domain(u: str | None) -> str | None:
     if not u:
@@ -1733,6 +1794,8 @@ def _url_domain(u: str | None) -> str | None:
         return u.split("://", 1)[-1].split("/", 1)[0]
     except Exception:
         return u
+    
+#finish here ---------------------------------------------------------------------
 
 
 def tenant_open_to_rent_section():
@@ -4029,6 +4092,9 @@ def landlord_dashboard():
     # =============================================================================
     # My Properties
     # =============================================================================
+    # =============================================================================
+    # My Properties
+    # =============================================================================
     st.subheader(tr("My Properties"))
 
     LP_NS = "myprops"  # namespacing to avoid widget-key collisions
@@ -4039,10 +4105,30 @@ def landlord_dashboard():
     with st.container(border=True):
         st.markdown("**🏠 " + tr("Add a property") + "**")
         with st.form(lpk("add", "form"), clear_on_submit=True):
+            # Address & URL
             addr = st.text_input(tr("Address"), key=lpk("add", "addr"), placeholder=tr("Street, number, city"))
             url  = st.text_input(tr("Listing URL (optional)"), key=lpk("add", "url"),
                                 placeholder="https://www.xe.gr/property/...")
+
+            # Location via Ellada JSON (Region → Regional Unit → Municipality)
+            lc1, lc2, lc3 = st.columns(3)
+            with lc1:
+                region, regional_unit, municipality = greece_location_pickers(prefix="lp_add")
+
+            # Specs
+            s1, s2, s3, s4 = st.columns(4)
+            with s1:
+                size_m2 = st.number_input(tr("Size (m²)"), min_value=0, max_value=10000, step=1, value=0, key=lpk("add", "size"))
+            with s2:
+                rooms = st.number_input(tr("Rooms"), min_value=0, max_value=50, step=1, value=0, key=lpk("add", "rooms"))
+            with s3:
+                floor = st.number_input(tr("Floor"), min_value=-5, max_value=100, step=1, value=0, key=lpk("add", "floor"))
+            with s4:
+                price = st.number_input(tr("Price (€)"), min_value=0, max_value=1_000_000, step=50, value=0, key=lpk("add", "price"))
+
+            # Visibility
             vis  = st.checkbox(tr("Visible to tenants"), key=lpk("add", "vis"), value=False)
+
             c1, c2 = st.columns([1, 5])
             submitted = c1.form_submit_button(tr("Add"))
             if submitted:
@@ -4051,7 +4137,19 @@ def landlord_dashboard():
                     st.error(tr("Please enter the address."))
                 else:
                     try:
-                        lp_add_property(st.session_state.user["id"], address, url, vis)
+                        lp_add_property(
+                            st.session_state.user["id"],
+                            address,
+                            url,
+                            vis,
+                            region=region,
+                            district=regional_unit,
+                            city=municipality,
+                            size_m2=size_m2,
+                            rooms=rooms,
+                            floor=floor,
+                            price=price,
+                        )
                         try: st.cache_data.clear()
                         except Exception: pass
                         st.success(tr("Property added."))
@@ -4064,14 +4162,29 @@ def landlord_dashboard():
     if not props:
         st.caption(tr("No properties yet."))
     else:
-        for (prop_id, address, listing_url, visible_to_tenants, created_at, updated_at) in props:
+        for (prop_id, address, listing_url, visible_to_tenants, created_at, updated_at,
+            region, district, city, size_m2, rooms, floor, price) in props:
+
             with st.container(border=True):
                 head = st.columns([6, 3, 3])
 
-                # Left: Address + link
+                # Left: Address + link + compact spec line
                 head[0].markdown(f"**{address}**")
+                chips = []
+                where = " — ".join([x for x in [region, district, city] if x])
+                if where:
+                    chips.append(where)
+                spec_bits = []
+                if size_m2: spec_bits.append(f"{int(size_m2)} m²")
+                if rooms:   spec_bits.append(f"{int(rooms)} {tr('rooms')}")
+                if floor is not None and floor != 0: spec_bits.append(f"{tr('Floor')} {int(floor)}")
+                if price:   spec_bits.append(f"€{int(price):,}")
+                if spec_bits:
+                    chips.append(" · ".join(spec_bits))
+                if chips:
+                    head[0].caption(" · ".join(chips))
+
                 if listing_url:
-                    # show short domain label
                     try:
                         domain = listing_url.split("://", 1)[-1].split("/", 1)[0]
                     except Exception:
@@ -4106,18 +4219,52 @@ def landlord_dashboard():
                     st.warning(tr("Property deleted."))
                     st.rerun()
 
-                # Editable details (modern compact editor)
+                # Editable details (with pickers again; leave blank to keep old)
                 with st.expander(tr("Edit details"), expanded=False):
                     e_addr = st.text_input(tr("Address"), value=address, key=lpk(prop_id, "edit_addr"))
                     e_url  = st.text_input(tr("Listing URL (optional)"), value=(listing_url or ""), key=lpk(prop_id, "edit_url"))
-                    e_vis  = st.checkbox(tr("Visible to tenants"), value=bool(int(visible_to_tenants or 0)), key=lpk(prop_id, "edit_vis"))
+
+                    # New picks (not prefilled; if user leaves empty, we keep the old values on save)
+                    ec1, ec2, ec3 = st.columns(3)
+                    with ec1:
+                        reg_new, ru_new, muni_new = greece_location_pickers(prefix=f"lp_edit_{prop_id}")
+
+                    # Numeric fields (pre-filled)
+                    es1, es2, es3, es4 = st.columns(4)
+                    with es1:
+                        size_new = st.number_input(tr("Size (m²)"), min_value=0, max_value=10000, step=1,
+                                                value=int(size_m2 or 0), key=lpk(prop_id, "edit_size"))
+                    with es2:
+                        rooms_new = st.number_input(tr("Rooms"), min_value=0, max_value=50, step=1,
+                                                    value=int(rooms or 0), key=lpk(prop_id, "edit_rooms"))
+                    with es3:
+                        floor_new = st.number_input(tr("Floor"), min_value=-5, max_value=100, step=1,
+                                                    value=int(floor or 0), key=lpk(prop_id, "edit_floor"))
+                    with es4:
+                        price_new = st.number_input(tr("Price (€)"), min_value=0, max_value=1_000_000, step=50,
+                                                    value=int(price or 0), key=lpk(prop_id, "edit_price"))
+
+                    e_vis  = st.checkbox(tr("Visible to tenants"),
+                                        value=bool(int(visible_to_tenants or 0)),
+                                        key=lpk(prop_id, "edit_vis"))
+
                     s1, s2 = st.columns([1, 5])
                     if s1.button(tr("Save changes"), key=lpk(prop_id, "save")):
                         try:
                             if not (e_addr or "").strip():
                                 st.error(tr("Address cannot be empty."))
                             else:
-                                lp_update_property(prop_id, st.session_state.user["id"], e_addr, e_url, e_vis)
+                                # Keep old location if no new selection is made
+                                region_final   = reg_new or region
+                                district_final = ru_new or district
+                                city_final     = muni_new or city
+
+                                lp_update_property(
+                                    prop_id, st.session_state.user["id"],
+                                    e_addr, e_url, e_vis,
+                                    region_final, district_final, city_final,
+                                    size_new, rooms_new, floor_new, price_new,
+                                )
                                 try: st.cache_data.clear()
                                 except Exception: pass
                                 st.success(tr("Saved."))
@@ -4125,8 +4272,106 @@ def landlord_dashboard():
                         except Exception as e:
                             st.error(f"{tr('Unable to save changes')}: {e}")
 
-                # Footer meta
                 st.caption(f"{tr('Updated')}: {updated_at} · {tr('Created')}: {created_at}")
+
+    # st.subheader(tr("My Properties"))
+
+    # LP_NS = "myprops"  # namespacing to avoid widget-key collisions
+    # def lpk(id_: int | str, name: str) -> str:
+    #     return f"{LP_NS}:{name}:{id_}"
+
+    # # --- Add property form --------------------------------------------------------
+    # with st.container(border=True):
+    #     st.markdown("**🏠 " + tr("Add a property") + "**")
+    #     with st.form(lpk("add", "form"), clear_on_submit=True):
+    #         addr = st.text_input(tr("Address"), key=lpk("add", "addr"), placeholder=tr("Street, number, city"))
+    #         url  = st.text_input(tr("Listing URL (optional)"), key=lpk("add", "url"),
+    #                             placeholder="https://www.xe.gr/property/...")
+    #         vis  = st.checkbox(tr("Visible to tenants"), key=lpk("add", "vis"), value=False)
+    #         c1, c2 = st.columns([1, 5])
+    #         submitted = c1.form_submit_button(tr("Add"))
+    #         if submitted:
+    #             address = (addr or "").strip()
+    #             if not address:
+    #                 st.error(tr("Please enter the address."))
+    #             else:
+    #                 try:
+    #                     lp_add_property(st.session_state.user["id"], address, url, vis)
+    #                     try: st.cache_data.clear()
+    #                     except Exception: pass
+    #                     st.success(tr("Property added."))
+    #                     st.rerun()
+    #                 except Exception as e:
+    #                     st.error(f"{tr('Unable to add property')}: {e}")
+
+    # # --- List properties ----------------------------------------------------------
+    # props = lp_list_properties(st.session_state.user["id"])
+    # if not props:
+    #     st.caption(tr("No properties yet."))
+    # else:
+    #     for (prop_id, address, listing_url, visible_to_tenants, created_at, updated_at) in props:
+    #         with st.container(border=True):
+    #             head = st.columns([6, 3, 3])
+
+    #             # Left: Address + link
+    #             head[0].markdown(f"**{address}**")
+    #             if listing_url:
+    #                 # show short domain label
+    #                 try:
+    #                     domain = listing_url.split("://", 1)[-1].split("/", 1)[0]
+    #                 except Exception:
+    #                     domain = listing_url
+    #                 head[0].caption(f"🔗 [{domain}]({listing_url})")
+
+    #             # Middle: Visibility badge
+    #             if int(visible_to_tenants or 0) == 1:
+    #                 head[1].success("👁️ " + tr("Visible to tenants"))
+    #             else:
+    #                 head[1].info("🙈 " + tr("Hidden from tenants"))
+
+    #             # Right: Quick actions (toggle + delete)
+    #             cvis, cdel = head[2].columns(2)
+    #             if int(visible_to_tenants or 0) == 1:
+    #                 if cvis.button(tr("Hide"), key=lpk(prop_id, "hide")):
+    #                     lp_toggle_visibility(prop_id, st.session_state.user["id"], False)
+    #                     try: st.cache_data.clear()
+    #                     except Exception: pass
+    #                     st.rerun()
+    #             else:
+    #                 if cvis.button(tr("Show"), key=lpk(prop_id, "show")):
+    #                     lp_toggle_visibility(prop_id, st.session_state.user["id"], True)
+    #                     try: st.cache_data.clear()
+    #                     except Exception: pass
+    #                     st.rerun()
+
+    #             if cdel.button(tr("Delete"), key=lpk(prop_id, "delete")):
+    #                 lp_delete_property(prop_id, st.session_state.user["id"])
+    #                 try: st.cache_data.clear()
+    #                 except Exception: pass
+    #                 st.warning(tr("Property deleted."))
+    #                 st.rerun()
+
+    #             # Editable details (modern compact editor)
+    #             with st.expander(tr("Edit details"), expanded=False):
+    #                 e_addr = st.text_input(tr("Address"), value=address, key=lpk(prop_id, "edit_addr"))
+    #                 e_url  = st.text_input(tr("Listing URL (optional)"), value=(listing_url or ""), key=lpk(prop_id, "edit_url"))
+    #                 e_vis  = st.checkbox(tr("Visible to tenants"), value=bool(int(visible_to_tenants or 0)), key=lpk(prop_id, "edit_vis"))
+    #                 s1, s2 = st.columns([1, 5])
+    #                 if s1.button(tr("Save changes"), key=lpk(prop_id, "save")):
+    #                     try:
+    #                         if not (e_addr or "").strip():
+    #                             st.error(tr("Address cannot be empty."))
+    #                         else:
+    #                             lp_update_property(prop_id, st.session_state.user["id"], e_addr, e_url, e_vis)
+    #                             try: st.cache_data.clear()
+    #                             except Exception: pass
+    #                             st.success(tr("Saved."))
+    #                             st.rerun()
+    #                     except Exception as e:
+    #                         st.error(f"{tr('Unable to save changes')}: {e}")
+
+    #             # Footer meta
+    #             st.caption(f"{tr('Updated')}: {updated_at} · {tr('Created')}: {created_at}")
 
 
     # =============================================================================
