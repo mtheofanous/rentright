@@ -741,6 +741,39 @@ def flc_cancel_request(landlord_id: int, tenant_id: int) -> None:
     )
     c.commit()
 
+import re  # ⬅️ add once at top of file if not already imported
+
+def search_landlords_by_name_or_email(q: str, limit: int = 25):
+    """
+    Partial, case-insensitive search over landlords by name or email.
+    Returns rows: (landlord_id, name, email)
+    """
+    q = (q or "").strip()
+    if not q:
+        return []
+    tokens = [t for t in re.split(r"\s+", q) if t]
+    if not tokens:
+        return []
+
+    c = get_conn()
+    # one LIKE pair (name OR email) per token; AND them together
+    conds = []
+    params = []
+    for t in tokens:
+        like = f"%{t.lower()}%"
+        conds.append("(LOWER(COALESCE(name,'')) LIKE ? OR LOWER(email) LIKE ?)")
+        params.extend([like, like])
+
+    sql = f"""
+        SELECT id, COALESCE(name, ''), email
+        FROM users
+        WHERE role='landlord' AND {" AND ".join(conds)}
+        ORDER BY (CASE WHEN COALESCE(name,'')='' THEN 1 ELSE 0 END),
+                 LOWER(COALESCE(name,email))
+        LIMIT ?
+    """
+    params.append(limit)
+    return c.execute(sql, params).fetchall() or []
 
 
 def _rerun():
@@ -3170,6 +3203,79 @@ def tenant_dashboard():
                             st.rerun()
                         except Exception as e:
                             st.error(f"{tr('Unable to add contact')}: {e}")
+            # --- Search landlords by name or email (partial match) ----------------------
+        with st.container(border=True):
+            st.markdown(f"**{tr('Search landlords by name or email')}**")
+            q = st.text_input(
+                tr("Type a name, surname, or email"),
+                key=f"{NS}:search_q",
+                placeholder=tr("e.g. Maria Papadopoulou or papadop"),
+            )
+
+            if q and len(q.strip()) >= 2:
+                try:
+                    results = search_landlords_by_name_or_email(q, limit=25)
+                except Exception as e:
+                    results = []
+                    st.warning(tr("Search is temporarily unavailable."))
+                
+                if not results:
+                    st.caption(tr("No matches found."))
+                else:
+                    for (ll_id, ll_name, ll_email) in results:
+                        # Resolve current relation / contact state
+                        try:
+                            rel_status = flc_get_status(ll_id, tenant_id)  # 'connected' | 'rejected' | None
+                        except Exception:
+                            rel_status = None
+
+                        c = get_conn()
+                        rowc = c.execute(
+                            "SELECT id, invited, inbound_request FROM future_landlord_contacts "
+                            "WHERE tenant_id=? AND LOWER(email)=LOWER(?) LIMIT 1",
+                            (tenant_id, (ll_email or "").strip().lower()),
+                        ).fetchone()
+                        in_contacts = bool(rowc)
+                        invited = int(rowc[1]) if rowc else 0
+                        inbound_req = int(rowc[2]) if rowc else 0
+
+                        with st.container(border=True):
+                            cols = st.columns([5, 3, 4])
+
+                            # Left: identity
+                            title = (ll_name or ll_email or f"Landlord #{ll_id}").strip()
+                            cols[0].markdown(f"**{title}**")
+                            if ll_name and ll_email:
+                                cols[0].caption(ll_email)
+
+                            # Middle: status badge
+                            if rel_status == "connected":
+                                cols[1].success(tr("Connected"))
+                            elif rel_status == "rejected":
+                                cols[1].error(tr("Rejected"))
+                            elif inbound_req:
+                                cols[1].info(tr("Pending"))
+                            elif invited:
+                                cols[1].info(tr("Invited"))
+                            elif in_contacts:
+                                cols[1].caption(tr("In contacts"))
+                            else:
+                                cols[1].caption(tr("No relation"))
+
+                            # Right: action
+                            if in_contacts:
+                                cols[2].caption(tr("Already in contacts"))
+                            else:
+                                if cols[2].button(tr("Add Contact"), key=k(ll_id, "search_add")):
+                                    try:
+                                        add_future_landlord_contact(tenant_id, ll_email)
+                                        try: st.cache_data.clear()
+                                        except Exception: pass
+                                        st.success(tr("Contact added."))
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"{tr('Unable to add contact')}: {e}")
+
 
         # --- List + actions (inbound/outbound/pending/connected) -----------------
         rows = list_future_landlord_contacts(tenant_id) or []
