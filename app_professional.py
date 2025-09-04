@@ -4992,15 +4992,16 @@ def landlord_dashboard():
                             top[1].caption(tr("No relation"))
 
                         # Right column: actions, depending on status/origin
-                        # if status_label == "connected":
-                        #     if top[2].button(tr("Disconnect"), key=f"otr_disc_{tenant_id}"):
-                        #         flc_disconnect(landlord_id, tenant_id)
-                        #         try: st.cache_data.clear()
-                        #         except Exception: pass
-                        #         st.warning(tr("Disconnected."))
-                        #         st.rerun()
+                        if status_label == "connected":
+                            pass
+                            # if top[2].button(tr("Disconnect"), key=f"otr_disc_{tenant_id}"):
+                            #     flc_disconnect(landlord_id, tenant_id)
+                            #     try: st.cache_data.clear()
+                            #     except Exception: pass
+                            #     st.warning(tr("Disconnected."))
+                            #     st.rerun()
 
-                        if status_label == "pending":
+                        elif status_label == "pending":
                             if pending_dir == "outbound":
                                 # You (landlord) already asked — allow cancel
                                 if top[2].button(tr("Cancel request"), key=f"otr_cancel_{tenant_id}"):
@@ -5024,13 +5025,13 @@ def landlord_dashboard():
                                     st.info(tr("Rejected."))
                                     st.rerun()
 
-                        # elif status_label == "disconnected":
-                        #     # Show the status AND allow sending a new request
-                        #     if top[2].button(tr("Ask to connect"), key=f"otr_req_{tenant_id}"):
-                        #         flc_request_connect(landlord_id, tenant_id)
-                        #         try: st.cache_data.clear()
-                        #         except Exception: pass
-                        #         st.rerun()
+                        elif status_label == "disconnected":
+                            # Show the status AND allow sending a new request
+                            if top[2].button(tr("Ask to connect"), key=f"otr_req_{tenant_id}"):
+                                flc_request_connect(landlord_id, tenant_id)
+                                try: st.cache_data.clear()
+                                except Exception: pass
+                                st.rerun()
 
                         else:
                             # No relation yet
