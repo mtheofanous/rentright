@@ -4340,7 +4340,6 @@ def landlord_dashboard():
                 except Exception:
                     latest_status_label = (latest_status or "—").title()
 
-                # ---- Reference details (tidy, card style) — only when connected ----
                 
                 # ---- Reference details (prettier) — only when connected ----
                     # ---- References (summary + details) ----------------------------------------
@@ -4603,9 +4602,7 @@ def landlord_dashboard():
     # =============================================================================
     # My Properties
     # =============================================================================
-    # =============================================================================
-    # My Properties
-    # =============================================================================
+
     st.subheader(tr("My Properties"))
 
     LP_NS = "myprops"  # namespacing to avoid widget-key collisions
@@ -4614,64 +4611,65 @@ def landlord_dashboard():
 
     # --- Add property form --------------------------------------------------------
     with st.container(border=True):
-        st.markdown("**🏠 " + tr("Add a property") + "**")
+        with st.expander("**🏠 " + tr("Add a property") + "**", expanded=False):
+        # st.markdown("**🏠 " + tr("Add a property") + "**")
 
-        # 1) Live location pickers OUTSIDE the form (update immediately)
-        lc1, lc2, lc3 = st.columns(3)
-        with lc1:
-            # returns (region, regional_unit, municipality)
-            # keys: lp_add_region / lp_add_ru / lp_add_mun
-            region, regional_unit, municipality = greece_location_pickers(prefix="lp_add")  # :contentReference[oaicite:0]{index=0}
+            # 1) Live location pickers OUTSIDE the form (update immediately)
+            lc1, lc2, lc3 = st.columns(3)
+            with lc1:
+                # returns (region, regional_unit, municipality)
+                # keys: lp_add_region / lp_add_ru / lp_add_mun
+                region, regional_unit, municipality = greece_location_pickers(prefix="lp_add")  # :contentReference[oaicite:0]{index=0}
 
-        # 2) The rest stays in a form (so we can clear_on_submit)
-        with st.form(lpk("add", "form"), clear_on_submit=True):
-            addr = st.text_input(tr("Address"), key=lpk("add", "addr"), placeholder=tr("Street, number, city"))
-            url  = st.text_input(tr("Listing URL (optional)"), key=lpk("add", "url"),
-                                placeholder="https://www.xe.gr/property/...")
-            s1, s2, s3, s4 = st.columns(4)
-            with s1:
-                size_m2 = st.number_input(tr("Size (m²)"), min_value=0, max_value=10000, step=1, value=0, key=lpk("add", "size"))
-            with s2:
-                rooms = st.number_input(tr("Rooms"), min_value=0, max_value=50, step=1, value=0, key=lpk("add", "rooms"))
-            with s3:
-                floor = st.number_input(tr("Floor"), min_value=-5, max_value=100, step=1, value=0, key=lpk("add", "floor"))
-            with s4:
-                price = st.number_input(tr("Price (€)"), min_value=0, max_value=1_000_000, step=50, value=0, key=lpk("add", "price"))
-            vis  = st.checkbox(tr("Visible to tenants"), key=lpk("add", "vis"), value=False)
+            # 2) The rest stays in a form (so we can clear_on_submit)
+            with st.form(lpk("add", "form"), clear_on_submit=True):
+                addr = st.text_input(tr("Address"), key=lpk("add", "addr"), placeholder=tr("Street, number, city"))
+                url  = st.text_input(tr("Listing URL (optional)"), key=lpk("add", "url"),
+                                    placeholder="https://www.xe.gr/property/...")
+                s1, s2, s3, s4 = st.columns(4)
+                with s1:
+                    size_m2 = st.number_input(tr("Size (m²)"), min_value=0, max_value=10000, step=10, value=0, key=lpk("add", "size"))
+                with s2:
+                    rooms = st.number_input(tr("Rooms"), min_value=0, max_value=50, step=1, value=0, key=lpk("add", "rooms"))
+                with s3:
+                    floor = st.number_input(tr("Floor"), min_value=-5, max_value=100, step=1, value=0, key=lpk("add", "floor"))
+                with s4:
+                    price = st.number_input(tr("Price (€)"), min_value=0, max_value=1_000_000, step=50, value=0, key=lpk("add", "price"))
+                vis  = st.checkbox(tr("Visible to tenants"), key=lpk("add", "vis"), value=False)
 
-            c1, _ = st.columns([1, 5])
-            submitted = c1.form_submit_button(tr("Add"))
+                c1, _ = st.columns([1, 5])
+                submitted = c1.form_submit_button(tr("Add"))
 
-        if submitted:
-            address = (addr or "").strip()
-            if not address:
-                st.error(tr("Please enter the address."))
-            else:
-                try:
-                    lp_add_property(
-                        st.session_state.user["id"],
-                        address,
-                        url,
-                        vis,
-                        region=region,                 # live value from picker
-                        district=regional_unit,        # live value from picker
-                        city=municipality,             # live value from picker
-                        size_m2=size_m2,
-                        rooms=rooms,
-                        floor=floor,
-                        price=price,
-                    )
-                    try: st.cache_data.clear()
-                    except Exception: pass
+            if submitted:
+                address = (addr or "").strip()
+                if not address:
+                    st.error(tr("Please enter the address."))
+                else:
+                    try:
+                        lp_add_property(
+                            st.session_state.user["id"],
+                            address,
+                            url,
+                            vis,
+                            region=region,                 # live value from picker
+                            district=regional_unit,        # live value from picker
+                            city=municipality,             # live value from picker
+                            size_m2=size_m2,
+                            rooms=rooms,
+                            floor=floor,
+                            price=price,
+                        )
+                        try: st.cache_data.clear()
+                        except Exception: pass
 
-                    # Optional: reset the pickers to Any after add
-                    for k in ("lp_add_region", "lp_add_ru", "lp_add_mun"):
-                        st.session_state.pop(k, None)
+                        # Optional: reset the pickers to Any after add
+                        for k in ("lp_add_region", "lp_add_ru", "lp_add_mun"):
+                            st.session_state.pop(k, None)
 
-                    st.success(tr("Property added."))
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"{tr('Unable to add property')}: {e}")
+                        st.success(tr("Property added."))
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"{tr('Unable to add property')}: {e}")
 
 
     # --- List properties ----------------------------------------------------------
