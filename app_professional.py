@@ -1927,17 +1927,33 @@ def tenant_open_to_rent_section():
     tid = st.session_state.user["id"]
     prefs = load_open_to_rent_prefs(tid)
 
-    # --- One-time init of widget state from saved prefs (NOT on reset) ----------
-    if "otr_keys_inited" not in st.session_state:
-        st.session_state["otr_open_flag"]  = bool(prefs.get("open_to_rent"))
-        st.session_state["otr_size_min"]   = int(prefs.get("size_min")  or 0)
-        st.session_state["otr_size_max"]   = int(prefs.get("size_max")  or 0)
-        st.session_state["otr_rooms_min"]  = int(prefs.get("rooms_min") or 0)
-        st.session_state["otr_rooms_max"]  = int(prefs.get("rooms_max") or 0)
-        st.session_state["otr_floor_min"]  = int(prefs.get("floor_min") or 0)
-        st.session_state["otr_floor_max"]  = int(prefs.get("floor_max") or 0)
-        st.session_state["otr_price_min"]  = int(prefs.get("price_min") or 0)
-        st.session_state["otr_price_max"]  = int(prefs.get("price_max") or 0)
+    # If reset asked, we force defaults (zeros/False) instead of loading prefs.
+    force_defaults = st.session_state.pop("otr_force_defaults", False)
+
+    if ("otr_keys_inited" not in st.session_state) or force_defaults:
+        if force_defaults:
+            # Defaults
+            st.session_state["otr_open_flag"]  = False
+            st.session_state["otr_size_min"]   = 0
+            st.session_state["otr_size_max"]   = 0
+            st.session_state["otr_rooms_min"]  = 0
+            st.session_state["otr_rooms_max"]  = 0
+            st.session_state["otr_floor_min"]  = 0
+            st.session_state["otr_floor_max"]  = 0
+            st.session_state["otr_price_min"]  = 0
+            st.session_state["otr_price_max"]  = 0
+        else:
+            # From saved prefs
+            st.session_state["otr_open_flag"]  = bool(prefs.get("open_to_rent"))
+            st.session_state["otr_size_min"]   = int(prefs.get("size_min")  or 0)
+            st.session_state["otr_size_max"]   = int(prefs.get("size_max")  or 0)
+            st.session_state["otr_rooms_min"]  = int(prefs.get("rooms_min") or 0)
+            st.session_state["otr_rooms_max"]  = int(prefs.get("rooms_max") or 0)
+            st.session_state["otr_floor_min"]  = int(prefs.get("floor_min") or 0)
+            st.session_state["otr_floor_max"]  = int(prefs.get("floor_max") or 0)
+            st.session_state["otr_price_min"]  = int(prefs.get("price_min") or 0)
+            st.session_state["otr_price_max"]  = int(prefs.get("price_max") or 0)
+
         st.session_state["otr_keys_inited"] = True
 
     # Defaults
@@ -2042,21 +2058,25 @@ def tenant_open_to_rent_section():
                 st.success(tr("Preferences saved!"))
 
         if col_reset.button(tr("Reset")):
-            # 1) Clear Greek pickers to "Any" (—)
+            # 1) Clear location pickers to “Any”
             for k in ("loc_region", "loc_unit", "loc_city"):
                 st.session_state.pop(k, None)
-            # 2) Force default values for all OTR fields
-            st.session_state["otr_open_flag"] = False
-            st.session_state["otr_size_min"]  = 0
-            st.session_state["otr_size_max"]  = 0
-            st.session_state["otr_rooms_min"] = 0
-            st.session_state["otr_rooms_max"] = 0
-            st.session_state["otr_floor_min"] = 0
-            st.session_state["otr_floor_max"] = 0
-            st.session_state["otr_price_min"] = 0
-            st.session_state["otr_price_max"] = 0
-            # 3) Tell the picker preselection logic to IGNORE saved prefs on next run
+
+            # 2) Clear all OTR widget keys so they won’t conflict in this run
+            for k in (
+                "otr_open_flag",
+                "otr_size_min", "otr_size_max",
+                "otr_rooms_min", "otr_rooms_max",
+                "otr_floor_min", "otr_floor_max",
+                "otr_price_min", "otr_price_max",
+                "otr_keys_inited",
+            ):
+                st.session_state.pop(k, None)
+
+            # 3) On the next run, initialize to defaults (not prefs) and ignore preselection
+            st.session_state["otr_force_defaults"]  = True
             st.session_state["otr_reset_preselect"] = True
+
             st.rerun()
 
     # --- Compact summary (uses current widget values) ---------------------------
