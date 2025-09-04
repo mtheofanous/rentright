@@ -4817,7 +4817,7 @@ def landlord_dashboard():
                         sub = " · ".join([", ".join(pref_bits)] + ([" | ".join(range_bits)] if range_bits else []))
                         if sub.strip(", · |"):
                             top[0].caption(sub)
-                        # top[1].markdown(f"{tr('Updated')}: {format_dt(updated_at)}")
+                   
 
                         # Hide only final states, not pending
                         try:
@@ -4889,15 +4889,11 @@ def landlord_dashboard():
                             st.caption(
                                 "📄 "
                                 + f"{tr('References')}: {ref['total']}  ·  "
-                                + f"{tr('Latest status')}: {latest_status_label}  ·  "
-                                + f"{tr('Result')}: {result_txt}"
+                                + f"{tr('Latest status')}: {latest_status_label}"
                             )
 
-                            # If connected, show latest completed answers inline
-                            # ref = quick_reference_summary(tenant_id)
-                            # status_label computed earlier via flc_relation_status(...)
-
                             if status_label == "connected" and ref["latest_answers"]:
+                                st.write(f"{tr('Result')}: {result_txt}")
                                 ans = ref["latest_answers"]
                                 prev_from = ans.get("prev_email") or "—"
                                 comments  = ans.get("comments")
