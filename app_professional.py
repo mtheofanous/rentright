@@ -1795,6 +1795,21 @@ def _url_domain(u: str | None) -> str | None:
     except Exception:
         return u
     
+def lp_list_visible_properties(landlord_id: int):
+    """Visible properties for a landlord (address + listing + location/specs)."""
+    c = get_conn()
+    rows = c.execute(
+        """
+        SELECT id, address, listing_url, updated_at,
+               region, district, city, size_m2, rooms, floor, price
+        FROM landlord_properties
+        WHERE landlord_id = ? AND visible_to_tenants = 1
+        ORDER BY updated_at DESC, id DESC
+        """,
+        (landlord_id,),
+    ).fetchall()
+    return rows or []
+
 #finish here ---------------------------------------------------------------------
 
 
@@ -3251,22 +3266,44 @@ def tenant_dashboard():
                         st.rerun()
 
                 # --- Visible properties from this landlord (shown to tenant) ---
+                # --- Visible properties from this landlord (shown to tenant) ---
                 if landlord_id:
-                    vprops = lp_list_visible_properties(landlord_id)  # (id, address, listing_url, updated_at)
+                    vprops = lp_list_visible_properties(landlord_id)  # now returns extra columns
                     if vprops:
+
+                        def _fmt_int(v):
+                            try:
+                                return f"{int(v):,}"
+                            except Exception:
+                                return None
+
+                        def _specs_line(size_m2, rooms, floor, price):
+                            bits = []
+                            if size_m2: bits.append(f"{_fmt_int(size_m2)} m²")
+                            if rooms:   bits.append(f"{int(rooms)} {tr('rooms')}")
+                            if floor not in (None, 0): bits.append(f"{tr('Floor')} {int(floor)}")
+                            if price:   bits.append(f"€{_fmt_int(price)}")
+                            return " · ".join(bits)
+
                         with st.expander(tr("Visible properties"), expanded=False):
-                            for pid, addr, url, upd in vprops:
+                            for pid, addr, url, upd, region, district, city, size_m2, rooms, floor, price in vprops:
+                                where = " — ".join([x for x in [region, district, city] if x])
+                                chips = " · ".join([b for b in [where, _specs_line(size_m2, rooms, floor, price)] if b])
+
                                 if url:
-                                    try:
-                                        dom = url.split("://", 1)[-1].split("/", 1)[0]
-                                    except Exception:
-                                        dom = url
+                                    dom = _url_domain(url) or tr("Open listing")
                                     st.markdown(
                                         f"• **{addr}**  \n"
-                                        f"  🔗 [{dom}]({url})  ·  {tr('Updated')}: {upd}"
+                                        + (f"  {chips}\n" if chips else "")
+                                        + f"  🔗 [{dom}]({url})  ·  {tr('Updated')}: {upd}"
                                     )
                                 else:
-                                    st.markdown(f"• **{addr}**  \n  {tr('Updated')}: {upd}")
+                                    st.markdown(
+                                        f"• **{addr}**  \n"
+                                        + (f"  {chips}\n" if chips else "")
+                                        + f"  {tr('Updated')}: {upd}"
+                                    )
+
 
     
     # def tenant_future_landlords_section():
