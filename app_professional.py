@@ -2013,78 +2013,80 @@ def tenant_open_to_rent_section():
         city_options = [ANY] + (municipalities or [])
         city_index = (city_options.index(saved_city) if (saved_city in city_options and not reset_preselect) else 0)
         city_sel = st.selectbox("Δήμος (Πόλη)", options=city_options, index=city_index, key="loc_city")
-
-        # Map to your schema (don’t save “Any” — treat as empty)
-        region   = "" if region_sel == ANY else region_sel
-        district = "" if unit_sel   == ANY else unit_sel
-        city     = "" if city_sel   == ANY else city_sel
-
-        c1, c2 = st.columns(2)
-        size_min = c1.number_input(tr("Min size (m²)"), 0, 10000, key="otr_size_min")
-        size_max = c2.number_input(tr("Max size (m²)"), 0, 10000, key="otr_size_max")
-
-        r1, r2 = st.columns(2)
-        rooms_min = r1.number_input(tr("Min rooms"), 0, 50, key="otr_rooms_min")
-        rooms_max = r2.number_input(tr("Max rooms"), 0, 50, key="otr_rooms_max")
-
-        f1, f2 = st.columns(2)
-        floor_min = f1.number_input(tr("Min floor"), -5, 100, key="otr_floor_min")
-        floor_max = f2.number_input(tr("Max floor"), -5, 100, key="otr_floor_max")
-
-        p1, p2 = st.columns(2)
-        price_min = p1.number_input(tr("Min price (€)"), 0, 1_000_000, key="otr_price_min")
-        price_max = p2.number_input(tr("Max price (€)"), 0, 1_000_000, key="otr_price_max")
         
+        with st.expander(tr("Property Charecteristics"), expanded=False):
+
+            # Map to your schema (don’t save “Any” — treat as empty)
+            region   = "" if region_sel == ANY else region_sel
+            district = "" if unit_sel   == ANY else unit_sel
+            city     = "" if city_sel   == ANY else city_sel
+
+            c1, c2 = st.columns(2)
+            size_min = c1.number_input(tr("Min size (m²)"), 0, 10000, key="otr_size_min")
+            size_max = c2.number_input(tr("Max size (m²)"), 0, 10000, key="otr_size_max")
+
+            r1, r2 = st.columns(2)
+            rooms_min = r1.number_input(tr("Min rooms"), 0, 50, key="otr_rooms_min")
+            rooms_max = r2.number_input(tr("Max rooms"), 0, 50, key="otr_rooms_max")
+
+            f1, f2 = st.columns(2)
+            floor_min = f1.number_input(tr("Min floor"), -5, 100, key="otr_floor_min")
+            floor_max = f2.number_input(tr("Max floor"), -5, 100, key="otr_floor_max")
+
+            p1, p2 = st.columns(2)
+            price_min = p1.number_input(tr("Min price (€)"), 0, 1_000_000, key="otr_price_min")
+            price_max = p2.number_input(tr("Max price (€)"), 0, 1_000_000, key="otr_price_max")
+            
 
 
-        # ---- Save / Reset -------------------------------------------------------
-        col_save, col_reset = st.columns([1, 1])
+            # ---- Save / Reset -------------------------------------------------------
+            col_save, col_reset = st.columns([1, 1])
 
-        if col_save.button(tr("Save")):
-            city_clean = "" if (city == "—") else (city or "")
-            district_clean = "" if (district == "—") else (district or "")
-            if not city_clean and not district_clean:
-                st.warning(tr("Please enter at least a city or a district."))
-            else:
-                try:
-                    save_open_to_rent_prefs(
-                        tid, bool(st.session_state["otr_open_flag"]),
-                        city_clean, district_clean,
-                        int(st.session_state["otr_size_min"]), int(st.session_state["otr_size_max"]),
-                        int(st.session_state["otr_rooms_min"]), int(st.session_state["otr_rooms_max"]),
-                        int(st.session_state["otr_floor_min"]), int(st.session_state["otr_floor_max"]),
-                        int(st.session_state["otr_price_min"]), int(st.session_state["otr_price_max"]),
-                        city_osm_id=None, city_osm_type=None,
-                        district_osm_id=None, district_osm_type=None,
-                    )
-                except TypeError:
-                    save_open_to_rent_prefs(
-                        tid, bool(st.session_state["otr_open_flag"]),
-                        city_clean, district_clean,
-                        int(st.session_state["otr_size_min"]), int(st.session_state["otr_size_max"]),
-                        int(st.session_state["otr_rooms_min"]), int(st.session_state["otr_rooms_max"]),
-                        int(st.session_state["otr_floor_min"]), int(st.session_state["otr_floor_max"]),
-                        int(st.session_state["otr_price_min"]), int(st.session_state["otr_price_max"]),
-                    )
-                try:
-                    st.cache_data.clear()
-                except Exception:
-                    pass
-                st.success(tr("Preferences saved!"))
+            if col_save.button(tr("Save")):
+                city_clean = "" if (city == "—") else (city or "")
+                district_clean = "" if (district == "—") else (district or "")
+                if not city_clean and not district_clean:
+                    st.warning(tr("Please enter at least a city or a district."))
+                else:
+                    try:
+                        save_open_to_rent_prefs(
+                            tid, bool(st.session_state["otr_open_flag"]),
+                            city_clean, district_clean,
+                            int(st.session_state["otr_size_min"]), int(st.session_state["otr_size_max"]),
+                            int(st.session_state["otr_rooms_min"]), int(st.session_state["otr_rooms_max"]),
+                            int(st.session_state["otr_floor_min"]), int(st.session_state["otr_floor_max"]),
+                            int(st.session_state["otr_price_min"]), int(st.session_state["otr_price_max"]),
+                            city_osm_id=None, city_osm_type=None,
+                            district_osm_id=None, district_osm_type=None,
+                        )
+                    except TypeError:
+                        save_open_to_rent_prefs(
+                            tid, bool(st.session_state["otr_open_flag"]),
+                            city_clean, district_clean,
+                            int(st.session_state["otr_size_min"]), int(st.session_state["otr_size_max"]),
+                            int(st.session_state["otr_rooms_min"]), int(st.session_state["otr_rooms_max"]),
+                            int(st.session_state["otr_floor_min"]), int(st.session_state["otr_floor_max"]),
+                            int(st.session_state["otr_price_min"]), int(st.session_state["otr_price_max"]),
+                        )
+                    try:
+                        st.cache_data.clear()
+                    except Exception:
+                        pass
+                    st.success(tr("Preferences saved!"))
 
-        if col_reset.button(tr("Reset")):
-            for k in ("loc_region","loc_unit","loc_city",
-                    "otr_open_flag",
-                    "otr_size_min","otr_size_max",
-                    "otr_rooms_min","otr_rooms_max",
-                    "otr_floor_min","otr_floor_max",
-                    "otr_price_min","otr_price_max",
-                    "otr_keys_inited"):
-                st.session_state.pop(k, None)
+            if col_reset.button(tr("Reset")):
+                for k in ("loc_region","loc_unit","loc_city",
+                        "otr_open_flag",
+                        "otr_size_min","otr_size_max",
+                        "otr_rooms_min","otr_rooms_max",
+                        "otr_floor_min","otr_floor_max",
+                        "otr_price_min","otr_price_max",
+                        "otr_keys_inited"):
+                    st.session_state.pop(k, None)
 
-            st.session_state["otr_force_defaults"]  = True
-            st.session_state["otr_reset_preselect"] = True
-            st.rerun()
+                st.session_state["otr_force_defaults"]  = True
+                st.session_state["otr_reset_preselect"] = True
+                st.rerun()
 
 
     # --- Compact summary (uses current widget values) ---------------------------
