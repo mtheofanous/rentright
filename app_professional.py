@@ -3320,7 +3320,53 @@ def tenant_dashboard():
 
     st.caption(f"{tr('Logged in with email')}: {tenant_email}")
     
-    bt_1, bt_2, bt_3, bt_4 = st.columns([1,1,1,1])
+   #
+    # ---------- NAV BUTTONS (set active page only) ----------
+    nav1, nav2, nav3, nav4 = st.columns(4)
+
+    # default page
+    if "tenant_page" not in st.session_state:
+        st.session_state.tenant_page = "find_landlords"
+
+    def _go(page_key: str):
+        # optional: clear any per-page transient UI flags when switching
+        for k in list(st.session_state.keys()):
+            if k.startswith(("tfl:", "tfl_", "tfl_contacts:", "ld_otr_", "otr_", "prospects")):
+                st.session_state.pop(k, None)
+        st.session_state.tenant_page = page_key
+        # no immediate st.rerun() needed; Streamlit reruns automatically after button click
+
+    with nav1:
+        if st.button(tr("Find Landlords"), key="btn_find_landlords", use_container_width=True):
+            _go("find_landlords")
+
+    with nav2:
+        if st.button(tr("My Contacts"), key="btn_my_contacts", use_container_width=True):
+            _go("my_contacts")
+
+    with nav3:
+        if st.button(tr("Open to Rent"), key="btn_open_to_rent", use_container_width=True):
+            _go("open_to_rent")
+
+    with nav4:
+        if st.button(tr("Previous Landlord References"), key="btn_prev_refs", use_container_width=True):
+            _go("prev_refs")
+
+    st.divider()
+
+    # ---------- FULL-WIDTH PAGE RENDER ----------
+    page = st.session_state.tenant_page
+    if page == "find_landlords":
+        tenant_future_landlords_section()
+    elif page == "my_contacts":
+        tenant_contancts()
+    elif page == "open_to_rent":
+        tenant_open_to_rent_section()
+    elif page == "prev_refs":
+        previous_landlords_references()
+    else:
+        # fallback (shouldn't happen)
+        tenant_future_landlords_section()
     
     def tenant_future_landlords_section():
         """
@@ -4120,25 +4166,6 @@ def tenant_dashboard():
             st.info(tr('No previous landlords added yet.'))
         st.divider()
 
-
-
-    
-    with bt_1:
-        if st.button("Find Landlords"):
-            
-            tenant_future_landlords_section()
-
-    with bt_2:
-        if st.button("My Contact"):
-            tenant_contancts()
-            
-    with bt_3:
-        if st.button("Open to Rent"):
-            tenant_open_to_rent_section()
-            
-    with bt_4:
-        if st.button("Previous Landlord References"):
-            previous_landlords_references()
 
 
 
