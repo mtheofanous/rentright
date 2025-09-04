@@ -4338,6 +4338,7 @@ def landlord_dashboard():
                 # ---- Reference details (tidy, card style) — only when connected ----
                 
                 # ---- Reference details (prettier) — only when connected ----
+                    # ---- References (summary + details) ----------------------------------------
                 def _to_bool(v):
                     if v is None: return None
                     if isinstance(v, bool): return v
@@ -4347,6 +4348,7 @@ def landlord_dashboard():
                         if s in {"1","true","yes","y","t"}: return True
                         if s in {"0","false","no","n","f"}: return False
                     return None
+
                 def _yn(v):
                     b = _to_bool(v)
                     if b is None: return "—"
@@ -4360,48 +4362,73 @@ def landlord_dashboard():
                     elif s_l in {"rejected","declined"}: cls = "pt-badge pt-badge--err"
                     return f'<span class="{cls}">{lab}</span>'
 
-                if status == "connected" and refs:
-                    st.caption(
-                        "📄 "
-                        + f"{tr('References')}: {total_refs}  ·  "
-                        + f"{tr('Avg score')}: {f'{avg_score}/10' if avg_score is not None else '—'}"
-                    )
-                    with st.expander(tr("Reference details"), expanded=False):
-                        for r in refs:
-                            prev_email = (r.get("prev_email") or "—").strip()
-                            status_lr  = r.get("status") or ""
-                            score_lr   = r.get("score")
-                            paid_on    = _to_bool(r.get("paid_on_time"))
-                            util_unp   = _to_bool(r.get("utilities_unpaid"))
-                            good_cond  = _to_bool(r.get("good_condition"))
-                            comments   = r.get("comments")
+                if status == "connected":
+                    # Load only when connected
+                    refs = list_latest_references_for_tenant_dict(tid) or []
+                    refs = [r for r in refs if (r.get("status") or "").lower() != "cancelled"]
 
-                            # Build chips
-                            chips = []
-                            if (status_lr or "").lower() == "completed" and score_lr is not None:
-                                chips.append(f'<span class="pill pill-score">{md_label("Score:")} {int(score_lr)}/10</span>')
-                            chips.append(f'<span class="pill {"pill-ok" if paid_on is True else "pill-no" if paid_on is False else "pill-na"}">{tr("Paid on time")}: {_yn(paid_on)}</span>')
-                            chips.append(f'<span class="pill {"pill-no" if util_unp is True else "pill-ok" if util_unp is False else "pill-na"}">{tr("Utilities unpaid")}: {_yn(util_unp)}</span>')
-                            chips.append(f'<span class="pill {"pill-ok" if good_cond is True else "pill-no" if good_cond is False else "pill-na"}">{tr("Apartment in good condition")}: {_yn(good_cond)}</span>')
-                            chips_html = " ".join(chips)
+                    if refs:
+                        completed_scores = [
+                            r.get("score") for r in refs
+                            if (r.get("status") or "").lower() == "completed" and r.get("score") is not None
+                        ]
+                        avg_score = round(sum(completed_scores) / len(completed_scores), 1) if completed_scores else None
 
-                            st.markdown(
-                                f"""
-                                <div class="ref-card">
-                                <div class="ref-header">
-                                    <div class="ref-title">{tr('From previous landlord')}: <a href="mailto:{prev_email}">{prev_email}</a></div>
-                                    <div>{_status_badge_html(status_lr)}</div>
-                                </div>
-                                <div class="ref-row">{chips_html}</div>
-                                </div>
-                                """,
-                                unsafe_allow_html=True
-                            )
-                            if comments:
-                                st.markdown(f"**{md_label('Comments:')}**")
-                                st.markdown(f"<div class='ref-comments'>{comments}</div>", unsafe_allow_html=True)
-                elif status != "connected":
-                    st.caption("🔒 " + tr("Reference details are visible after you connect."))
+                        st.caption(
+                            "📄 "
+                            + f"{tr('References')}: {len(refs)}  ·  "
+                            + f"{tr('Avg score')}: {f'{avg_score}/10' if avg_score is not None else '—'}"
+                        )
+
+                        with st.expander(tr("Reference details"), expanded=False):
+                            for r in refs:
+                                prev_email = (r.get("prev_email") or "—").strip()
+                                status_lr  = r.get("status") or ""
+                                score_lr   = r.get("score")
+                                paid_on    = _to_bool(r.get("paid_on_time"))
+                                util_unp   = _to_bool(r.get("utilities_unpaid"))
+                                good_cond  = _to_bool(r.get("good_condition"))
+                                comments   = r.get("comments")
+
+                                # Chip classes (clear & safe)
+                                score_chip = ""
+                                if (status_lr or "").lower() == "completed" and score_lr is not None:
+                                    score_chip = f'<span class="pill pill-score">{md_label("Score:")} {int(score_lr)}/10</span>'
+                                paid_cls = "pill-ok" if paid_on is True else "pill-no" if paid_on is False else "pill-na"
+                                util_cls = "pill-no" if util_unp is True else "pill-ok" if util_unp is False else "pill-na"
+                                cond_cls = "pill-ok" if good_cond is True else "pill-no" if good_cond is False else "pill-na"
+
+                                chips_html = " ".join(filter(None, [
+                                    score_chip,
+                                    f'<span class="pill {paid_cls}">{tr("Paid on time")}: {_yn(paid_on)}</span>',
+                                    f'<span class="pill {util_cls}">{tr("Utilities unpaid")}: {_yn(util_unp)}</span>',
+                                    f'<span class="pill {cond_cls}">{tr("Apartment in good condition")}: {_yn(good_cond)}</span>',
+                                ]))
+
+                                st.markdown(
+                                    f"""
+                                    <div class="ref-card">
+                                    <div class="ref-header">
+                                        <div class="ref-title">{tr('From previous landlord')}: <a href="mailto:{prev_email}">{prev_email}</a></div>
+                                        <div>{_status_badge_html(status_lr)}</div>
+                                    </div>
+                                    <div class="ref-row">{chips_html}</div>
+                                    </div>
+                                    """,
+                                    unsafe_allow_html=True
+                                )
+                                if comments:
+                                    st.markdown(f"**{md_label('Comments:')}**")
+                                    st.markdown(f"<div class='ref-comments'>{comments}</div>", unsafe_allow_html=True)
+
+                else:
+                    # Optional: show lock note ONLY if there are refs at all
+                    try:
+                        if list_latest_references_for_tenant(tid):
+                            st.caption("🔒 " + tr("Reference details are visible after you connect."))
+                    except Exception:
+                        pass
+
 
                 # def _to_bool(v):
                 #     if v is None: return None
