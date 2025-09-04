@@ -4242,14 +4242,14 @@ def landlord_dashboard():
                 # Left: avatar + name/email + meta
                 display_title = tenant_name or tenant_email or f"Tenant #{tid}"
                 initials = _pt_initials(tenant_name, tenant_email)
-                meta_bits = []
-                if tenant_email:
-                    meta_bits.append(f'<a href="mailto:{tenant_email}">{tenant_email}</a>')
-                if invited and invited_at:
-                    meta_bits.append(tr("Invited on") + f" {invited_at}")
-                if inbound_request and inbound_requested_at:
-                    meta_bits.append(tr("Requested on") + f" {inbound_requested_at}")
-                meta_line = " · ".join(meta_bits)
+                # meta_bits = []
+                # if tenant_email:
+                #     meta_bits.append(f'<a href="mailto:{tenant_email}">{tenant_email}</a>')
+                # if invited and invited_at:
+                #     meta_bits.append(tr("Invited on") + f" {invited_at}")
+                # if inbound_request and inbound_requested_at:
+                #     meta_bits.append(tr("Requested on") + f" {inbound_requested_at}")
+                # meta_line = " · ".join(meta_bits)
 
                 colL.markdown(
                     f"""
