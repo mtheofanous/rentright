@@ -2113,7 +2113,7 @@ def tenant_open_to_rent_section():
         st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {tr('Anywhere')}")
 
 
-    # --- Compact summary (adds size, rooms, floor) ---
+   # --- Compact summary (uses current widget values) ---------------------------
     def _fmt_range(lo, hi, suffix=""):
         has_lo = lo not in (None, 0, "0", "")
         has_hi = hi not in (None, 0, "0", "")
@@ -2123,29 +2123,26 @@ def tenant_open_to_rent_section():
         hi_txt = f"{int(hi):,}" if has_hi else "—"
         return f"{lo_txt}–{hi_txt}{suffix}"
 
-    # Location (safe)
-    latest_region = region if (region and region != "—") else ""
-    latest_district = district if (district and district != "—") else saved_dist
-    latest_city = city if (city and city != "—") else saved_city
-    loc_txt = " — ".join([x.strip() for x in [latest_region, latest_district, latest_city] if x])
+    # region/district/city come from the pickers block above; we also guard them:
+    latest_region  = (region  or "").strip()
+    latest_district= (district or "").strip()
+    latest_city    = (city    or "").strip()
+    loc_txt = " — ".join([x for x in [latest_region, latest_district, latest_city] if x])
 
-    # Ranges to show
-    size_txt = _fmt_range(size_min, size_max, " m²")
-    rooms_txt = _fmt_range(rooms_min, rooms_max, f" {tr('rooms')}")
-    floor_txt = _fmt_range(floor_min, floor_max)
+    size_txt  = _fmt_range(st.session_state.get("otr_size_min", 0),  st.session_state.get("otr_size_max", 0),  " m²")
+    rooms_txt = _fmt_range(st.session_state.get("otr_rooms_min", 0), st.session_state.get("otr_rooms_max", 0), f" {tr('rooms')}")
+    floor_txt = _fmt_range(st.session_state.get("otr_floor_min", 0), st.session_state.get("otr_floor_max", 0))
+    price_txt = _fmt_range(st.session_state.get("otr_price_min", 0), st.session_state.get("otr_price_max", 0))
 
-    details_bits = []
-    if size_txt: details_bits.append(size_txt)
-    if rooms_txt: details_bits.append(rooms_txt)
-    if floor_txt: details_bits.append(tr("Floor") + " " + floor_txt)
+    bits = []
+    if size_txt:  bits.append(size_txt)
+    if rooms_txt: bits.append(rooms_txt)
+    if floor_txt: bits.append(tr("Floor") + " " + floor_txt)
+    if price_txt: bits.append("€" + price_txt.replace("–", "–€"))
 
-    # (Optional) also show price; uncomment if you want it too
-    price_txt = _fmt_range(price_min, price_max)
-    if price_txt: details_bits.append("€" + price_txt.replace("–", "–€"))
+    details_txt = " · ".join(bits)
+    state_label = tr("Active") if st.session_state.get("otr_open_flag", False) else tr("Inactive")
 
-    details_txt = " · ".join(details_bits)
-
-    state_label = tr("Active") if open_flag else tr("Inactive")
     if loc_txt and details_txt:
         st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {loc_txt} · {details_txt}")
     elif loc_txt:
@@ -2154,6 +2151,7 @@ def tenant_open_to_rent_section():
         st.caption(f"{tr('Status:')} {state_label} · {details_txt}")
     else:
         st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {tr('Anywhere')}")
+
  
 
 def storage_delete(storage_key: str):
