@@ -3268,7 +3268,6 @@ def tenant_dashboard():
         def k(cid, name):
             return f"{NS}:{name}:{cid}"
 
-        # --- Add Contact form ----------------------------------------------------
          # --- Search landlords by name or email (PARTIAL) ----------------------------
         with st.container(border=True):
             st.markdown(f"**{tr('Search landlords by name or email')}**")
@@ -3354,7 +3353,7 @@ def tenant_dashboard():
                     key=f"{NS}:new_email",
                     placeholder="name@example.com",
                 )
-                col_a, _ = st.columns([1, 6])
+                col_a, _ = st.columns([3, 6])
                 submitted = col_a.form_submit_button(tr("Add Contact"))
                 if submitted:
                     email = (new_email or "").strip()
