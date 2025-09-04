@@ -11,11 +11,24 @@ from pathlib import Path
 import tempfile
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo 
-from utils_vault import encrypt_bytes, decrypt_bytes, sha256_bytes
 import requests
 from functools import lru_cache
 import json
 from json import JSONDecodeError
+
+# Safe import: utils_vault may rely on missing secrets (KeyError)
+VAULT_OK = True
+VAULT_ERR = None
+try:
+    from utils_vault import encrypt_bytes, decrypt_bytes, sha256_bytes
+except Exception as e:
+    # Fallback: disable vault but keep the app running
+    import hashlib
+    def encrypt_bytes(b: bytes) -> bytes: return b
+    def decrypt_bytes(b: bytes) -> bytes: return b
+    def sha256_bytes(b: bytes) -> str: return hashlib.sha256(b).hexdigest()
+    VAULT_OK = False
+    VAULT_ERR = e
 
 
 
@@ -3361,11 +3374,10 @@ def tenant_dashboard():
         st.divider()
 
     def tenant_contancts():
-        
         st.subheader(tr('Contacts'))
-        # Inject minimal CSS once
+
+        # CSS every run
         def _ensure_tfl_css():
-       
             st.markdown("""
             <style>
             .tfl-title{display:flex;align-items:center;gap:12px;margin-bottom:4px}
@@ -3386,7 +3398,13 @@ def tenant_dashboard():
             .prop-foot{color:#64748b;font-size:.85rem}
             </style>
             """, unsafe_allow_html=True)
-            
+
+        _ensure_tfl_css()
+
+        # Namespace + key builder (LOCAL to this function)
+        NSC = "tfl_contacts"
+        def k(cid, name):
+            return f"{NSC}:{name}:{cid}"
 
         def _initials(name, email):
             base = (name or "").strip() or (email or "").split("@")[0]
@@ -3394,16 +3412,14 @@ def tenant_dashboard():
             if len(parts) >= 2: return (parts[0][0]+parts[1][0]).upper()
             if parts: return parts[0][:2].upper()
             return "?"
-        
-        _ensure_tfl_css()
-        
+
         def _clear_transient_search_flags():
-            for k in list(st.session_state.keys()):
-                if k.startswith(("ld_otr_", "otr_", "prospects")):
-                    del st.session_state[k]
-        
+            for key in list(st.session_state.keys()):
+                if key.startswith(("ld_otr_", "otr_", "prospects")):
+                    del st.session_state[key]
+
         tenant_id = st.session_state.user["id"]
-        # --- List + actions (inbound/outbound/pending/connected) -----------------
+
         rows = list_future_landlord_contacts(tenant_id) or []
         if not rows:
             st.caption(tr("No future landlord contacts yet."))
@@ -3411,32 +3427,24 @@ def tenant_dashboard():
 
         for (cid, fl_email, created_at, invited, invited_at, inbound_request, inbound_requested_at) in rows:
             with st.container(border=True):
-                # Resolve landlord before rendering identity
                 landlord_user = get_user_by_email(fl_email)
                 landlord_id = landlord_user["id"] if landlord_user and landlord_user.get("role") == "landlord" else None
                 landlord_name = (landlord_user.get("name") or "").strip() if landlord_user else ""
 
-                # Canonical connection status
                 try:
                     status = flc_get_status(landlord_id, tenant_id) if landlord_id else None
                 except Exception:
                     status = None
 
-                # Header row: identity • badge • actions
                 colL, colM, colR = st.columns([6, 3, 3])
 
-                # Left: avatar + name/email + meta
                 display_title = landlord_name or fl_email
                 initials = _initials(landlord_name, fl_email)
                 meta_bits = []
-                if landlord_name and fl_email:
-                    meta_bits.append(fl_email)
-                if created_at:
-                    meta_bits.append(tr("Added") + f": {created_at}")
-                if invited and invited_at:
-                    meta_bits.append(tr("Invited on") + f" {invited_at}")
-                if inbound_request and inbound_requested_at:
-                    meta_bits.append(tr("Requested on") + f" {inbound_requested_at}")
+                if landlord_name and fl_email: meta_bits.append(fl_email)
+                if created_at: meta_bits.append(tr("Added") + f": {created_at}")
+                if invited and invited_at: meta_bits.append(tr("Invited on") + f" {invited_at}")
+                if inbound_request and inbound_requested_at: meta_bits.append(tr("Requested on") + f" {inbound_requested_at}")
                 meta_line = " · ".join(meta_bits)
 
                 colL.markdown(
@@ -3453,7 +3461,7 @@ def tenant_dashboard():
                     unsafe_allow_html=True
                 )
 
-                # Middle: status badge (custom look)
+                # badges
                 if status == "connected":
                     colM.markdown(f'<span class="tfl-badge tfl-badge--ok">{tr("Connected")}</span>', unsafe_allow_html=True)
                 elif status == "rejected":
@@ -3465,7 +3473,7 @@ def tenant_dashboard():
                 else:
                     colM.markdown(f'<span class="tfl-badge">{tr("Not connected")}</span>', unsafe_allow_html=True)
 
-                # Right: actions (same logic, nicer placement)
+                # actions
                 if status == "connected":
                     if colR.button(tr("Disconnect"), key=k(cid, "disconnect_connected")):
                         if landlord_id: flc_disconnect(landlord_id, tenant_id)
@@ -3531,7 +3539,7 @@ def tenant_dashboard():
                         st.info(tr("Contact removed."))
                         st.rerun()
 
-                # -------- Visible properties (clean, card-style) --------
+                # visible properties (unchanged render)...
                 if landlord_id:
                     vprops = lp_list_visible_properties(landlord_id)
                     if vprops:
@@ -3545,16 +3553,7 @@ def tenant_dashboard():
                                 if floor not in (None, 0): chips.append(f'<span class="pill">{tr("Floor")} {int(floor)}</span>')
                                 if price:   chips.append(f'<span class="pill">€{int(price):,}</span>')
                                 chips_html = " ".join(chips)
-
-                                if url:
-                                    try:
-                                        dom = url.split("://", 1)[-1].split("/", 1)[0]
-                                    except Exception:
-                                        dom = url
-                                    link_html = f' 🔗 <a href="{url}">{dom}</a>'
-                                else:
-                                    link_html = ""
-
+                                link_html = f' 🔗 <a href="{url}">{_url_domain(url) or tr("Open listing")}</a>' if url else ""
                                 st.markdown(
                                     f"""
                                     <div class="prop-card">
@@ -3565,6 +3564,7 @@ def tenant_dashboard():
                                     """,
                                     unsafe_allow_html=True
                                 )
+
 
     
     
