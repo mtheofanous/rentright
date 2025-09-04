@@ -4271,8 +4271,8 @@ def landlord_dashboard():
                 elif status == "rejected":
                     colM.markdown(f'<span class="pt-badge pt-badge--err">{tr("Rejected")}</span>', unsafe_allow_html=True)
                 else:
-                    origin = tr("You requested") if inbound_request else tr("Tenant listed you")
-                    colM.markdown(f'<span class="pt-badge pt-badge--info">{tr("Pending")} · {origin}</span>', unsafe_allow_html=True)
+                    # origin = tr("You requested") if inbound_request else tr("Tenant listed you")
+                    colM.markdown(f'<span class="pt-badge pt-badge--info">{tr("Pending")}</span>', unsafe_allow_html=True)
 
                 # Right: actions (same logic as before)
                 if status == "connected":
