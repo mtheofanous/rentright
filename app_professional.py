@@ -1997,8 +1997,9 @@ def tenant_open_to_rent_section():
         price_min = p1.number_input(tr("Min price (€)"), min_value=0, max_value=1_000_000, value=int(prefs.get("price_min") or 0), step=50)
         price_max = p2.number_input(tr("Max price (€)"), min_value=0, max_value=1_000_000, value=int(prefs.get("price_max") or 0), step=50)
 
-        # ---- Save ----
-        col_save, _ = st.columns([1,3])
+        # ---- Save / Reset ----
+        col_save, col_reset = st.columns([1, 1])
+
         if col_save.button(tr("Save")):
             city_clean = "" if (city == "—") else (city or "")
             district_clean = "" if (district == "—") else (district or "")
@@ -2027,7 +2028,49 @@ def tenant_open_to_rent_section():
                         floor_min, floor_max,
                         price_min, price_max,
                     )
+                try:
+                    st.cache_data.clear()
+                except Exception:
+                    pass
                 st.success(tr("Preferences saved!"))
+
+        if col_reset.button(tr("Reset")):
+            # Discard unsaved edits: clear the pickers so they re-infer from saved prefs on rerun
+            for k in ("loc_region", "loc_unit", "loc_city"):
+                st.session_state.pop(k, None)
+            # number_inputs reinitialize from `prefs` on rerun (their 'value=' comes from prefs)
+            st.rerun()
+
+        # col_save, _ = st.columns([1,3])
+        # if col_save.button(tr("Save")):
+        #     city_clean = "" if (city == "—") else (city or "")
+        #     district_clean = "" if (district == "—") else (district or "")
+        #     if not city_clean and not district_clean:
+        #         st.warning(tr("Please enter at least a city or a district."))
+        #     else:
+        #         try:
+        #             # If your saver accepts OSM args
+        #             save_open_to_rent_prefs(
+        #                 tid, open_flag,
+        #                 city_clean, district_clean,
+        #                 size_min, size_max,
+        #                 rooms_min, rooms_max,
+        #                 floor_min, floor_max,
+        #                 price_min, price_max,
+        #                 city_osm_id=None, city_osm_type=None,
+        #                 district_osm_id=None, district_osm_type=None,
+        #             )
+        #         except TypeError:
+        #             # Old signature without OSM args
+        #             save_open_to_rent_prefs(
+        #                 tid, open_flag,
+        #                 city_clean, district_clean,
+        #                 size_min, size_max,
+        #                 rooms_min, rooms_max,
+        #                 floor_min, floor_max,
+        #                 price_min, price_max,
+        #             )
+        #         st.success(tr("Preferences saved!"))
 
 
 
@@ -4273,13 +4316,6 @@ def landlord_dashboard():
                         f'</div>',
                         unsafe_allow_html=True
                     )
-
-                # try:
-                #     o2r_line = open_to_rent_summary_line(tid)  # returns None if not Active
-                # except Exception:
-                #     o2r_line = None
-                # if o2r_line:
-                #     st.markdown(f"🟢 *{o2r_line}*")
 
                 # ---- References summary ----
                 refs = list_latest_references_for_tenant_dict(tid) or []
