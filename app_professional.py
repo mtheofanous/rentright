@@ -3381,7 +3381,7 @@ def tenant_dashboard():
 
                             # Right: action
                             if in_contacts:
-                                cols[2].caption(tr("Already in contacts"))
+                                pass
                             else:
                                 if cols[2].button(tr("Add Contact"), key=k(ll_id, "search_add")):
                                     try:
@@ -3489,12 +3489,6 @@ def tenant_dashboard():
 
                 display_title = landlord_name or fl_email
                 initials = _initials(landlord_name, fl_email)
-                meta_bits = []
-                if landlord_name and fl_email: meta_bits.append(fl_email)
-                if created_at: meta_bits.append(tr("Added") + f": {created_at}")
-                if invited and invited_at: meta_bits.append(tr("Invited on") + f" {invited_at}")
-                if inbound_request and inbound_requested_at: meta_bits.append(tr("Requested on") + f" {inbound_requested_at}")
-                meta_line = " · ".join(meta_bits)
 
                 colL.markdown(
                     f"""
@@ -3505,7 +3499,7 @@ def tenant_dashboard():
                         <div class="tfl-email">{'' if landlord_name else ''}<a href="mailto:{fl_email}">{fl_email}</a></div>
                     </div>
                     </div>
-                    <div class="tfl-meta">{meta_line}</div>
+
                     """,
                     unsafe_allow_html=True
                 )
