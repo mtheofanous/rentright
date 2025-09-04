@@ -3302,6 +3302,24 @@ def tenant_dashboard():
             st.rerun()
     with col_h3: logout_button()
     
+    tenant_id = st.session_state.user["id"]
+    tenant_email = (st.session_state.user.get("email") or "").strip().lower()
+    tenant_name = (st.session_state.user.get("name") or "").strip()  # fallback if name in session
+
+    # Try DB lookup if name not in session
+    if not tenant_name:
+        c = get_conn()
+        row = c.execute("SELECT name FROM users WHERE id=? LIMIT 1", (tenant_id,)).fetchone()
+        if row:
+            tenant_name = (row[0] or "").strip()
+
+    if tenant_name:
+        st.subheader(f"{tr('Welcome')} {tenant_name}")
+    else:
+        st.subheader(tr("Welcome"))
+
+    st.caption(f"{tr('Logged in with email')}: {tenant_email}")
+    
     def tenant_future_landlords_section():
         """
         Tenant dashboard: manage 'Future Landlords (Contacts)'.
@@ -4124,7 +4142,22 @@ def landlord_dashboard():
 
     landlord_id = st.session_state.user["id"]
     landlord_email = (st.session_state.user.get("email") or "").strip().lower()
-    st.caption(f"{tr('Logged in as')} {landlord_email}")
+    landlord_name = (st.session_state.user.get("name") or "").strip()  # fallback if name is in session
+
+    # Try DB lookup if name not stored in session
+    if not landlord_name:
+        c = get_conn()
+        row = c.execute("SELECT name FROM users WHERE id=? LIMIT 1", (landlord_id,)).fetchone()
+        if row:
+            landlord_name = (row[0] or "").strip()
+
+    if landlord_name:
+        st.subheader(f"{tr('Welcome')} {landlord_name}")
+    else:
+        st.subheader(tr("Welcome"))
+
+    st.caption(f"{tr('Logged in with email')}: {landlord_email}")
+
 
     # =============================================================================
     # Prospective Tenants (landlord view)
