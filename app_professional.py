@@ -4365,84 +4365,84 @@ def landlord_dashboard():
             }
 
         
-        def open_to_rent_summary_line(tenant_id: int) -> str | None:
-            """
-            Status: Active · Looking in: Region — District — City · 60–100 m² · 1–3 rooms · Floor 2–4 · €500–€1,000
-            Shown only when tenant_profiles.open_to_rent == 1. Robust to missing columns and id field.
-            """
-            c = get_conn()
+        # def open_to_rent_summary_line(tenant_id: int) -> str | None:
+        #     """
+        #     Status: Active · Looking in: Region — District — City · 60–100 m² · 1–3 rooms · Floor 2–4 · €500–€1,000
+        #     Shown only when tenant_profiles.open_to_rent == 1. Robust to missing columns and id field.
+        #     """
+        #     c = get_conn()
 
-            # Discover available columns
-            try:
-                cols_info = c.execute("PRAGMA table_info(tenant_profiles)").fetchall()
-            except Exception:
-                return None
-            available = {row[1] for row in cols_info}
+        #     # Discover available columns
+        #     try:
+        #         cols_info = c.execute("PRAGMA table_info(tenant_profiles)").fetchall()
+        #     except Exception:
+        #         return None
+        #     available = {row[1] for row in cols_info}
 
-            if "open_to_rent" not in available:
-                return None  # no O2R support
+        #     if "open_to_rent" not in available:
+        #         return None  # no O2R support
 
-            # Determine id column (your DB uses tenant_id)
-            id_col = "tenant_id" if "tenant_id" in available else ("user_id" if "user_id" in available else None)
-            if not id_col:
-                return None
+        #     # Determine id column (your DB uses tenant_id)
+        #     id_col = "tenant_id" if "tenant_id" in available else ("user_id" if "user_id" in available else None)
+        #     if not id_col:
+        #         return None
 
-            wanted = [
-                "open_to_rent",
-                "search_region", "search_district", "search_city",
-                "size_min", "size_max",
-                "rooms_min", "rooms_max",
-                "floor_min", "floor_max",
-                "price_min", "price_max",
-            ]
-            select_cols = [col for col in wanted if col in available]
-            sql_cols = ", ".join([f'"{col}"' for col in select_cols])
+        #     wanted = [
+        #         "open_to_rent",
+        #         "search_region", "search_district", "search_city",
+        #         "size_min", "size_max",
+        #         "rooms_min", "rooms_max",
+        #         "floor_min", "floor_max",
+        #         "price_min", "price_max",
+        #     ]
+        #     select_cols = [col for col in wanted if col in available]
+        #     sql_cols = ", ".join([f'"{col}"' for col in select_cols])
 
-            row = c.execute(
-                f'SELECT {sql_cols} FROM tenant_profiles WHERE "{id_col}"=?',
-                (tenant_id,),
-            ).fetchone()
-            if not row:
-                return None
+        #     row = c.execute(
+        #         f'SELECT {sql_cols} FROM tenant_profiles WHERE "{id_col}"=?',
+        #         (tenant_id,),
+        #     ).fetchone()
+        #     if not row:
+        #         return None
 
-            data = dict(zip(select_cols, row))
+        #     data = dict(zip(select_cols, row))
 
-            # Active?
-            o2r = data.get("open_to_rent")
-            try:
-                active = int(o2r) == 1
-            except Exception:
-                active = str(o2r).strip() == "1"
-            if not active:
-                return None
+        #     # Active?
+        #     o2r = data.get("open_to_rent")
+        #     try:
+        #         active = int(o2r) == 1
+        #     except Exception:
+        #         active = str(o2r).strip() == "1"
+        #     if not active:
+        #         return None
 
-            # Compose the line (Region may not exist in older DBs)
-            region   = data.get("search_region")
-            district = data.get("search_district")
-            city     = data.get("search_city")
-            where_txt = " — ".join([x for x in (region, district, city) if x]) or tr("Anywhere")
+        #     # Compose the line (Region may not exist in older DBs)
+        #     region   = data.get("search_region")
+        #     district = data.get("search_district")
+        #     city     = data.get("search_city")
+        #     where_txt = " — ".join([x for x in (region, district, city) if x]) or tr("Anywhere")
 
-            def fmt_num(v):
-                if v is None or v == "" or (isinstance(v, (int, float)) and v == 0):
-                    return "—"
-                try:
-                    return f"{int(v):,}"
-                except Exception:
-                    return str(v)
+        #     def fmt_num(v):
+        #         if v is None or v == "" or (isinstance(v, (int, float)) and v == 0):
+        #             return "—"
+        #         try:
+        #             return f"{int(v):,}"
+        #         except Exception:
+        #             return str(v)
 
-            def rng(lo, hi, unit=""):
-                return f"{fmt_num(lo)}–{fmt_num(hi)}{unit}"
+        #     def rng(lo, hi, unit=""):
+        #         return f"{fmt_num(lo)}–{fmt_num(hi)}{unit}"
 
-            size_txt  = rng(data.get("size_min"),  data.get("size_max"),  " m²")
-            rooms_txt = f"{rng(data.get('rooms_min'), data.get('rooms_max'))} {tr('rooms')}"
-            floor_txt = f"{tr('Floor')} {rng(data.get('floor_min'), data.get('floor_max'))}"
-            price_txt = f"€{rng(data.get('price_min'), data.get('price_max'))}"
+        #     size_txt  = rng(data.get("size_min"),  data.get("size_max"),  " m²")
+        #     rooms_txt = f"{rng(data.get('rooms_min'), data.get('rooms_max'))} {tr('rooms')}"
+        #     floor_txt = f"{tr('Floor')} {rng(data.get('floor_min'), data.get('floor_max'))}"
+        #     price_txt = f"€{rng(data.get('price_min'), data.get('price_max'))}"
 
-            return (
-                f"{tr('Status')}: {tr('Active')} · "
-                f"{tr('Looking in')}: {where_txt} · "
-                f"{size_txt} · {rooms_txt} · {floor_txt} · {price_txt}"
-            )
+        #     return (
+        #         f"{tr('Status')}: {tr('Active')} · "
+        #         f"{tr('Looking in')}: {where_txt} · "
+        #         f"{size_txt} · {rooms_txt} · {floor_txt} · {price_txt}"
+        #     )
 
         
         # ── Data ───────────────────────────────────────────────────────────────────────
@@ -5243,7 +5243,6 @@ def landlord_dashboard():
     elif page == "my_refs":
         my_references()
     else:
-        # fallback (shouldn't happen)
         my_tenants()
         
 def reference_submitted_page():
