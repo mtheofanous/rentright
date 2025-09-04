@@ -4137,11 +4137,11 @@ def tenant_dashboard():
         st.divider()
 
 
-    with nav1:
+    with nav2:
         if st.button(tr("Find Landlords"), key="btn_find_landlords", use_container_width=True):
             _go("find_landlords")
 
-    with nav2:
+    with nav1:
         if st.button(tr("My Contacts"), key="btn_my_contacts", use_container_width=True):
             _go("my_contacts")
 
