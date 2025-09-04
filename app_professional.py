@@ -1996,25 +1996,26 @@ def tenant_open_to_rent_section():
             tr("I'm currently looking for a place"),
             key="otr_open_flag",
         )
-
-        # REGION
-        region_options = [ANY] + (regions or [])
-        region_index = (region_options.index(pre_region) if (pre_region in region_options and not reset_preselect) else 0)
-        region_sel = st.selectbox("Περιφέρεια", options=region_options, index=region_index, key="loc_region")
-
-        # REGIONAL UNIT (depends on Region)
-        units = list_units(data, region_sel) if (region_sel and region_sel != ANY) else []
-        unit_options = [ANY] + (units or [])
-        unit_index = (unit_options.index(pre_unit) if (pre_unit in unit_options and not reset_preselect) else 0)
-        unit_sel = st.selectbox("Περιφερειακή Ενότητα", options=unit_options, index=unit_index, key="loc_unit")
-
-        # MUNICIPALITY (depends on Unit)
-        municipalities = list_municipalities(data, region_sel, unit_sel) if (region_sel and region_sel != ANY and unit_sel and unit_sel != ANY) else []
-        city_options = [ANY] + (municipalities or [])
-        city_index = (city_options.index(saved_city) if (saved_city in city_options and not reset_preselect) else 0)
-        city_sel = st.selectbox("Δήμος (Πόλη)", options=city_options, index=city_index, key="loc_city")
         
         with st.expander(tr("Property Charecteristics"), expanded=False):
+
+            # REGION
+            region_options = [ANY] + (regions or [])
+            region_index = (region_options.index(pre_region) if (pre_region in region_options and not reset_preselect) else 0)
+            region_sel = st.selectbox("Περιφέρεια", options=region_options, index=region_index, key="loc_region")
+
+            # REGIONAL UNIT (depends on Region)
+            units = list_units(data, region_sel) if (region_sel and region_sel != ANY) else []
+            unit_options = [ANY] + (units or [])
+            unit_index = (unit_options.index(pre_unit) if (pre_unit in unit_options and not reset_preselect) else 0)
+            unit_sel = st.selectbox("Περιφερειακή Ενότητα", options=unit_options, index=unit_index, key="loc_unit")
+
+            # MUNICIPALITY (depends on Unit)
+            municipalities = list_municipalities(data, region_sel, unit_sel) if (region_sel and region_sel != ANY and unit_sel and unit_sel != ANY) else []
+            city_options = [ANY] + (municipalities or [])
+            city_index = (city_options.index(saved_city) if (saved_city in city_options and not reset_preselect) else 0)
+            city_sel = st.selectbox("Δήμος (Πόλη)", options=city_options, index=city_index, key="loc_city")
+    
 
             # Map to your schema (don’t save “Any” — treat as empty)
             region   = "" if region_sel == ANY else region_sel
