@@ -3241,40 +3241,6 @@ def tenant_dashboard():
         - Shows landlord name (if available) + email.
         """
         st.subheader(tr("Future Landlords (Contacts)"))
-        
-            # Inject minimal CSS once
-        def _ensure_tfl_css():
-       
-            st.markdown("""
-            <style>
-            .tfl-title{display:flex;align-items:center;gap:12px;margin-bottom:4px}
-            .tfl-avatar{width:40px;height:40px;border-radius:999px;display:flex;align-items:center;justify-content:center;
-                        font-weight:700;color:#111;border:1px solid #e5e7eb;background:linear-gradient(135deg,#f8fafc,#e2e8f0)}
-            .tfl-name{font-weight:700;font-size:1.05rem;margin:0}
-            .tfl-email{color:#64748b;font-size:.9rem;margin-top:2px}
-            .tfl-badge{padding:4px 10px;border-radius:999px;font-size:.85rem;font-weight:600;border:1px solid;display:inline-block}
-            .tfl-badge--ok{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
-            .tfl-badge--info{background:#eff6ff;color:#1e40af;border-color:#bfdbfe}
-            .tfl-badge--err{background:#fef2f2;color:#7f1d1d;border-color:#fecaca}
-            .tfl-meta{color:#94a3b8;font-size:.85rem;margin-top:2px}
-            .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#f1f5f9;color:#334155;font-size:.8rem;
-                margin-right:6px;margin-bottom:4px;border:1px solid #e2e8f0}
-            .prop-card{border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;margin-bottom:8px;background:#fff}
-            .prop-title{font-weight:600;margin-bottom:2px}
-            .prop-sub{color:#475569;font-size:.9rem;margin:4px 0 6px}
-            .prop-foot{color:#64748b;font-size:.85rem}
-            </style>
-            """, unsafe_allow_html=True)
-            
-
-        def _initials(name, email):
-            base = (name or "").strip() or (email or "").split("@")[0]
-            parts = [p for p in base.replace(".", " ").split() if p]
-            if len(parts) >= 2: return (parts[0][0]+parts[1][0]).upper()
-            if parts: return parts[0][:2].upper()
-            return "?"
-        
-        _ensure_tfl_css()
 
 
         tenant_id = st.session_state.user["id"]
@@ -3362,13 +3328,13 @@ def tenant_dashboard():
                                         st.rerun()
                                     except Exception as e:
                                         st.error(f"{tr('Unable to add contact')}: {e}")
+                                        
 
         # Friendly hint between search and add-by-email
         st.caption(tr("If you can’t find the landlord above, send a request to connect by email."))
 
         # --- Add Contact (request to connect by email) ------------------------------
         with st.container(border=False):
-            st.markdown(f"**{tr('Add contact by email (request to connect)')}**")
             with st.form(f"{NS}:add_contact_form", clear_on_submit=True):
                 new_email = st.text_input(
                     tr("Landlord email"),
@@ -3394,7 +3360,49 @@ def tenant_dashboard():
 
         st.divider()
 
+    def tenant_contancts():
+        
+        st.subheader(tr('Contacts'))
+        # Inject minimal CSS once
+        def _ensure_tfl_css():
+       
+            st.markdown("""
+            <style>
+            .tfl-title{display:flex;align-items:center;gap:12px;margin-bottom:4px}
+            .tfl-avatar{width:40px;height:40px;border-radius:999px;display:flex;align-items:center;justify-content:center;
+                        font-weight:700;color:#111;border:1px solid #e5e7eb;background:linear-gradient(135deg,#f8fafc,#e2e8f0)}
+            .tfl-name{font-weight:700;font-size:1.05rem;margin:0}
+            .tfl-email{color:#64748b;font-size:.9rem;margin-top:2px}
+            .tfl-badge{padding:4px 10px;border-radius:999px;font-size:.85rem;font-weight:600;border:1px solid;display:inline-block}
+            .tfl-badge--ok{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
+            .tfl-badge--info{background:#eff6ff;color:#1e40af;border-color:#bfdbfe}
+            .tfl-badge--err{background:#fef2f2;color:#7f1d1d;border-color:#fecaca}
+            .tfl-meta{color:#94a3b8;font-size:.85rem;margin-top:2px}
+            .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#f1f5f9;color:#334155;font-size:.8rem;
+                margin-right:6px;margin-bottom:4px;border:1px solid #e2e8f0}
+            .prop-card{border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;margin-bottom:8px;background:#fff}
+            .prop-title{font-weight:600;margin-bottom:2px}
+            .prop-sub{color:#475569;font-size:.9rem;margin:4px 0 6px}
+            .prop-foot{color:#64748b;font-size:.85rem}
+            </style>
+            """, unsafe_allow_html=True)
+            
 
+        def _initials(name, email):
+            base = (name or "").strip() or (email or "").split("@")[0]
+            parts = [p for p in base.replace(".", " ").split() if p]
+            if len(parts) >= 2: return (parts[0][0]+parts[1][0]).upper()
+            if parts: return parts[0][:2].upper()
+            return "?"
+        
+        _ensure_tfl_css()
+        
+        def _clear_transient_search_flags():
+            for k in list(st.session_state.keys()):
+                if k.startswith(("ld_otr_", "otr_", "prospects")):
+                    del st.session_state[k]
+        
+        tenant_id = st.session_state.user["id"]
         # --- List + actions (inbound/outbound/pending/connected) -----------------
         rows = list_future_landlord_contacts(tenant_id) or []
         if not rows:
@@ -3558,8 +3566,11 @@ def tenant_dashboard():
                                     unsafe_allow_html=True
                                 )
 
-
+    
+    
     tenant_future_landlords_section()
+    
+    tenant_contancts()
     
     tenant_open_to_rent_section()
 
