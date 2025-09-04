@@ -3395,7 +3395,149 @@ def tenant_dashboard():
                                         st.rerun()
                                     except Exception as e:
                                         st.error(f"{tr('Unable to add contact')}: {e}")
-                                        
+        #-------------------------
+        # --- Search landlords by property (VISIBLE props only) ------------------------
+        with st.container(border=True):
+            st.markdown(f"**{tr('Search landlords by property')}**")
+
+            with st.expander(tr("Filters (property fields)"), True):
+                # Location pickers (Region → Regional Unit → Municipality)
+                lc1, lc2, lc3 = st.columns(3)
+                with lc1:
+                    p_region, p_regional_unit, p_municipality = greece_location_pickers(prefix=f"{NS}_prop")  # region / RU / municipality
+
+                # Ranged numeric filters (all optional)
+                r1c1, r1c2 = st.columns(2)
+                p_size_min = r1c1.number_input(tr("Min size (m²)"), min_value=0, max_value=10000, value=0, step=1, key=f"{NS}:p_size_min") or None
+                p_size_max = r1c2.number_input(tr("Max size (m²)"), min_value=0, max_value=10000, value=0, step=1, key=f"{NS}:p_size_max") or None
+
+                r2c1, r2c2 = st.columns(2)
+                p_rooms_min = r2c1.number_input(tr("Min rooms"), min_value=0, max_value=50, value=0, step=1, key=f"{NS}:p_rooms_min") or None
+                p_rooms_max = r2c2.number_input(tr("Max rooms"), min_value=0, max_value=50, value=0, step=1, key=f"{NS}:p_rooms_max") or None
+
+                r3c1, r3c2 = st.columns(2)
+                _floor_min_val = r3c1.number_input(tr("Min floor"), min_value=-5, max_value=100, value=0, step=1, key=f"{NS}:p_floor_min")
+                _floor_max_val = r3c2.number_input(tr("Max floor"), min_value=-5, max_value=100, value=0, step=1, key=f"{NS}:p_floor_max")
+                p_floor_min = _floor_min_val if _floor_min_val != 0 else None
+                p_floor_max = _floor_max_val if _floor_max_val != 0 else None
+
+                r4c1, r4c2 = st.columns(2)
+                p_price_min = r4c1.number_input(tr("Min price (€)"), min_value=0, max_value=1_000_000, value=0, step=50, key=f"{NS}:p_price_min") or None
+                p_price_max = r4c2.number_input(tr("Max price (€)"), min_value=0, max_value=1_000_000, value=0, step=50, key=f"{NS}:p_price_max") or None
+
+            # sticky flag so results persist
+            flag_key = f"{NS}:prop_do_search"
+            if flag_key not in st.session_state:
+                st.session_state[flag_key] = False
+
+            cbtn1, cbtn2 = st.columns([1, 1])
+            if cbtn1.button(tr("Search"), key=f"{NS}:prop_search_btn"):
+                st.session_state[flag_key] = True
+            if cbtn2.button(tr("Reset"), key=f"{NS}:prop_reset_btn"):
+                st.session_state[flag_key] = False
+                try: st.cache_data.clear()
+                except Exception: pass
+                st.rerun()
+
+            if st.session_state[flag_key]:
+                try:
+                    prop_results = search_landlords_by_property_location(
+                        region=p_region,
+                        regional_unit=p_regional_unit,
+                        municipality=p_municipality,
+                        size_min=p_size_min, size_max=p_size_max,
+                        rooms_min=p_rooms_min, rooms_max=p_rooms_max,
+                        floor_min=p_floor_min, floor_max=p_floor_max,
+                        price_min=p_price_min, price_max=p_price_max,
+                        limit=50,
+                    )
+                except Exception:
+                    prop_results = []
+                    st.warning(tr("Search is temporarily unavailable."))
+
+                if not prop_results:
+                    st.caption(tr("No matches found."))
+                else:
+                    st.caption(f"{len(prop_results)} {tr('result(s)')}")
+                    # Each row is a visible property with landlord info
+                    for (
+                        prop_id, ll_id, ll_name, ll_email,
+                        addr, url, reg, ru, muni, size_m2, rooms, floor, price, updated_at
+                    ) in prop_results:
+
+                        # relation/contacts state (reuse same logic as name/email search)
+                        try:
+                            rel_status = flc_get_status(ll_id, tenant_id)  # 'connected' | 'rejected' | None
+                        except Exception:
+                            rel_status = None
+
+                        c = get_conn()
+                        rowc = c.execute(
+                            "SELECT id, invited, inbound_request FROM future_landlord_contacts "
+                            "WHERE tenant_id=? AND LOWER(email)=LOWER(?) LIMIT 1",
+                            (tenant_id, (ll_email or "").strip().lower()),
+                        ).fetchone()
+                        in_contacts = bool(rowc)
+                        invited = int(rowc[1]) if rowc else 0
+                        inbound_req = int(rowc[2]) if rowc else 0
+
+                        with st.container(border=True):
+                            cols = st.columns([5, 3, 4])
+
+                            # Left: landlord identity + a small property spec line
+                            title = (ll_name or ll_email or f"Landlord #{ll_id}").strip()
+                            cols[0].markdown(f"**{title}**")
+                            if ll_name and ll_email:
+                                cols[0].caption(ll_email)
+
+                            # Middle: status badge (consistent with the first search)
+                            if rel_status == "connected":
+                                cols[1].success(tr("Connected"))
+                            elif rel_status == "rejected":
+                                cols[1].error(tr("Rejected"))
+                            elif inbound_req:
+                                cols[1].info(tr("Pending"))
+                            elif invited:
+                                cols[1].info(tr("Invited"))
+                            elif in_contacts:
+                                cols[1].caption(tr("In contacts"))
+                            else:
+                                cols[1].caption(tr("No relation"))
+
+                            # Right: action
+                            if not in_contacts:
+                                if cols[2].button(tr("Add Contact"), key=f"{NS}:prop_add_{prop_id}_{ll_id}"):
+                                    try:
+                                        add_future_landlord_contact(tenant_id, ll_email)
+                                        try: st.cache_data.clear()
+                                        except Exception: pass
+                                        st.success(tr("Contact added."))
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"{tr('Unable to add contact')}: {e}")
+
+                            # Show the matching visible property (chips + optional link)
+                            where = " — ".join([x for x in [reg, ru, muni] if x])
+                            chips = []
+                            if where:   chips.append(f'<span class="pill">{where}</span>')
+                            if size_m2: chips.append(f'<span class="pill">{int(size_m2):,} m²</span>')
+                            if rooms:   chips.append(f'<span class="pill">{int(rooms)} {tr("rooms")}</span>')
+                            if floor not in (None, 0): chips.append(f'<span class="pill">{tr("Floor")} {int(floor)}</span>')
+                            if price:   chips.append(f'<span class="pill">€{int(price):,}</span>')
+                            chips_html = " ".join(chips)
+                            link_html = f' 🔗 <a href="{url}">{_url_domain(url) or tr("Open listing")}</a>' if url else ""
+                            st.markdown(
+                                f"""
+                                <div class="prop-card">
+                                <div class="prop-title">• {addr}</div>
+                                <div class="prop-sub">{chips_html}</div>
+                                <div class="prop-foot">{tr('Updated')}: {format_dt(updated_at)}</div>
+                                <div class="prop-foot">{tr('For more details visit')}: {link_html}</div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
+                               
 
         # Friendly hint between search and add-by-email
         st.caption(tr("If you can’t find the landlord above, send a request to connect by email."))
