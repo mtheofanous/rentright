@@ -1844,6 +1844,68 @@ def lp_list_visible_properties(landlord_id: int):
     return rows or []
 
 #finish here ---------------------------------------------------------------------
+def search_landlords_by_property_location(
+    region: str | None = None,
+    regional_unit: str | None = None,
+    municipality: str | None = None,
+    size_min: int | None = None, size_max: int | None = None,
+    rooms_min: int | None = None, rooms_max: int | None = None,
+    floor_min: int | None = None, floor_max: int | None = None,
+    price_min: int | None = None, price_max: int | None = None,
+    limit: int = 50,
+):
+    """
+    Find landlords that have at least one VISIBLE property matching the filters.
+    Returns rows of matching properties with landlord info:
+      (prop_id, landlord_id, landlord_name, landlord_email,
+       address, listing_url, region, regional_unit, municipality,
+       size_m2, rooms, floor, price, updated_at)
+    """
+    c = get_conn()
+    sql = """
+    SELECT
+      lp.id            AS prop_id,
+      u.id             AS landlord_id,
+      COALESCE(u.name,'') AS landlord_name,
+      u.email          AS landlord_email,
+      lp.address, lp.listing_url,
+      lp.region       AS region,
+      lp.district     AS regional_unit,   -- DB column 'district' == Regional Unit
+      lp.city         AS municipality,    -- DB column 'city'     == Municipality
+      lp.size_m2, lp.rooms, lp.floor, lp.price,
+      lp.updated_at
+    FROM landlord_properties lp
+    JOIN users u ON u.id = lp.landlord_id AND u.role = 'landlord'
+    WHERE lp.visible_to_tenants = 1
+      AND (? IS NULL OR lp.region   = ?)
+      AND (? IS NULL OR lp.district = ?)
+      AND (? IS NULL OR lp.city     = ?)
+      AND (? IS NULL OR lp.size_m2 >= ?)
+      AND (? IS NULL OR lp.size_m2 <= ?)
+      AND (? IS NULL OR lp.rooms    >= ?)
+      AND (? IS NULL OR lp.rooms    <= ?)
+      AND (? IS NULL OR lp.floor    >= ?)
+      AND (? IS NULL OR lp.floor    <= ?)
+      AND (? IS NULL OR lp.price    >= ?)
+      AND (? IS NULL OR lp.price    <= ?)
+    ORDER BY lp.updated_at DESC, lp.id DESC
+    LIMIT ?
+    """
+    params = [
+        region,  region,
+        regional_unit, regional_unit,
+        municipality,  municipality,
+        size_min, size_min,
+        size_max, size_max,
+        rooms_min, rooms_min,
+        rooms_max, rooms_max,
+        floor_min, floor_min,
+        floor_max, floor_max,
+        price_min, price_min,
+        price_max, price_max,
+        limit,
+    ]
+    return c.execute(sql, params).fetchall() or []
 
 
 def tenant_open_to_rent_section():
@@ -1953,6 +2015,8 @@ def tenant_open_to_rent_section():
                         price_min, price_max,
                     )
                 st.success(tr("Preferences saved!"))
+
+
 
     # --- Compact summary (adds size, rooms, floor) ---
     def _fmt_range(lo, hi, suffix=""):
@@ -2310,6 +2374,49 @@ def set_contract_status(token: str, status: str, by_email: str) -> tuple[bool, s
 
     return True, "Status updated."
 
+def get_tenant_saved_preferences(tenant_id: int) -> dict | None:
+    """
+    Read the tenant_profiles preference fields WITHOUT checking open_to_rent.
+    Returns a dict with keys (if columns exist): search_region, search_district, search_city,
+    size_min, size_max, rooms_min, rooms_max, floor_min, floor_max, price_min, price_max
+    """
+    c = get_conn()
+    try:
+        cols = {r[1] for r in c.execute("PRAGMA table_info(tenant_profiles)").fetchall()}
+    except Exception:
+        return None
+
+    # Determine id column in your tenant_profiles
+    id_col = "tenant_id" if "tenant_id" in cols else ("user_id" if "user_id" in cols else None)
+    if not id_col:
+        return None
+
+    wanted = [
+        "search_region", "search_district", "search_city",
+        "size_min", "size_max",
+        "rooms_min", "rooms_max",
+        "floor_min", "floor_max",
+        "price_min", "price_max",
+    ]
+    select_cols = [cname for cname in wanted if cname in cols]
+    if not select_cols:
+        return None
+
+    sql_cols = ", ".join([f'"{cname}"' for cname in select_cols])
+    row = c.execute(f'SELECT {sql_cols} FROM tenant_profiles WHERE "{id_col}"=?', (tenant_id,)).fetchone()
+    if not row:
+        return None
+
+    data = dict(zip(select_cols, row))
+
+    # Normalize numerics to ints when possible
+    for k in ["size_min","size_max","rooms_min","rooms_max","floor_min","floor_max","price_min","price_max"]:
+        if k in data and data[k] is not None and data[k] != "":
+            try:
+                data[k] = int(data[k])
+            except Exception:
+                pass
+    return data
 
 
 def contract_status_badge(status: str) -> str:
@@ -3183,27 +3290,7 @@ def tenant_dashboard():
             return f"{NS}:{name}:{cid}"
 
         # --- Add Contact form ----------------------------------------------------
-        with st.container(border=True):
-            st.markdown(f"**{tr('Add Contact')}**")
-            with st.form(f"{NS}:add_contact_form", clear_on_submit=True):
-                new_email = st.text_input(tr("Landlord email"), key=f"{NS}:new_email")
-                col_a, _ = st.columns([1, 6])
-                submitted = col_a.form_submit_button(tr("Add"))
-                if submitted:
-                    email = (new_email or "").strip()
-                    if not email or "@" not in email:
-                        st.error(tr("Please enter a valid email address."))
-                    else:
-                        try:
-                            add_future_landlord_contact(tenant_id, email)
-                            try: st.cache_data.clear()
-                            except Exception: pass
-                            _clear_transient_search_flags()
-                            st.success(tr("Contact added."))
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"{tr('Unable to add contact')}: {e}")
-            # --- Search landlords by name or email (partial match) ----------------------
+         # --- Search landlords by name or email (PARTIAL) ----------------------------
         with st.container(border=True):
             st.markdown(f"**{tr('Search landlords by name or email')}**")
             q = st.text_input(
@@ -3215,15 +3302,15 @@ def tenant_dashboard():
             if q and len(q.strip()) >= 2:
                 try:
                     results = search_landlords_by_name_or_email(q, limit=25)
-                except Exception as e:
+                except Exception:
                     results = []
                     st.warning(tr("Search is temporarily unavailable."))
-                
+
                 if not results:
                     st.caption(tr("No matches found."))
                 else:
                     for (ll_id, ll_name, ll_email) in results:
-                        # Resolve current relation / contact state
+                        # relation/contacts state
                         try:
                             rel_status = flc_get_status(ll_id, tenant_id)  # 'connected' | 'rejected' | None
                         except Exception:
@@ -3276,6 +3363,241 @@ def tenant_dashboard():
                                     except Exception as e:
                                         st.error(f"{tr('Unable to add contact')}: {e}")
 
+        # Friendly hint between search and add-by-email
+        st.caption("➕ " + tr("If you can’t find the landlord above, send a request to connect by email."))
+
+        # --- Add Contact (request to connect by email) ------------------------------
+        with st.container(border=True):
+            st.markdown(f"**{tr('Add contact by email (request to connect)')}**")
+            with st.form(f"{NS}:add_contact_form", clear_on_submit=True):
+                new_email = st.text_input(
+                    tr("Landlord email"),
+                    key=f"{NS}:new_email",
+                    placeholder="name@example.com",
+                )
+                col_a, _ = st.columns([1, 6])
+                submitted = col_a.form_submit_button(tr("Add Contact"))
+                if submitted:
+                    email = (new_email or "").strip()
+                    if not email or "@" not in email:
+                        st.error(tr("Please enter a valid email address."))
+                    else:
+                        try:
+                            add_future_landlord_contact(tenant_id, email)
+                            try: st.cache_data.clear()
+                            except Exception: pass
+                            _clear_transient_search_flags()
+                            st.success(tr("Contact added."))
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"{tr('Unable to add contact')}: {e}")
+
+        st.divider()
+
+        # with st.container(border=True):
+        #     st.markdown(f"**{tr('Add Contact')}**")
+        #     with st.form(f"{NS}:add_contact_form", clear_on_submit=True):
+        #         new_email = st.text_input(tr("Landlord email"), key=f"{NS}:new_email")
+        #         col_a, _ = st.columns([1, 6])
+        #         submitted = col_a.form_submit_button(tr("Add"))
+        #         if submitted:
+        #             email = (new_email or "").strip()
+        #             if not email or "@" not in email:
+        #                 st.error(tr("Please enter a valid email address."))
+        #             else:
+        #                 try:
+        #                     add_future_landlord_contact(tenant_id, email)
+        #                     try: st.cache_data.clear()
+        #                     except Exception: pass
+        #                     _clear_transient_search_flags()
+        #                     st.success(tr("Contact added."))
+        #                     st.rerun()
+        #                 except Exception as e:
+        #                     st.error(f"{tr('Unable to add contact')}: {e}")
+        #     # --- Search landlords by name or email (partial match) ----------------------
+        # with st.container(border=True):
+        #     st.markdown(f"**{tr('Search landlords by name or email')}**")
+        #     q = st.text_input(
+        #         tr("Type a name, surname, or email"),
+        #         key=f"{NS}:search_q",
+        #         placeholder=tr("e.g. Maria Papadopoulou or papadop"),
+        #     )
+
+        #     if q and len(q.strip()) >= 2:
+        #         try:
+        #             results = search_landlords_by_name_or_email(q, limit=25)
+        #         except Exception as e:
+        #             results = []
+        #             st.warning(tr("Search is temporarily unavailable."))
+                
+        #         if not results:
+        #             st.caption(tr("No matches found."))
+        #         else:
+        #             for (ll_id, ll_name, ll_email) in results:
+        #                 # Resolve current relation / contact state
+        #                 try:
+        #                     rel_status = flc_get_status(ll_id, tenant_id)  # 'connected' | 'rejected' | None
+        #                 except Exception:
+        #                     rel_status = None
+
+        #                 c = get_conn()
+        #                 rowc = c.execute(
+        #                     "SELECT id, invited, inbound_request FROM future_landlord_contacts "
+        #                     "WHERE tenant_id=? AND LOWER(email)=LOWER(?) LIMIT 1",
+        #                     (tenant_id, (ll_email or "").strip().lower()),
+        #                 ).fetchone()
+        #                 in_contacts = bool(rowc)
+        #                 invited = int(rowc[1]) if rowc else 0
+        #                 inbound_req = int(rowc[2]) if rowc else 0
+
+        #                 with st.container(border=True):
+        #                     cols = st.columns([5, 3, 4])
+
+        #                     # Left: identity
+        #                     title = (ll_name or ll_email or f"Landlord #{ll_id}").strip()
+        #                     cols[0].markdown(f"**{title}**")
+        #                     if ll_name and ll_email:
+        #                         cols[0].caption(ll_email)
+
+        #                     # Middle: status badge
+        #                     if rel_status == "connected":
+        #                         cols[1].success(tr("Connected"))
+        #                     elif rel_status == "rejected":
+        #                         cols[1].error(tr("Rejected"))
+        #                     elif inbound_req:
+        #                         cols[1].info(tr("Pending"))
+        #                     elif invited:
+        #                         cols[1].info(tr("Invited"))
+        #                     elif in_contacts:
+        #                         cols[1].caption(tr("In contacts"))
+        #                     else:
+        #                         cols[1].caption(tr("No relation"))
+
+        #                     # Right: action
+        #                     if in_contacts:
+        #                         cols[2].caption(tr("Already in contacts"))
+        #                     else:
+        #                         if cols[2].button(tr("Add Contact"), key=k(ll_id, "search_add")):
+        #                             try:
+        #                                 add_future_landlord_contact(tenant_id, ll_email)
+        #                                 try: st.cache_data.clear()
+        #                                 except Exception: pass
+        #                                 st.success(tr("Contact added."))
+        #                                 st.rerun()
+        #                             except Exception as e:
+        #                                 st.error(f"{tr('Unable to add contact')}: {e}")
+                                        
+        # --- Search landlords by property (Region / Regional Unit / Municipality) ----
+        with st.container(border=True):
+            st.markdown(f"**{tr('Search landlords by property')}**")
+
+            # Linked pickers from ellada.json (live; no form)
+            lc1, lc2, lc3 = st.columns(3)
+            with lc1:
+                # keys: tfl_prop_region / tfl_prop_ru / tfl_prop_mun
+                prop_region, prop_regional_unit, prop_municipality = greece_location_pickers(prefix="tfl_prop")
+
+            # Quick actions to pull in your saved preferences (works even if OTR not active)
+            a1, a2 = st.columns([1.6, 2.2])
+            if a1.button(tr("Use my saved preferences"), key=f"{NS}:prop_use_mine"):
+                prefs = get_tenant_saved_preferences(tenant_id) or {}
+                # Location
+                st.session_state["tfl_prop_region"] = prefs.get("search_region")
+                st.session_state["tfl_prop_ru"]     = prefs.get("search_district")     # Regional Unit
+                st.session_state["tfl_prop_mun"]    = prefs.get("search_city")         # Municipality
+                # Numerics (store zeros for empty to play nice with number_input)
+                def _nz(x): 
+                    try:
+                        return int(x) if x not in (None, "") else 0
+                    except Exception:
+                        return 0
+                st.session_state[f"{NS}:prop_size_min"]  = _nz(prefs.get("size_min"))
+                st.session_state[f"{NS}:prop_size_max"]  = _nz(prefs.get("size_max"))
+                st.session_state[f"{NS}:prop_rooms_min"] = _nz(prefs.get("rooms_min"))
+                st.session_state[f"{NS}:prop_rooms_max"] = _nz(prefs.get("rooms_max"))
+                st.session_state[f"{NS}:prop_floor_min"] = _nz(prefs.get("floor_min"))
+                st.session_state[f"{NS}:prop_floor_max"] = _nz(prefs.get("floor_max"))
+                st.session_state[f"{NS}:prop_price_min"] = _nz(prefs.get("price_min"))
+                st.session_state[f"{NS}:prop_price_max"] = _nz(prefs.get("price_max"))
+                st.rerun()
+
+            if a2.button(tr("Search with my preferences"), key=f"{NS}:prop_search_mine"):
+                prefs = get_tenant_saved_preferences(tenant_id) or {}
+                # Set the UI state as above, then flip the search flag
+                st.session_state["tfl_prop_region"] = prefs.get("search_region")
+                st.session_state["tfl_prop_ru"]     = prefs.get("search_district")
+                st.session_state["tfl_prop_mun"]    = prefs.get("search_city")
+                def _nz(x):
+                    try:
+                        return int(x) if x not in (None, "") else 0
+                    except Exception:
+                        return 0
+                st.session_state[f"{NS}:prop_size_min"]  = _nz(prefs.get("size_min"))
+                st.session_state[f"{NS}:prop_size_max"]  = _nz(prefs.get("size_max"))
+                st.session_state[f"{NS}:prop_rooms_min"] = _nz(prefs.get("rooms_min"))
+                st.session_state[f"{NS}:prop_rooms_max"] = _nz(prefs.get("rooms_max"))
+                st.session_state[f"{NS}:prop_floor_min"] = _nz(prefs.get("floor_min"))
+                st.session_state[f"{NS}:prop_floor_max"] = _nz(prefs.get("floor_max"))
+                st.session_state[f"{NS}:prop_price_min"] = _nz(prefs.get("price_min"))
+                st.session_state[f"{NS}:prop_price_max"] = _nz(prefs.get("price_max"))
+                st.session_state[f"{NS}:prop_do_search"] = True
+                st.rerun()
+
+            # Show the chosen location clearly with correct labels
+            st.caption(
+                f"{tr('Region')}: {prop_region or tr('Any')} · "
+                f"{tr('Regional Unit')}: {prop_regional_unit or tr('Any')} · "
+                f"{tr('Municipality')}: {prop_municipality or tr('Any')}"
+            )
+
+            # Numeric filters
+            r1c1, r1c2 = st.columns(2)
+            size_min = r1c1.number_input(tr("Min size (m²)"), 0, 10000, st.session_state.get(f"{NS}:prop_size_min", 0), 1, key=f"{NS}:prop_size_min")
+            size_max = r1c2.number_input(tr("Max size (m²)"), 0, 10000, st.session_state.get(f"{NS}:prop_size_max", 0), 1, key=f"{NS}:prop_size_max")
+
+            r2c1, r2c2 = st.columns(2)
+            rooms_min = r2c1.number_input(tr("Min rooms"), 0, 50, st.session_state.get(f"{NS}:prop_rooms_min", 0), 1, key=f"{NS}:prop_rooms_min")
+            rooms_max = r2c2.number_input(tr("Max rooms"), 0, 50, st.session_state.get(f"{NS}:prop_rooms_max", 0), 1, key=f"{NS}:prop_rooms_max")
+
+            r3c1, r3c2 = st.columns(2)
+            floor_min = r3c1.number_input(tr("Min floor"), -5, 100, st.session_state.get(f"{NS}:prop_floor_min", 0), 1, key=f"{NS}:prop_floor_min")
+            floor_max = r3c2.number_input(tr("Max floor"), -5, 100, st.session_state.get(f"{NS}:prop_floor_max", 0), 1, key=f"{NS}:prop_floor_max")
+
+            r4c1, r4c2 = st.columns(2)
+            price_min = r4c1.number_input(tr("Min price (€)"), 0, 1_000_000, st.session_state.get(f"{NS}:prop_price_min", 0), 50, key=f"{NS}:prop_price_min")
+            price_max = r4c2.number_input(tr("Max price (€)"), 0, 1_000_000, st.session_state.get(f"{NS}:prop_price_max", 0), 50, key=f"{NS}:prop_price_max")
+
+            # Sticky Search/Reset
+            flag_key = f"{NS}:prop_do_search"
+            b1, b2 = st.columns([1,1])
+            if b1.button(tr("Search"), key=f"{NS}:prop_go"):
+                st.session_state[flag_key] = True
+            if b2.button(tr("Reset"), key=f"{NS}:prop_reset"):
+                st.session_state[flag_key] = False
+                for k_ in (f"{NS}:prop_size_min", f"{NS}:prop_size_max",
+                        f"{NS}:prop_rooms_min", f"{NS}:prop_rooms_max",
+                        f"{NS}:prop_floor_min", f"{NS}:prop_floor_max",
+                        f"{NS}:prop_price_min", f"{NS}:prop_price_max"):
+                    st.session_state.pop(k_, None)
+                # also reset pickers to Any (optional)
+                for k_ in ("tfl_prop_region","tfl_prop_ru","tfl_prop_mun"):
+                    st.session_state.pop(k_, None)
+                st.rerun()
+
+            # Render results (reuses your search_landlords_by_property_location)
+            if st.session_state.get(flag_key):
+                def nn(x): return None if (x is None or x == 0) else int(x)
+                rows = search_landlords_by_property_location(
+                    region=prop_region or None,
+                    regional_unit=prop_regional_unit or None,
+                    municipality=prop_municipality or None,
+                    size_min=nn(size_min), size_max=nn(size_max),
+                    rooms_min=nn(rooms_min), rooms_max=nn(rooms_max),
+                    floor_min=floor_min if floor_min != 0 else None,
+                    floor_max=floor_max if floor_max != 0 else None,
+                    price_min=nn(price_min), price_max=nn(price_max),
+                    limit=100,
+                )
 
         # --- List + actions (inbound/outbound/pending/connected) -----------------
         rows = list_future_landlord_contacts(tenant_id) or []
