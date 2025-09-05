@@ -4930,7 +4930,7 @@ def tenant_dashboard():
         st.divider()
 
 
-    current_page = st.session_state.get("tenant_page", "find_landlords")
+    current_page = st.session_state.get("tenant_page", "my_contacts")
 
     with nav1:
         is_active = current_page == "my_contacts"
