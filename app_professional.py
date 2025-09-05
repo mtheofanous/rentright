@@ -5117,7 +5117,7 @@ def landlord_dashboard():
                                         value=bool(int(visible_to_tenants or 0)),
                                         key=lpk(prop_id, "edit_vis"))
 
-                    s1, s2 = st.columns([1, 5])
+                    s1, s2 = st.columns([3, 5])
                     if s1.button(tr("Save changes"), key=lpk(prop_id, "save")):
                         try:
                             if not (e_addr or "").strip():
