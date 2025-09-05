@@ -1437,22 +1437,25 @@ def post_message(thread_id: int, sender_id: int, body: str):
     c.commit()
     
 def chat_panel():
-    # only show if opened by a button on either side
     if not st.session_state.get("chat_open"):
         return
 
     me = st.session_state.user
     role = st.session_state.get("chat_role")
 
-    landlord_id = None
-    tenant_id = None
+    landlord_id, tenant_id = None, None
+    partner_user = None
 
     if role == "tenant":
         tenant_id = me["id"]
         landlord_id = st.session_state.get("chat_with_landlord_id")
+        if landlord_id:
+            partner_user = get_user_by_id(landlord_id)
     elif role == "landlord":
         landlord_id = me["id"]
         tenant_id = st.session_state.get("chat_with_tenant_id")
+        if tenant_id:
+            partner_user = get_user_by_id(tenant_id)
 
     if not (landlord_id and tenant_id):
         return
@@ -1466,8 +1469,13 @@ def chat_panel():
         st.warning(tr("Chat unavailable."))
         return
 
+    # 👇 partner display
+    partner_name = (partner_user.get("name") or "").strip() if partner_user else ""
+    partner_email = (partner_user.get("email") or "").strip() if partner_user else ""
+    display = partner_name or partner_email or tr("Unknown")
+
     st.divider()
-    st.subheader("💬 Chat")
+    st.subheader(f"💬 {tr('Chat with')} {display}")
 
     # Messages
     msgs = list_messages(thread_id, limit=200)
@@ -1482,6 +1490,7 @@ def chat_panel():
     if text is not None:
         post_message(thread_id, me["id"], text)
         st.rerun()
+
 
 
 
