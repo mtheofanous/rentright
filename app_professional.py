@@ -5213,7 +5213,7 @@ def landlord_dashboard():
                     status = None
 
                 # Header row: identity • badge • actions
-                colL, colM, colR = st.columns([6, 3, 5])
+                colL, colM, colR = st.columns([6, 3, 6])
 
                 # Left: avatar + name/email
                 display_title = tenant_name or tenant_email or f"Tenant #{tid}"
