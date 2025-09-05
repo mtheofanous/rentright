@@ -282,6 +282,10 @@ TRANSLATIONS_EL = {
 }
 
 
+if "selected_thread" not in st.session_state:
+    st.session_state.selected_thread = None  # int | None
+if "chat_open" not in st.session_state:
+    st.session_state.chat_open = False
 
 
 def tr(s: str) -> str:
@@ -350,6 +354,36 @@ st.markdown("""
     --help-fg: #93C5FD;
     --help-border: rgba(147,197,253,.35);
   }
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<style>
+/* Thread rows (toggle) — default look */
+div[data-testid="stSwitch"].thread-row{
+  border:1px solid rgba(37,99,235,.25);
+  border-radius:10px;
+  padding:10px 12px;
+  margin-bottom:8px;
+  display:flex; align-items:center; gap:.6rem;
+}
+
+/* Avatar circle next to the label */
+.thread-avatar{
+  width:28px; height:28px; border-radius:999px;
+  background:#EEF2FF; color:#1F2937; font-weight:700; font-size:12px;
+  display:inline-flex; align-items:center; justify-content:center;
+}
+
+/* Blue highlight when the row is ON (clicked/open) */
+div[data-testid="stSwitch"].thread-row:has(input:checked){
+  background:#2563eb; color:white; border-color:#2563eb;
+}
+
+/* Make the label stretch so the whole row is clickable */
+div[data-testid="stSwitch"].thread-row label{
+  flex:1; cursor:pointer;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -1393,6 +1427,11 @@ def flc_cancel_request(landlord_id: int, tenant_id: int) -> None:
     )
     c.commit()
     
+#===============================================================================================================================================
+# chat helpers
+#===============================================================================================================================================
+
+
 def can_chat(landlord_id: int, tenant_id: int) -> bool:
     # Only allow chat if this pair is connected
     try:
@@ -1438,8 +1477,50 @@ def post_message(thread_id: int, sender_id: int, body: str):
     )
     c.commit()
     
-import io
-from PIL import Image, ImageDraw, ImageFont
+def get_thread_by_id(thread_id: int):
+    """Return chat_threads row joined with both users."""
+    c = get_conn()
+    row = c.execute("""
+        SELECT ct.id, ct.landlord_id, ct.tenant_id,
+               lu.name  AS landlord_name, lu.email AS landlord_email,
+               tu.name  AS tenant_name,   tu.email AS tenant_email
+        FROM chat_threads ct
+        JOIN users lu ON lu.id = ct.landlord_id
+        JOIN users tu ON tu.id = ct.tenant_id
+        WHERE ct.id = ?
+    """, (thread_id,)).fetchone()
+    return row
+
+def list_threads_for_user(user_id: int, role: str):
+    """All threads where this user participates, plus partner display."""
+    c = get_conn()
+    if role == "landlord":
+        rows = c.execute("""
+            SELECT ct.id, ct.landlord_id, ct.tenant_id,
+                   u.name AS partner_name, u.email AS partner_email
+            FROM chat_threads ct
+            JOIN users u ON u.id = ct.tenant_id
+            WHERE ct.landlord_id = ?
+            ORDER BY ct.id DESC
+        """, (user_id,)).fetchall()
+    else:  # tenant
+        rows = c.execute("""
+            SELECT ct.id, ct.landlord_id, ct.tenant_id,
+                   u.name AS partner_name, u.email AS partner_email
+            FROM chat_threads ct
+            JOIN users u ON u.id = ct.landlord_id
+            WHERE ct.tenant_id = ?
+            ORDER BY ct.id DESC
+        """, (user_id,)).fetchall()
+    return rows or []
+
+def _initials_safe(name: str | None, email: str | None) -> str:
+    base = (name or "").strip() or (email or "").split("@")[0]
+    parts = [p for p in (base or "").replace(".", " ").split() if p]
+    if len(parts) >= 2: return (parts[0][0] + parts[1][0]).upper()
+    if parts: return parts[0][:2].upper()
+    return "?"
+
 
 @st.cache_resource
 def _load_avatar_font():
@@ -1479,84 +1560,194 @@ def _avatar_image_from_initials(initials: str, size: int = 48,
 
 # ---------- Chat UI (bubble style) ----------
 
-
-
-
-def _initials(name: str | None, email: str | None) -> str:
-    base = (name or "").strip() or (email or "").split("@")[0]
-    parts = [p for p in (base or "").replace(".", " ").split() if p]
-    if len(parts) >= 2:
-        return (parts[0][0] + parts[1][0]).upper()
-    if parts:
-        return parts[0][:2].upper()
-    return "?"
-
-
-def chat_panel():
-    if not st.session_state.get("chat_open"):
-        return
-
+def render_message_threads_for_me():
     me = st.session_state.user
-    role = st.session_state.get("chat_role")
+    role = me.get("role")  # "tenant" or "landlord"
+    threads = list_threads_for_user(me["id"], role)
 
-    landlord_id, tenant_id = None, None
-    partner_user = None
+    # Ensure only one open at a time
+    def _open_thread(tid: int, landlord_id: int, tenant_id: int):
+        # Close any previously open row
+        prev = st.session_state.selected_thread
+        if prev and prev != tid:
+            st.session_state[f"thread_on_{prev}"] = False
+        # Toggle logic
+        if st.session_state.selected_thread == tid:
+            # clicked again -> close
+            st.session_state.selected_thread = None
+            st.session_state.chat_open = False
+            st.session_state[f"thread_on_{tid}"] = False
+        else:
+            # open this thread
+            st.session_state.selected_thread = tid
+            st.session_state.chat_open = True
+            st.session_state[f"thread_on_{tid}"] = True
+            # keep convenience IDs for your existing logic (optional)
+            if role == "tenant":
+                st.session_state["chat_role"] = "tenant"
+                st.session_state["chat_with_landlord_id"] = landlord_id
+            else:
+                st.session_state["chat_role"] = "landlord"
+                st.session_state["chat_with_tenant_id"] = tenant_id
 
-    if role == "tenant":
-        tenant_id = me["id"]
-        landlord_id = st.session_state.get("chat_with_landlord_id")
-        if landlord_id:
-            partner_user = get_user_by_id(landlord_id)
-    elif role == "landlord":
-        landlord_id = me["id"]
-        tenant_id = st.session_state.get("chat_with_tenant_id")
-        if tenant_id:
-            partner_user = get_user_by_id(tenant_id)
+        st.rerun()
 
-    if not (landlord_id and tenant_id):
+    st.subheader("Messages")
+
+    for t in threads:
+        tid = t["id"]
+        partner = t["partner_name"] or t["partner_email"] or "Unknown"
+        initials = _initials_safe(t["partner_name"], t["partner_email"])
+        is_on = st.session_state.get(f"thread_on_{tid}", False)
+
+        # Give the toggle a stable key; add our thread-row class via `help` label trick
+        col = st.container()
+        with col:
+            # Little avatar + name in one label
+            label_html = f"<span class='thread-avatar'>{initials}</span> {partner}"
+            # Render as toggle; we wrap it in a styled div via markdown so it picks up our CSS
+            st.markdown("<div class='thread-row'>", unsafe_allow_html=True)
+            toggled = st.toggle(label=partner, key=f"thread_on_{tid}", value=is_on, help="open/close")
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            # Click handling (toggle state just changed)
+            if toggled != is_on:
+                _open_thread(tid, t["landlord_id"], t["tenant_id"])
+
+        # If this row is ON, show the chat right under it
+        if st.session_state.selected_thread == tid and st.session_state.chat_open:
+            chat_panel_for_thread(tid)  # see next section
+
+
+
+# def _initials(name: str | None, email: str | None) -> str:
+#     base = (name or "").strip() or (email or "").split("@")[0]
+#     parts = [p for p in (base or "").replace(".", " ").split() if p]
+#     if len(parts) >= 2:
+#         return (parts[0][0] + parts[1][0]).upper()
+#     if parts:
+#         return parts[0][:2].upper()
+#     return "?"
+
+def chat_panel_for_thread(thread_id: int):
+    me = st.session_state.user
+    thr = get_thread_by_id(thread_id)
+    if not thr:
+        st.warning("Chat unavailable.")
         return
 
+    landlord_id, tenant_id = thr["landlord_id"], thr["tenant_id"]
     if not can_chat(landlord_id, tenant_id):
         st.warning(tr("Chat is available only after you connect."))
         return
 
-    thread_id = get_or_create_thread(landlord_id, tenant_id)
-    if not thread_id:
+    # Ensure the thread exists (it should), then pull messages
+    tid = get_or_create_thread(landlord_id, tenant_id)
+    if not tid:
         st.warning(tr("Chat unavailable."))
         return
 
-    # Partner display
-    partner_name = (partner_user.get("name") or "").strip() if partner_user else ""
-    partner_email = (partner_user.get("email") or "").strip() if partner_user else ""
-    partner_display = partner_name or partner_email or tr("Unknown")
-    
-    my_initials       = _initials(me.get("name"), me.get("email"))
-    partner_initials  = _initials(partner_name, partner_email)
+    # Partner info
+    if me["id"] == landlord_id:
+        partner_name  = thr["tenant_name"]
+        partner_email = thr["tenant_email"]
+    else:
+        partner_name  = thr["landlord_name"]
+        partner_email = thr["landlord_email"]
 
-    # Build avatar images once
-    my_avatar_img      = _avatar_image_from_initials(my_initials)
-    partner_avatar_img = _avatar_image_from_initials(partner_initials)
+    partner_display = (partner_name or partner_email or tr("Unknown")).strip()
 
-    st.divider()
+    st.markdown("---")
     st.subheader(f"💬 {tr('Chat with')} {partner_display}")
 
+    # Messages (oldest→newest)
+    msgs = list_messages(tid, limit=200)
 
-    # Messages
-    
-    msgs = list_messages(thread_id, limit=200)
+    # Build avatars once (optional – if you already have your helpers, reuse them)
+    my_initials      = _initials_safe(me.get("name"), me.get("email"))
+    partner_initials = _initials_safe(partner_name, partner_email)
+    my_avatar      = _avatar_image_from_initials(my_initials)
+    partner_avatar = _avatar_image_from_initials(partner_initials)
+
     for m in msgs:
         is_me = (m["sender_id"] == me["id"])
-        avatar_img = my_avatar_img if is_me else partner_avatar_img
-
+        avatar_img = my_avatar if is_me else partner_avatar
         with st.chat_message("user", avatar=avatar_img):
             st.markdown(m["body"])
             st.caption(m["created_at"])
 
     # Input
-    text = st.chat_input(placeholder=tr("Type a message…"))
-    if text is not None:
-        post_message(thread_id, me["id"], text)
+    text = st.chat_input(placeholder=tr("Type a message…"), key=f"chat_input_{thread_id}")
+    if text is not None and text.strip():
+        post_message(tid, me["id"], text.strip())
         st.rerun()
+
+
+# def chat_panel():
+#     if not st.session_state.get("chat_open"):
+#         return
+
+#     me = st.session_state.user
+#     role = st.session_state.get("chat_role")
+
+#     landlord_id, tenant_id = None, None
+#     partner_user = None
+
+#     if role == "tenant":
+#         tenant_id = me["id"]
+#         landlord_id = st.session_state.get("chat_with_landlord_id")
+#         if landlord_id:
+#             partner_user = get_user_by_id(landlord_id)
+#     elif role == "landlord":
+#         landlord_id = me["id"]
+#         tenant_id = st.session_state.get("chat_with_tenant_id")
+#         if tenant_id:
+#             partner_user = get_user_by_id(tenant_id)
+
+#     if not (landlord_id and tenant_id):
+#         return
+
+#     if not can_chat(landlord_id, tenant_id):
+#         st.warning(tr("Chat is available only after you connect."))
+#         return
+
+#     thread_id = get_or_create_thread(landlord_id, tenant_id)
+#     if not thread_id:
+#         st.warning(tr("Chat unavailable."))
+#         return
+
+#     # Partner display
+#     partner_name = (partner_user.get("name") or "").strip() if partner_user else ""
+#     partner_email = (partner_user.get("email") or "").strip() if partner_user else ""
+#     partner_display = partner_name or partner_email or tr("Unknown")
+    
+#     my_initials       = _initials(me.get("name"), me.get("email"))
+#     partner_initials  = _initials(partner_name, partner_email)
+
+#     # Build avatar images once
+#     my_avatar_img      = _avatar_image_from_initials(my_initials)
+#     partner_avatar_img = _avatar_image_from_initials(partner_initials)
+
+#     st.divider()
+#     st.subheader(f"💬 {tr('Chat with')} {partner_display}")
+
+
+#     # Messages
+    
+#     msgs = list_messages(thread_id, limit=200)
+#     for m in msgs:
+#         is_me = (m["sender_id"] == me["id"])
+#         avatar_img = my_avatar_img if is_me else partner_avatar_img
+
+#         with st.chat_message("user", avatar=avatar_img):
+#             st.markdown(m["body"])
+#             st.caption(m["created_at"])
+
+#     # Input
+#     text = st.chat_input(placeholder=tr("Type a message…"))
+#     if text is not None:
+#         post_message(thread_id, me["id"], text)
+#         st.rerun()
 
 
 
@@ -4842,7 +5033,7 @@ def tenant_dashboard():
     else:
         # fallback (shouldn't happen)
         tenant_contacts()
-    chat_panel()
+    render_message_threads_for_me()
         
 
 
@@ -5837,7 +6028,7 @@ def landlord_dashboard():
     else:
         my_tenants()
         
-    chat_panel()
+    render_message_threads_for_me()
         
 def reference_submitted_page():
     # Show ONLY the success text and stop
