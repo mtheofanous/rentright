@@ -1331,21 +1331,6 @@ def add_future_landlord_contact(tenant_id: int, email: str):
         )
         conn.commit()
 
-def flc_reinvite(tenant_id: int, landlord_email: str) -> None:
-    """
-    If the relationship was rejected, let the tenant send a fresh request.
-    We delete the old row (to clear any rejected flags) and reuse your existing
-    add_future_landlord_contact(...) flow to re-create + (re)send.
-    """
-    email = (landlord_email or "").strip().lower()
-    c = get_conn()
-    c.execute(
-        "DELETE FROM future_landlord_contacts WHERE tenant_id=? AND LOWER(email)=LOWER(?)",
-        (tenant_id, email),
-    )
-    c.commit()
-    # Recreate / re-invite with your existing helper (handles ON CONFLICT + email)
-    add_future_landlord_contact(tenant_id, email)
 
 
 def _table_has_column(conn_or_none, table: str, column: str) -> bool:
@@ -3475,30 +3460,16 @@ def tenant_dashboard():
                         cols[1].caption(ll_email)
                     if rel_status == "connected":
                         cols[1].success(tr("Connected"))
-
                     elif rel_status == "rejected":
                         cols[1].error(tr("Rejected"))
-                        # Offer to send a fresh request
-                        if cols[1].button(tr("Send request again"), key=f"{NS}:reinvite_{tenant_id}_{ll_id}_{prop_id}"):
-                            try:
-                                flc_reinvite(tenant_id, ll_email)
-                                st.success(tr("Request sent again."))
-                                # st.rerun()
-                            except Exception as e:
-                                st.error(f"{tr('Could not resend')}: {e}")
-
                     elif inbound_req:
                         cols[1].info(tr("Pending"))
-
                     elif invited:
                         cols[1].info(tr("Invited"))
-
                     elif in_contacts:
                         cols[1].caption(tr("In contacts"))
-
                     else:
                         cols[1].caption(tr("No relation"))
-
 
                     # Right: actions (⭐ Save + Add contact)
                     act1, act2 = cols[2].columns(2)
