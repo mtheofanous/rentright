@@ -7,6 +7,8 @@ from email.mime.text import MIMEText
 from uuid import uuid4
 import os
 from pathlib import Path
+from html import escape
+import uuid
 import tempfile
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo 
@@ -249,6 +251,7 @@ TRANSLATIONS_EL = {
     }
 
 
+
 def tr(s: str) -> str:
     """Translate string s to Greek if the UI language is Greek; otherwise return s."""
     # 2) READ session_state safely. Do not create or modify it here.
@@ -261,6 +264,82 @@ def tr(s: str) -> str:
     if isinstance(s, str) and lang.startswith("Ελλην"):
         return TRANSLATIONS_EL.get(s, s)
     return s
+
+
+# --- Global style: tiny help "?" badge + tooltip ---
+
+st.markdown("""
+<style>
+:root{
+  /* Tweak these 3 to match your brand */
+  --accent: #2563eb;                   /* primary */
+  --help-bg: rgba(37,99,235,.12);      /* pill bg */
+  --help-fg: #2563eb;                  /* pill text/border */
+  --help-border: rgba(37,99,235,.35);
+}
+
+/* Tiny circular "?" */
+.help-tip{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:18px; height:18px;             /* size */
+  border-radius:999px;
+  font-size:12px; line-height:1; font-weight:700;
+  background:var(--help-bg); color:var(--help-fg);
+  border:1px solid var(--help-border);
+  cursor:help; user-select:none; position:relative;
+  margin-left:.35rem;
+}
+
+/* Tooltip bubble */
+.help-tip__bubble{
+  position:absolute; left:50%; top:calc(100% + 8px); transform:translateX(-50%);
+  min-width:220px; max-width:320px;
+  background:#111827; color:#F9FAFB;
+  border-radius:8px; padding:10px 12px;
+  font-size:12px; line-height:1.45;
+  box-shadow:0 6px 24px rgba(0,0,0,.18);
+  opacity:0; pointer-events:none; transition:opacity .15s ease;
+  z-index:9999;
+}
+.help-tip__bubble:before{
+  content:""; position:absolute; top:-6px; left:50%; transform:translateX(-50%);
+  border-width:6px; border-style:solid;
+  border-color:transparent transparent #111827 transparent;
+}
+
+/* show on hover/focus */
+.help-tip:hover .help-tip__bubble,
+.help-tip:focus .help-tip__bubble{ opacity:1; }
+
+/* Dark-mode friendly tweaks */
+@media (prefers-color-scheme: dark){
+  :root{
+    --help-bg: rgba(59,130,246,.18);
+    --help-fg: #93C5FD;
+    --help-border: rgba(147,197,253,.35);
+  }
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+
+def help_icon(text: str, key: str | None = None):
+    """
+    Renders a tiny circular "?" with a custom tooltip.
+    Use next to headers, buttons, inputs, etc.
+    """
+    # unique id is optional; useful if you later add JS/a11y hooks
+    _ = key or f"help_{uuid.uuid4().hex[:8]}"
+    st.markdown(
+        f'''
+        <span class="help-tip" tabindex="0" aria-label="{escape(text)}">?
+          <span class="help-tip__bubble">{escape(text)}</span>
+        </span>
+        ''',
+        unsafe_allow_html=True
+    )
+
 
 
 # === Label & status helpers (i18n-friendly) ===
@@ -3147,7 +3226,7 @@ def tenant_dashboard():
             with c1:
                 st.markdown(f"**{tr('Search landlords')}**")
             with c2:
-                st.button("?", help="Find landlords already in the system by name or email.", key="help_search_name")
+                help_icon("?", help="Find landlords already in the system by name or email.", key="help_search_name")
 
             q = st.text_input(
                 tr("Type a name or email"),
@@ -3225,7 +3304,7 @@ def tenant_dashboard():
             with c1:
                 st.markdown(f"**{tr('Search landlords by property')}**")
             with c2:
-                st.button("?", help="Filter landlords by visible property listings.", key="help_search_property")
+                help_icon("?", help="Filter landlords by visible property listings.", key="help_search_property")
 
             with st.expander(tr("Property filters"), True):
                 # Location pickers
