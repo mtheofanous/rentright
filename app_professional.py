@@ -4111,7 +4111,7 @@ def tenant_dashboard():
             
     def previous_landlords_references():
         # Header + focused help
-        h1, h2 = st.columns([6, 0.08])
+        h1, h2 = st.columns([6, 0.3])
         with h1:
             st.markdown(f"**{tr('Previous landlords & references')}**")
         with h2:
@@ -4222,7 +4222,7 @@ def tenant_dashboard():
                             # No requests OR latest was cancelled → show Start/Delete
                             st.caption(tr("No active reference request."))
                             # Start (with a concise help icon – important UX)
-                            cs, ch, cd = st.columns([1, 0.08, 1])
+                            cs, ch, cd = st.columns([1, 3, 1])
                             with cs:
                                 if st.button(tr("New reference request"), key=f"start_{pid}"):
                                     rec = create_reference_request(st.session_state.user["id"], pid, email)
@@ -4323,7 +4323,7 @@ def tenant_dashboard():
                                 confirm_key = f"confirm_cancel_{tok}"
 
                                 # Step 1: button + help icon
-                                cb1, cb2 = st.columns([1, 0.1])
+                                cb1, cb2 = st.columns([1, 0.3])
                                 with cb1:
                                     if not st.session_state.get(confirm_key, False):
                                         if st.button(tr("Cancel request"), key=f"cancel_{pid}"):
@@ -4378,7 +4378,7 @@ def tenant_dashboard():
 
                         else:
                             # No file yet → uploader + help
-                            fu1, fu2 = st.columns([1, 0.1])
+                            fu1, fu2 = st.columns([1, 0.3])
                             with fu1:
                                 uploaded = st.file_uploader(
                                     tr("Upload tenancy contract (PDF or image)"),
