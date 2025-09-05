@@ -4419,7 +4419,7 @@ def tenant_dashboard():
                     if p.get("marital_status"):   chips.append(f'<span class="pill">{tr("Marital status")}: {p["marital_status"]}</span>')
                     if p.get("contract_type"):    chips.append(f'<span class="pill">{tr("Contract type")}: {p["contract_type"]}</span>')
                     if p.get("monthly_salary") is not None:
-                        chips.append(f'<span class="pill">{tr("Annual salary (€)")}: {int(p["monthly_salary"]):,}</span>')
+                        chips.append(f'<span class="pill">{tr("Monthly salary (€)")}: {int(p["monthly_salary"]):,}</span>')
                     chips.append(f'<span class="pill">{tr("Pets")}: {_pets}</span>')
                     if p.get("num_tenants"):      chips.append(f'<span class="pill">{tr("Number of tenants")}: {int(p["num_tenants"])}</span>')
 
@@ -5365,9 +5365,9 @@ def landlord_dashboard():
                         with left:
                             st.caption(f"**{tr('Age')}**: {details.get('age') if details.get('age') is not None else '—'}")
                             if details.get('monthly_salary') is not None:
-                                st.caption(f"**{tr('Annual salary (€)')}**: {int(details.get('monthly_salary')):,}")
+                                st.caption(f"**{tr('Monthly salary (€)')}**: {int(details.get('monthly_salary')):,}")
                             else:
-                                st.caption(f"**{tr('Annual salary (€)')}**: —")
+                                st.caption(f"**{tr('Monthly salary (€)')}**: —")
                             st.caption(f"**{tr('Marital status')}**: {details.get('marital_status') or '—'}")
                             st.caption(f"**{tr('Pets')}**: {_pets_txt}")
                             st.caption(f"**{tr('Number of tenants')}**: {details.get('num_tenants') if details.get('num_tenants') is not None else '—'}")
@@ -5385,113 +5385,6 @@ def landlord_dashboard():
                             st.caption("🔒 " + tr("Reference details are visible after you connect."))
                     except Exception:
                         pass
-
-                # refs = list_latest_references_for_tenant_dict(tid) or []
-                # refs = [r for r in refs if (r.get("status") or "").lower() != "cancelled"]
-
-                # total_refs = len(refs)
-                # latest_status = (refs[0].get("status") if refs else None) or None
-                # completed = [r for r in refs if (r.get("status") or "").lower() == "completed"]
-                # scores = [r.get("score") for r in completed if r.get("score") is not None]
-                # avg_score = round(sum(scores) / len(scores), 1) if scores else None
-
-                # st.caption(f"{tr('References')}: {len(refs)}")
-
-                # try:
-                #     latest_status_label = display_status_label(latest_status)
-                # except Exception:
-                #     latest_status_label = (latest_status or "—").title()
-
-                # # ---- Reference details (only when connected) ----
-                # def _status_badge_html(s):
-                #     lab = display_status_label(s) if s else "—"
-                #     s_l = (s or "").lower()
-                #     cls = "pt-badge pt-badge--info"
-                #     if s_l == "completed": cls = "pt-badge pt-badge--ok"
-                #     elif s_l in {"rejected","declined"}: cls = "pt-badge pt-badge--err"
-                #     return f'<span class="{cls}">{lab}</span>'
-
-                # if status == "connected":
-                #     # Load only when connected
-                #     refs = list_latest_references_for_tenant_dict(tid) or []
-                #     refs = [r for r in refs if (r.get("status") or "").lower() != "cancelled"]
-
-                #     if refs:
-                #         completed_scores = [
-                #             r.get("score") for r in refs
-                #             if (r.get("status") or "").lower() == "completed" and r.get("score") is not None
-                #         ]
-                #         avg_score = round(sum(completed_scores) / len(completed_scores), 1) if completed_scores else None
-
-                #         st.markdown(f"{tr('Avg score')}: {f'{avg_score}/10' if avg_score is not None else '—'}")
-
-                #         with st.expander(tr("Reference details"), expanded=False):
-                #             for r in refs:
-                #                 prev_email = (r.get("prev_email") or "—").strip()
-                #                 status_lr  = r.get("status") or ""
-                #                 score_lr   = r.get("score")
-                #                 paid_on    = _to_bool(r.get("paid_on_time"))
-                #                 util_unp   = _to_bool(r.get("utilities_unpaid"))
-                #                 good_cond  = _to_bool(r.get("good_condition"))
-                #                 comments   = r.get("comments")
-
-                #                 # Chip classes
-                #                 score_chip = ""
-                #                 if (status_lr or "").lower() == "completed" and score_lr is not None:
-                #                     score_chip = f'<span class="pill pill-score">{tr("Score")}: {int(score_lr)}/10</span>'
-                #                 paid_cls = "pill-ok" if paid_on is True else "pill-no" if paid_on is False else "pill-na"
-                #                 util_cls = "pill-no" if util_unp is True else "pill-ok" if util_unp is False else "pill-na"
-                #                 cond_cls = "pill-ok" if good_cond is True else "pill-no" if good_cond is False else "pill-na"
-
-                #                 chips_html = " ".join(filter(None, [
-                #                     score_chip,
-                #                     f'<span class="pill {paid_cls}">{tr("Paid on time")}: {_yn(paid_on)}</span>',
-                #                     f'<span class="pill {util_cls}">{tr("Unpaid utilities")}: {_yn(util_unp)}</span>',
-                #                     f'<span class="pill {cond_cls}">{tr("Good condition")}: {_yn(good_cond)}</span>',
-                #                 ]))
-
-                #                 st.markdown(
-                #                     f"""
-                #                     <div class="ref-card">
-                #                     <div class="ref-header">
-                #                         <div class="ref-title">{tr('Previous landlord')}: <a href="mailto:{prev_email}">{prev_email}</a></div>
-                #                         <div>{_status_badge_html(status_lr)}</div>
-                #                     </div>
-                #                     <div class="ref-row">{chips_html}</div>
-                #                     </div>
-                #                     """,
-                #                     unsafe_allow_html=True
-                #                 )
-                #                 if comments:
-                #                     st.markdown(f"**{tr('Comments')}**")
-                #                     st.markdown(f"<div class='ref-comments'>{comments}</div>", unsafe_allow_html=True)
-                #         # personal details -------------------------------------------------
-                        
-                #         with st.expander(tr("Profile details"), expanded=False):
-                            
-                #             left, right = st.columns(2)
-                #             with left:
-                #                 st.caption(f"**{tr('Age')}**: {details.get('age') or '—'}")
-                #                 st.caption(f"**{tr('Annual salary (€)')}**: {int(details.get('annual_salary') or 0):,}" if details.get('annual_salary') is not None else f"**{tr('Annual salary (€)')}**: —")
-                #                 st.caption(f"**{tr('Marital status')}**: {details.get('marital_status') or '—'}")
-                #                 st.caption(f"**{tr('Pets')}**: {_pets_txt}")
-                #                 st.caption(f"**{tr('Number of tenants')}**: {details.get('num_tenants') or '—'}")
-                #             with right:
-                #                 st.caption(f"**{tr('Job position')}**: {details.get('job_position') or '—'}")
-                #                 st.caption(f"**{tr('Contract type')}**: {details.get('contract_type') or '—'}")
-                #             if details.get("about"):
-                #                 st.markdown(f"**{tr('A few words about yourself')}**")
-                #                 st.write(details.get("about"))
-
-                        
-                # else:
-                #     # Optional: show lock note ONLY if there are refs at all
-                #     try:
-                #         if list_latest_references_for_tenant(tid):
-                #             st.caption("🔒 " + tr("Reference details are visible after you connect."))
-                #     except Exception:
-                #         pass
-
    
     # =============================================================================
     # My Properties
