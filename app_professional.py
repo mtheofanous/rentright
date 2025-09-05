@@ -4294,14 +4294,7 @@ def tenant_dashboard():
                 help_icon(tr("Turn on to appear in landlord searches. You can hide this anytime."), key="help_otr_toggle")
 
             with st.expander(tr("Property characteristics"), expanded=False):
-                # One well-placed help icon for the whole filter logic (important UX)
-                hx1, hx2 = st.columns([1, 0.3])
-                with hx1:
-                    st.empty()
-                with hx2:
-                    help_icon(tr("Pick region → unit → municipality. Use ‘Any’ to skip. Set 0 for no minimum. Max must be ≥ min."),
-                            key="help_otr_filters")
-
+   
                 # REGION
                 region_options = [ANY] + (regions or [])
                 region_index = (region_options.index(pre_region) if (pre_region in region_options and not reset_preselect) else 0)
