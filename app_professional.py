@@ -1436,6 +1436,16 @@ def post_message(thread_id: int, sender_id: int, body: str):
     )
     c.commit()
     
+def _initials(name: str | None, email: str | None) -> str:
+    """Return 1–2 letter initials from name or email prefix."""
+    base = (name or "").strip() or (email or "").split("@")[0]
+    parts = [p for p in (base or "").replace(".", " ").split() if p]
+    if len(parts) >= 2:
+        return (parts[0][0] + parts[1][0]).upper()
+    if parts:
+        return parts[0][:2].upper()
+    return "?"
+
 def chat_panel():
     if not st.session_state.get("chat_open"):
         return
@@ -1469,19 +1479,27 @@ def chat_panel():
         st.warning(tr("Chat unavailable."))
         return
 
-    # 👇 partner display
+    # Partner display
     partner_name = (partner_user.get("name") or "").strip() if partner_user else ""
     partner_email = (partner_user.get("email") or "").strip() if partner_user else ""
-    display = partner_name or partner_email or tr("Unknown")
+    partner_display = partner_name or partner_email or tr("Unknown")
 
     st.divider()
-    st.subheader(f"💬 {tr('Chat with')} {display}")
+    st.subheader(f"💬 {tr('Chat with')} {partner_display}")
+
+    # 👇 Compute initials once
+    my_initials = _initials(me.get("name"), me.get("email"))
+    partner_initials = _initials(partner_name, partner_email)
 
     # Messages
     msgs = list_messages(thread_id, limit=200)
     for m in msgs:
-        who = "me" if m["sender_id"] == me["id"] else "other"
-        with st.chat_message(who):
+        if m["sender_id"] == me["id"]:
+            avatar = my_initials
+        else:
+            avatar = partner_initials
+
+        with st.chat_message("user", avatar=avatar):
             st.markdown(m["body"])
             st.caption(m["created_at"])
 
