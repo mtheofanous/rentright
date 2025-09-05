@@ -1237,7 +1237,7 @@ def run_migrations(conn):
     
     # --- Profile details on tenant_profiles ---
     add_column_if_missing(conn, "tenant_profiles", "age INTEGER")
-    add_column_if_missing(conn, "tenant_profiles", "annual_salary INTEGER")
+    add_column_if_missing(conn, "tenant_profiles", "monthly_salary INTEGER")
     add_column_if_missing(conn, "tenant_profiles", "marital_status TEXT")
     add_column_if_missing(conn, "tenant_profiles", "job_position TEXT")
     add_column_if_missing(conn, "tenant_profiles", "contract_type TEXT")
@@ -1987,7 +1987,7 @@ def load_profile_details(tenant_id: int) -> dict:
         ON CONFLICT(tenant_id) DO NOTHING
     """, (tenant_id,))
     row = c.execute("""
-        SELECT age, annual_salary, marital_status, job_position,
+        SELECT age, monthly_salary, marital_status, job_position,
                contract_type, pets, num_tenants, about
         FROM tenant_profiles WHERE tenant_id=?
     """, (tenant_id,)).fetchone()
@@ -2003,7 +2003,7 @@ def save_profile_details(tenant_id: int, **data):
     """, (tenant_id,))
 
     fields, params = [], []
-    for k in ("age","annual_salary","marital_status","job_position",
+    for k in ("age","monthly_salary","marital_status","job_position",
               "contract_type","pets","num_tenants","about"):
         if k in data:
             fields.append(f"{k}=?")
@@ -4424,11 +4424,11 @@ def tenant_dashboard():
                         c1, c2 = st.columns(2)
 
                         with c1:
-                            age = st.number_input(tr("Age"), min_value=0, max_value=120, step=1,
+                            age = st.number_input(tr("Age"), min_value=18, max_value=120, step=1,
                                                 value=int((_prof or {}).get("age") or 0),
                                                 key="profile_age", disabled=disabled)
-                            salary = st.number_input(tr("Annual salary (€)"), min_value=0, step=1000,
-                                                    value=int((_prof or {}).get("annual_salary") or 0),
+                            salary = st.number_input(tr("Monthly salary (€)"), min_value=0, step=100,
+                                                    value=int((_prof or {}).get("monthly_salary") or 0),
                                                     key="profile_salary", disabled=disabled)
                             marital_opts = ["Single","Married","Divorced","Widowed"]
                             marital_idx = marital_opts.index(((_prof or {}).get("marital_status") or "Single")) \
@@ -4467,7 +4467,7 @@ def tenant_dashboard():
                         save_profile_details(
                             tid,
                             age=int(st.session_state["profile_age"]),
-                            annual_salary=int(st.session_state["profile_salary"]),
+                            monthly_salary=int(st.session_state["profile_salary"]),
                             marital_status=marital_map.get(st.session_state["profile_marital"], "Single"),
                             job_position=st.session_state["profile_job_position"].strip(),
                             contract_type=contract_map.get(st.session_state["profile_contract"], "Permanent"),
@@ -5310,8 +5310,8 @@ def landlord_dashboard():
                         left, right = st.columns(2)
                         with left:
                             st.caption(f"**{tr('Age')}**: {details.get('age') if details.get('age') is not None else '—'}")
-                            if details.get('annual_salary') is not None:
-                                st.caption(f"**{tr('Annual salary (€)')}**: {int(details.get('annual_salary')):,}")
+                            if details.get('monthly_salary') is not None:
+                                st.caption(f"**{tr('Annual salary (€)')}**: {int(details.get('monthly_salary')):,}")
                             else:
                                 st.caption(f"**{tr('Annual salary (€)')}**: —")
                             st.caption(f"**{tr('Marital status')}**: {details.get('marital_status') or '—'}")
