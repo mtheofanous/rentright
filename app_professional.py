@@ -2754,7 +2754,8 @@ def _table_has_column(conn, table: str, column: str) -> bool:
     cur = conn.execute(f"PRAGMA table_info({table})")
     return any(row[1].lower() == column.lower() for row in cur.fetchall())
 
-#     pl.afm AS prev_afm,
+#--------------LANDLORD HELPER-----------------------------------------------
+
 def list_latest_references_for_tenant(tenant_id: int):
     """Return each previous landlord with the latest (most recent) reference request, if any, and its answers."""
     cur = conn.cursor()
@@ -2787,6 +2788,8 @@ def list_latest_references_for_tenant(tenant_id: int):
         (tenant_id,),
     )
     return cur.fetchall()
+
+#-----------HELPER FOR LANDLOARD DASHBOARD ------------------------------------------------
 
 def list_latest_references_for_tenant_dict(tenant_id: int) -> list[dict]:
     cur = conn.cursor()
@@ -2824,7 +2827,7 @@ def list_latest_references_for_tenant_dict(tenant_id: int) -> list[dict]:
     rows = cur.fetchall()  # sqlite3.Row objects
     return [dict(r) for r in rows]
 
-
+#-----------HELPER FOR ADMIN AND TENANT DASHBOARD (BUILD REFERENCE LINK)------------------------------------------------
 
 def build_reference_link(token: str) -> str:
     base = st.session_state.get("app_base_url") or (st.secrets.get("APP_BASE_URL") if hasattr(st, "secrets") else "")
@@ -2834,6 +2837,9 @@ def build_reference_link(token: str) -> str:
     # fallback that still works when clicked inside the app
     return f"?ref={token}"
 
+#-----------------------------------------------------------------------------------------------------------------------------
+#---------------EMAILS---------------------------------------------------------------------------------------------------------
+#-STARTS HERE-----------------------------------------------------------------------------------------------------------------------------
 
 def email_reference_request(
     tenant_name: str, tenant_email: str,
@@ -2867,8 +2873,13 @@ def email_reference_request(
 
     return send_email_smtp(landlord_email, subject, body)
 
+#-FINISH HERE-----------------------------------------------------------------------------------------------------------------------------
 
-# ---------- Landlord Reference Portal (public) ----------
+
+
+#--------------------------------------------------------------------------------------------------------------------------------
+# ---------- Landlord Reference Portal (public) ---------------------------------------------------------------------------------
+#-------------------------------------------------------------------------------------------------------------------------------
 
 
 def reference_portal(token: str):
@@ -2971,6 +2982,9 @@ def reference_portal(token: str):
             st.experimental_set_query_params(page="cancelled")
         st.rerun()
 
+#------------------------------------------------------------------------------------------------------------------------------------    
+#---------HELPER OF ADMIN DASHBOARD (SEARCH TENANTS)------------------------------------------------------------------------------- 
+# STARTS HERE------------------------------------------------------------------------------------------------------------------------------------     
 
 
 def cleanup_old_contracts(days_locked: int = 30, days_rejected: int = 30):
@@ -3010,6 +3024,13 @@ def cleanup_old_contracts(days_locked: int = 30, days_rejected: int = 30):
 
     conn.commit()
     
+# FINISH HERE------------------------------------------------------------------------------------------------------------------------------------     
+    
+    
+
+#------------------------------------------------------------------------------------------------------------------------------------    
+#---------HELPER OF LANDLORD DASHBOARD (SEARCH TENANTS)------------------------------------------------------------------------------- 
+# STARTS HERE------------------------------------------------------------------------------------------------------------------------------------     
 def search_open_to_rent_tenants(
     q: str | None = None,
     city: str | None = None,
@@ -3089,7 +3110,12 @@ def search_open_to_rent_tenants(
     cur.execute(sql, params)
     return cur.fetchall()
 
+# FINISH HERE------------------------------------------------------------------------------------------------------------------------------------     
 
+
+#------------------------------------------------------------------------------------------------------------------------------
+#-----------ADMIN DASHBOARD----------------------------------------------------------------------------------------------------
+#-------------------------------------------------------------------------------------------------------------------------------
 
 def admin_dashboard():
     # periodic cleanup on admin view
@@ -3293,6 +3319,9 @@ def admin_dashboard():
     st.markdown("---")
     logout_button()
 
+#-----------------------------------------------------------------------------------------------------------------------------
+# ----------------TENANT DASHBOARD-------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------------------------------------------------------
     
 def tenant_dashboard():
     col_h1, col_h2, col_h3 = st.columns([5,1,2])
@@ -4169,8 +4198,8 @@ def tenant_dashboard():
         # fallback (shouldn't happen)
         tenant_contancts()
 
-
-# ---------- Landlord Dashboard (enhanced) ----------
+# -----------------------------------------------------------------------------------------------------------------------
+# ---------- Landlord Dashboard (enhanced) -------------------------------------------------------------------------------
 def landlord_dashboard():
     # --- Header ---
     col_h1, col_h2, col_h3 = st.columns([4, 1, 2])
