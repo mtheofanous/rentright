@@ -37,618 +37,247 @@ except Exception as e:
 st.set_page_config(page_title="RentRight", page_icon="🏠", layout="centered")
 # === Language selector & translation ===
 if "lang" not in st.session_state:
-    st.session_state["lang"] = "Ελληνικά"  # default
-
+    st.session_state["lang"] = "Ελληνικά" 
+    # default
 TRANSLATIONS_EL = {
-        # Auth & common
-        "Sign In": "Σύνδεση",
-        "Create Account": "Δημιουργία Λογαριασμού",
-        "Sign Out": "Αποσύνδεση",
-        "Incorrect email or password. Please try again.": "Λάθος email ή κωδικός. Παρακαλώ δοκιμάστε ξανά.",
-        "Your account has been created. Please sign in to continue.": "Ο λογαριασμός σας δημιουργήθηκε. Συνδεθείτε για να συνεχίσετε.",
-        "Your account has been created — please sign in.": "Ο λογαριασμός σας δημιουργήθηκε — συνδεθείτε.",
-        "Welcome": "Καλώς ορίσατε, ",
-        "Please enter your full name.": "Παρακαλώ εισαγάγετε το πλήρες όνομά σας.",
-        "Please enter a valid email address.": "Παρακαλώ εισαγάγετε έγκυρη διεύθυνση email.",
-        "Passwords do not match. Please try again.": "Οι κωδικοί δεν ταιριάζουν. Δοκιμάστε ξανά.",
-        "This email is already registered.": "Αυτό το email έχει ήδη καταχωρηθεί.",
-        "Unknown role:": "Άγνωστος ρόλος:",
-        "Logged in as": "Συνδεθήκατε ως",
-        "Refresh": "Ανανέωση",
-        # SMTP
-        "Missing SMTP details: host, port, username, password, sender, or recipient.": "Λείπουν στοιχεία SMTP: host, port, όνομα χρήστη, κωδικός, αποστολέας ή παραλήπτης.",
-        "Send Test Email": "Αποστολή Δοκιμαστικού Email",
-        "Send test to": "Αποστολή δοκιμής σε",
-        "If you received this email, your SMTP configuration is working. ✅": "Αν λάβατε αυτό το email, η ρύθμιση SMTP λειτουργεί. ✅",
-        "Test email sent successfully.": "Το δοκιμαστικό email στάλθηκε με επιτυχία.",
-        "Failed to send email:": "Αποτυχία αποστολής email:",
-        # Sections
-        "Tenant Dashboard": "Πίνακας Ενοικιαστή",
-        "Landlord Dashboard": "Πίνακας Ιδιοκτήτη",
-        "Administrator Dashboard": "Πίνακας Διαχειριστή",
-         # --- Search by name/email ---
-        "Search landlords": "Αναζήτηση ιδιοκτητών",
-        "Type a name or email": "Πληκτρολογήστε όνομα ή email",
-        "e.g. Maria Papadopoulou or papadop": "π.χ. Μαρία Παπαδοπούλου ή papadop",
-        "Search unavailable.": "Η αναζήτηση δεν είναι διαθέσιμη.",
-        "No matches.": "Δεν βρέθηκαν αποτελέσματα.",
-        "Add contact": "Προσθήκη επαφής",
-        "Contact added.": "Η επαφή προστέθηκε.",
-        "Can’t add contact": "Αδυναμία προσθήκης επαφής",
-        
-        "My properties": "Τα ακίνητά μου",
-        "My Properties": "Τα Aκίνητά μου",
+    "**Created:**": "**Δημιουργήθηκε:**",
+    "**Email:**": "**Email:**",
+    "**Score:**": "**Βαθμολογία:**",
+    "**Status:**": "**Κατάσταση:**",
+    "**Tenant:**": "**Ενοικιαστής:**",
+    "**To landlord:**": "Στον Ιδιοκτήτη",
+    "Admin": "Διαχειριστής",
+    "Address": "Διεύθυνση",
+    "Address is required.": "Απαιτείται διεύθυνση.",
+    "Add": "Προσθήκη",
+    "Add Contact": "Προσθήκη Επαφής",
+    "Add Previous Landlord": "Προσθήκη Προηγούμενου Ιδιοκτήτη",
+    "Add previous landlord": "Προσθήκη προηγούμενου ιδιοκτήτη",
+    "Add property": "Προσθήκη ακινήτου",
+    "Administrator Dashboard": "Πίνακας Διαχειριστή",
+    "All": "Όλα",
+    "All reference requests": "Όλα τα αιτήματα σύστασης",
+    "All Reference Requests": "Όλα τα Αιτήματα Σύστασης",
+    "Any": "Οποιοδήποτε",
+    "App Base URL": "Βασικό URL Εφαρμογής",
+    "Apartment in good condition": "Καλή κατάσταση",
+    "Are you sure you want to cancel this reference request?": "Είσαι σίγουρος ότι θέλεις να ακυρώσεις αυτό το αίτημα;",
+    "Are you sure you want to delete this previous landlord and all related data?": "Θέλεις σίγουρα να διαγράψεις αυτόν τον προηγούμενο ιδιοκτήτη και όλα τα σχετικά δεδομένα;",
+    "Avg score": "Μ.Ο. βαθμολογίας",
+    "Average": "Μέσος όρος",
+    "Base URL for Links": "Βασικό URL για Συνδέσμους",
+    "Cancel Reference": "Ακύρωση Σύστασης",
+    "Cancel request": "Ακύρωση αιτήματος",
+    "Cancel this reference request?": "Ακύρωση αυτού του αιτήματος σύστασης;",
+    "Can’t add contact": "Αδυναμία προσθήκης επαφής",
+    "Can’t add property": "Αδυναμία προσθήκης ακινήτου",
+    "Can’t delete": "Αδυναμία διαγραφής",
+    "Can’t read the saved file": "Αδυναμία ανάγνωσης του αποθηκευμένου αρχείου",
+    "Can’t save changes": "Αδυναμία αποθήκευσης αλλαγών",
+    "Cancel Request": "Ακύρωση αιτήματος",
+    "Change password": "Αλλαγή κωδικού",
+    "Changes saved.": "Οι αλλαγές αποθηκεύτηκαν.",
+    "City": "Πόλη",
+    "Comments": "Σχόλια",
+    "Comments (optional)": "Σχόλια (προαιρετικά)",
+    "Completed": "Ολοκληρωμένα",
+    "Confirm password": "Επιβεβαίωση κωδικού",
+    "Connected": "Συνδεδεμένος",
+    "Connected.": "Συνδέθηκε.",
+    "Connect": "Σύνδεση",
+    "Connect to view full answers": "Συνδεθείτε για να δείτε όλες τις απαντήσεις",
+    "Contract is locked awaiting landlord consent.": "Το συμβόλαιο παραμένει κλειδωμένο, αναμένεται συναίνεση ιδιοκτήτη",
+    "Contract locked until landlord consents": "Το συμβόλαιο είναι κλειδωμένο μέχρι να συναινέσει ο ιδιοκτήτης",
+    "Contract Status:": "Κατάσταση Συμβολαίου:",
+    "Contract verified — no upload needed.": "Το συμβόλαιο επιβεβαιώθηκε — δεν απαιτείται μεταφόρτωση.",
+    "Contract verified successfully.": "Το συμβόλαιο επικυρώθηκε με επιτυχία.",
+    "Create Account": "Δημιουργία Λογαριασμού",
+    "Delete": "Διαγραφή",
+    "Delete previous landlord": "Διαγραφή προηγούμενου ιδιοκτήτη",
+    "Disconnected": "Αποσυνδέθηκε",
+    "Disconnected.": "Αποσυνδέθηκε.",
+    "District": "Περιοχή",
+    "Download contract": "Λήψη συμβολαίου",
+    "Edit": "Επεξεργασία",
+    "Email": "Email",
+    "Email & App Settings": "Ρυθμίσεις Email & Εφαρμογής",
+    "Email delivery failed": "Αποτυχία αποστολής email",
+    "Email Settings (SMTP)": "Ρυθμίσεις Email (SMTP)",
+    "Enter a valid email.": "Εισάγετε έγκυρο email.",
+    "Enter at least a city or a district.": "Εισαγάγετε τουλάχιστον πόλη ή περιφερειακή ενότητα.",
+    "Enter the landlord’s address.": "Εισαγάγετε τη διεύθυνση του ιδιοκτήτη.",
+    "Enter the landlord’s name.": "Εισαγάγετε το όνομα του ιδιοκτήτη.",
+    "Enter an address.": "Εισαγάγετε διεύθυνση.",
+    "e.g. Maria or nikos@example.com": "π.χ. Μαρία ή nikos@example.com",
+    "e.g. Maria Papadopoulou or papadop": "π.χ. Μαρία Παπαδοπούλου ή papadop",
+    "Find Landlords": "Αναζήτηση Ιδιοκτητών",
+    "Find tenants": "Εύρεση ενοικιαστών",
+    "Find Tenants": "Εύρεση Ενοικιαστών",
+    "Find Tenants (Open to Rent)": "Εύρεση ενοικιαστών (Ανοιχτός για ενοικίαση)",
+    "Find landlords": "Αναζήτηση ιδιοκτητών",
+    "Floor": "Όροφος",
+    "For more details": "Για περισσότερες λεπτομέρειες",
+    "For more details visit": "Για περισσότερες λεπτομέρειες",
+    "Full name": "Πλήρες όνομα",
+    "Future Landlords (Contacts)": "Μελλοντικοί Ιδιοκτήτες (Επαφές)",
+    "Good condition": "Καλή κατάσταση",
+    "Hide": "Απόκρυψη",
+    "I’m looking for a place": "Αναζητώ κατοικία",
+    "I'm currently looking for a place": "Αναζητώ αυτήν την περίοδο σπίτι",
+    "Incorrect email or password. Please try again.": "Λάθος email ή κωδικός. Παρακαλώ δοκιμάστε ξανά.",
+    "In contacts": "Στις επαφές",
+    "Invitation sent.": "Η πρόσκληση στάλθηκε.",
+    "Invitation sent successfully.": "Η πρόσκληση στάλθηκε με επιτυχία.",
+    "Invited": "Προσκεκλημένος",
+    "Landlord": "Ιδιοκτήτης",
+    "Landlord Dashboard": "Πίνακας Ιδιοκτήτη",
+    "Landlord email": "Email ιδιοκτήτη",
+    "Landlord name": "Όνομα ιδιοκτήτη",
+    "Latest answers": "Τελευταίες απαντήσεις",
+    "Latest status": "Τελευταία κατάσταση",
+    "Let landlords know you’re looking and share your criteria.": "Ενημερώνει τους ιδιοκτήτες ότι αναζητάτε και εμφανίζει τα κριτήριά σας.",
+    "Listing URL (optional)": "Σύνδεσμος αγγελίας (προαιρετικό)",
+    "Logged in as": "Συνδεθήκατε ως",
+    "Logged in with email": "Συνδεθήκατε με email",
+    "Looking in": "Αναζήτηση σε",
+    "Max floor": "Μέγιστος όροφος",
+    "Max price (€)": "Μέγιστη τιμή (€)",
+    "Max rooms": "Μέγιστα δωμάτια",
+    "Max size (m²)": "Μέγιστο μέγεθος (τ.μ.)",
+    "Min floor": "Ελάχιστος όροφος",
+    "Min price (€)": "Ελάχιστη τιμή (€)",
+    "Min rooms": "Ελάχιστα δωμάτια",
+    "Min size (m²)": "Ελάχιστο μέγεθος (τ.μ.)",
+    "Missing SMTP details: host, port, username, password, sender, or recipient.": "Λείπουν στοιχεία SMTP: host, port, όνομα χρήστη, κωδικός, αποστολέας ή παραλήπτης.",
+    "Municipality": "Δήμος",
+    "Municipality (City)": "Δήμος (Πόλη)",
+    "My Contacts": "Επαφές",
+    "My properties": "Τα ακίνητά μου",
+    "My Properties": "Τα Ακίνητά μου",
+    "My References": "Συστάσεις",
+    "Name": "Ονοματεπώνυμο",
+    "New reference request": "Νέο αίτημα σύστασης",
+    "No": "Όχι",
+    "No actions": "Καμία ενέργεια",
+    "No active reference request.": "Δεν υπάρχει ενεργό αίτημα σύστασης.",
+    "No matches.": "Δεν βρέθηκαν αποτελέσματα.",
+    "No previous landlords added yet.": "Δεν έχουν προστεθεί ακόμη προηγούμενοι ιδιοκτήτες.",
+    "No previous landlords yet.": "Δεν έχουν προστεθεί προηγούμενοι ιδιοκτήτες.",
+    "No properties yet.": "Δεν υπάρχουν ακόμη ακίνητα.",
+    "No prospective tenants yet.": "Δεν υπάρχουν ακόμη υποψήφιοι ενοικιαστές.",
+    "No reference found.": "Δεν βρέθηκε σύσταση.",
+    "No reference requests have been created yet.": "Δεν έχουν δημιουργηθεί ακόμα αιτήματα σύστασης.",
+    "No reference requests yet.": "Δεν υπάρχουν ακόμη αιτήματα σύστασης.",
+    "None": "Καμία",
+    "Not My Tenant / Cancel": "Δεν είναι ο ενοικιαστής μου / Ακύρωση",
+    "Open listing": "Προβολή αγγελίας",
+    "Open to Rent": "Ανοιχτός για ενοικίαση",
+    "Open to rent": "Ανοιχτός για ενοικίαση",
+    "Paid on time": "Πλήρωνε στην ώρα του",
+    "Paid on time?": "Πλήρωνε στην ώρα του;",
+    "Password": "Κωδικός",
+    "Pending": "Εκκρεμή",
+    "Pending References (All Tenants)": "Εκκρεμείς Συστάσεις (Όλοι οι Ενοικιαστές)",
+    "Please check your ranges: maximums must be greater than or equal to minimums.": "Ελέγξτε τα εύρη: τα μέγιστα πρέπει να είναι μεγαλύτερα ή ίσα από τα ελάχιστα.",
+    "Please enter a valid email address.": "Παρακαλώ εισαγάγετε έγκυρη διεύθυνση email.",
+    "Please enter at least a city or a district.": "Καταχωρίστε τουλάχιστον πόλη ή περιοχή.",
+    "Please enter the landlord’s address.": "Παρακαλώ εισαγάγετε τη διεύθυνση του ιδιοκτήτη.",
+    "Please enter the landlord’s name.": "Παρακαλώ εισαγάγετε το όνομα του ιδιοκτήτη.",
+    "Please enter your full name.": "Παρακαλώ εισαγάγετε το πλήρες όνομά σας.",
+    "Price": "Τιμή",
+    "Price (€)": "Τιμή (€)",
+    "Privacy & verification details": "Λεπτομέρειες απορρήτου & επαλήθευσης",
+    "Privacy Notice": "Πολιτική Απορρήτου",
+    "Prospective tenants": "Υποψήφιοι ενοικιαστές",
+    "Prospective Tenants (Listed You as Future Landlord)": "Υποψήφιοι Ενοικιαστές (Σας έχουν δηλώσει ως μελλοντικό ιδιοκτήτη)",
+    "Reference cancelled.": "Η σύσταση ακυρώθηκε.",
+    "Reference details": "Λεπτομέρειες σύστασης",
+    "Reference details are visible after you connect.": "Οι λεπτομέρειες συστάσεων είναι ορατές μετά τη σύνδεση.",
+    "Reference for": "Σύσταση για",
+    "Reference Link": "Σύνδεσμος Σύστασης",
+    "Reference Requests Sent To You": "Αιτήματα σύστασης που σας στάλθηκαν",
+    "Reference request emailed.": "Το αίτημα σύστασης εστάλη με email.",
+    "Reference request sent successfully by email.": "Το αίτημα σύστασης στάλθηκε με επιτυχία μέσω email.",
+    "Reference submitted successfully. Thank you!": "Η αναφορά υποβλήθηκε με επιτυχία. Ευχαριστούμε!",
+    "Reference submitted successfully.": "Η σύσταση υποβλήθηκε με επιτυχία.",
+    "Refresh": "Ανανέωση",
+    "Region": "Περιφέρεια",
+    "Registered:": "Εγγράφηκε:",
+    "Reject": "Απόρριψη",
+    "Rejected": "Απορρίφθηκε",
+    "Rejected.": "Απορρίφθηκε.",
+    "Remove": "Αφαίρεση",
+    "Request cancelled and data deleted, but email notification failed: ": "Το αίτημα ακυρώθηκε και τα δεδομένα διαγράφηκαν, αλλά η ειδοποίηση email απέτυχε: ",
+    "Request cancelled.": "Το αίτημα ακυρώθηκε.",
+    "Request cancelled. Landlord notified; contract and responses deleted.": "Το αίτημα ακυρώθηκε. Ο ιδιοκτήτης ειδοποιήθηκε· το συμβόλαιο και οι απαντήσεις διαγράφηκαν.",
+    "Request connection": "Αίτημα σύνδεσης",
+    "Request kept.": "Το αίτημα διατηρήθηκε.",
+    "Request Reference": "Αίτημα Σύστασης",
+    "Request reference": "Αίτημα σύστασης",
+    "Requests": "Αιτήματα",
+    "Reset": "Επαναφορά",
+    "Results limit": "Όριο αποτελεσμάτων",
+    "Rooms": "Δωμάτια",
+    "Role": "Ρόλος",
+    "Save changes": "Αποθήκευση αλλαγών",
+    "Save preferences": "Αποθήκευση προτιμήσεων",
+    "Score": "Βαθμολογία",
+    "Score:": "Βαθμολογία:",
+    "Search": "Αναζήτηση",
+    "Search by name or email": "Αναζήτηση με όνομα ή email",
+    "Search landlords": "Αναζήτηση ιδιοκτητών",
+    "Search landlords by property": "Αναζήτηση ιδιοκτητών ανά ακίνητο",
+    "Search unavailable.": "Η αναζήτηση δεν είναι διαθέσιμη.",
+    "Send Invitation": "Αποστολή Πρόσκλησης",
+    "Send request by email": "Αίτημα μέσω email",
+    "Send Test Email": "Αποστολή Δοκιμαστικού Email",
+    "Send test to": "Αποστολή δοκιμής σε",
+    "Share this link manually": "Μοιραστείτε αυτόν τον σύνδεσμο χειροκίνητα",
+    "Share this link manually or try again": "Μοιραστείτε τον σύνδεσμο χειροκίνητα ή δοκιμάστε ξανά",
+    "Show": "Εμφάνιση",
+    "Sign In": "Σύνδεση",
+    "Sign Out": "Αποσύνδεση",
+    "Size": "Μέγεθος",
+    "Size (m²)": "Μέγεθος (τ.μ.)",
+    "SMTP test email body": "Αν λάβατε αυτό το email, η ρύθμιση SMTP λειτουργεί. ✅",
+    "Start New Reference Request": "Αίτημα Σύστασης",
+    "Status:": "Κατάσταση:",
+    "Stops this request and deletes the contract and responses. Landlord is notified.": "Σταματά το αίτημα και διαγράφει συμβόλαιο και απαντήσεις. Ο ιδιοκτήτης ενημερώνεται.",
+    "Street, number, city": "Οδός, αριθμός, πόλη",
+    "Submit Reference": "Υποβολή σύστασης",
+    "Tenant": "Ενοικιαστής",
+    "Tenant Dashboard": "Πίνακας Ενοικιαστή",
+    "Tenant preferences": "Προτιμήσεις ενοικιαστή",
+    "Tenant:": "Ενοικιαστής:",
+    "Thanks, your response is saved.": "Ευχαριστούμε, η απάντησή σας αποθηκεύτηκε.",
+    "This email is already registered.": "Αυτό το email έχει ήδη καταχωρηθεί.",
+    "This reference has already been submitted. Thank you!": "Αυτή η σύσταση έχει ήδη υποβληθεί. Ευχαριστούμε!",
+    "Tip: leave a minimum as 0 if you have no minimum for that field.": "Συμβουλή: αφήστε το ελάχιστο ως 0 αν δεν έχετε ελάχιστο για το πεδίο.",
+    "Type a name or email": "Πληκτρολογήστε όνομα ή email",
+    "Unknown role:": "Άγνωστος ρόλος:",
+    "Unpaid utilities": "Απλήρωτοι λογαριασμοί",
+    "Upload tenancy contract (PDF or image)": "Μεταφόρτωση συμβολαίου μίσθωσης (PDF ή εικόνα)",
+    "Upload Tenancy Contract (PDF or Image)": "Μεταφόρτωση Συμβολαίου Μίσθωσης (PDF ή Εικόνα)",
+    "Replace Tenancy Contract (PDF or Image)": "Αντικατάσταση Συμβολαίου Μίσθωσης (PDF ή Εικόνα)",
+    "Updated": "Ενημερώθηκε",
+    "Updated:": "Ενημερώθηκε:",
+    "Use ‘Any’ to skip": "Χρησιμοποιήστε «Οποιοδήποτε» για παράλειψη",
+    "Utilities unpaid": "Απλήρωτοι λογαριασμοί",
+    "Valid or expired token error": "Μη έγκυρο ή ληγμένο διακριτικό σύστασης.",
+    "Verified": "Επιβεβαιωμένο",
+    "View Submitted Reference": "Προβολή Υποβληθείσας Σύστασης",
+    "Visible properties": "Ορατά ακίνητα",
+    "Visible to tenants": "Ορατό στους ενοικιαστές",
+    "Welcome": "Καλώς ορίσατε, ",
+    "Yes": "Ναι",
+    "🏠 RentRight — Landlord Reference Portal": "🏠 RentRight — Συστατικές επιστολές Ιδιοκτήτη",
+    "✅ Verify Contract": "✅ Επικύρωση Συμβολαίου",
+    "✅ Verified": "✅ Επιβεβαιωμένο",
+    "✅ Verified Contract": "✅ Επικυρωμένο Συμβόλαιο",
+    "⏳ Pending Review": "⏳ Αναμονή Ελέγχου",
+    "ΑFΜ (9 digits)": "ΑΦΜ (9 ψηφία)",
+}
 
-        # Add property
-        "Add property": "Προσθήκη ακινήτου",
-        "Address": "Διεύθυνση",
-        "Street, number, city": "Οδός, αριθμός, πόλη",
-        "Listing URL (optional)": "Σύνδεσμος αγγελίας (προαιρετικό)",
-        "Size (m²)": "Μέγεθος (τ.μ.)",
-        "Rooms": "Δωμάτια",
-        "Floor": "Όροφος",
-        "Price (€)": "Τιμή (€)",
-        "Visible to tenants": "Ορατό στους ενοικιαστές",
-        "Enter an address.": "Εισαγάγετε διεύθυνση.",
-        "Property added.": "Το ακίνητο προστέθηκε.",
-        "Can’t add property": "Αδυναμία προσθήκης ακινήτου",
-
-        # List / empty state
-        "No properties yet.": "Δεν υπάρχουν ακόμη ακίνητα.",
-
-        # Visibility + actions
-        "Hidden from tenants": "Κρυφό από τους ενοικιαστές",
-        "Hide": "Απόκρυψη",
-        "Show": "Εμφάνιση",
-        "Delete": "Διαγραφή",
-        "Property deleted.": "Το ακίνητο διαγράφηκε.",
-
-        # Edit
-        "Edit": "Επεξεργασία",
-        "Save changes": "Αποθήκευση αλλαγών",
-        "Address is required.": "Απαιτείται διεύθυνση.",
-        "Changes saved.": "Οι αλλαγές αποθηκεύτηκαν.",
-        "Can’t save changes": "Αδυναμία αποθήκευσης αλλαγών",
-
-        # Reused
-        "rooms": "δωμάτια",
-        "Updated": "Ενημερώθηκε",
-
-        # --- Property search ---
-        "Search landlords by property": "Αναζήτηση ιδιοκτητών ανά ακίνητο",
-        "Property filters": "Φίλτρα ακινήτων",
-        "Min size (m²)": "Ελάχιστο μέγεθος (τ.μ.)",
-        "Max size (m²)": "Μέγιστο μέγεθος (τ.μ.)",
-        "Min rooms": "Ελάχιστα δωμάτια",
-        "Max rooms": "Μέγιστα δωμάτια",
-        "Min floor": "Ελάχιστος όροφος",
-        "Max floor": "Μέγιστος όροφος",
-        "Min price (€)": "Ελάχιστη τιμή (€)",
-        "Max price (€)": "Μέγιστη τιμή (€)",
-        "Search": "Αναζήτηση",
-        "Reset": "Επαναφορά",
-        "result(s)": "αποτέλεσμα(τα)",
-        "rooms": "δωμάτια",
-        "Floor": "Όροφος",
-        "Open listing": "Προβολή αγγελίας",
-        "Updated": "Ενημερώθηκε",
-        "For more details": "Για περισσότερες λεπτομέρειες",
-
-        # --- Add-by-email ---
-        "Can’t find the landlord? Send a request by email.": "Δεν βρίσκετε τον ιδιοκτήτη; Στείλτε αίτημα μέσω email.",
-        "Send request by email": "Αίτημα μέσω email",
-        "Landlord email": "Email ιδιοκτήτη",
-        "Enter a valid email.": "Εισάγετε έγκυρο email.",
-
-        # --- Status badges ---
-        "Connected": "Συνδεδεμένος",
-        "Rejected": "Απορρίφθηκε",
-        "Pending": "Εκκρεμεί",
-        "Invited": "Προσκεκλημένος",
-        "In contacts": "Στις επαφές",
-        "No relation": "Καμία σχέση",
-        # --- Help icon tooltips ---
-        "Find landlords already in the system by name or email.": "Βρείτε ιδιοκτήτες που υπάρχουν ήδη στην πλατφόρμα με όνομα ή email.",
-        "Filter landlords by visible property listings.": "Φιλτράρετε ιδιοκτήτες μέσω των αγγελιών τους.",
-         # Header + empty state
-        "Future landlords": "Επαφές",
-        "No future landlord contacts yet.": "Δεν υπάρχουν ακόμη επαφές μελλοντικών ιδιοκτητών.",
-
-        # Status badges (reuse from earlier for consistency)
-        "No relation": "Καμία σχέση",
-        "Connected": "Συνδεδεμένος",
-        "Rejected": "Απορρίφθηκε",
-        "Pending": "Εκκρεμεί",
-        "Invited": "Προσκεκλημένος",
-
-        # Actions + toasts
-        "Disconnect": "Αποσύνδεση",
-        "Disconnected.": "Αποσυνδέθηκε.",
-        "Connect": "Σύνδεση",
-        "Connected.": "Συνδέθηκε.",
-        "Remove": "Αφαίρεση",
-        "Contact removed.": "Η επαφή αφαιρέθηκε.",
-        "Send invitation": "Αποστολή πρόσκλησης",
-        "Invitation sent.": "Η πρόσκληση στάλθηκε.",
-        "Can’t send invitation": "Αδυναμία αποστολής πρόσκλησης",
-
-        # Visible properties section
-        "Visible properties": "Ορατά ακίνητα",
-        "For more details": "Για περισσότερες λεπτομέρειες",
-        "Updated": "Ενημερώθηκε",
-        "Open listing": "Προβολή αγγελίας",
-        "rooms": "δωμάτια",
-        "Floor": "Όροφος",
-
-        # Help icon tooltips
-        "Landlords you’ve added or connected with.": "Ιδιοκτήτες που έχετε προσθέσει ή με τους οποίους έχετε συνδεθεί.",
-        "Stop sharing status with this landlord.": "Διακοπή κοινής χρήσης κατάστασης με αυτόν τον ιδιοκτήτη.",
-        "Approve to connect and share your status. Decline to reject the request.": "Εγκρίνετε για σύνδεση και κοινή χρήση κατάστασης. Απορρίψτε για να απορρίψετε το αίτημα.",
-        "Remove this contact from your list.": "Αφαιρέστε αυτή την επαφή από τη λίστα σας.",
-        "Send a secure link so this landlord can connect with you.": "Στείλτε έναν ασφαλή σύνδεσμο ώστε ο ιδιοκτήτης να συνδεθεί μαζί σας.",
-        "Properties this landlord has publicly listed.": "Ακίνητα που έχει δημοσιεύσει δημόσια ο ιδιοκτήτης.",
-        
-        # Section + header help
-        "Open to rent": "Ανοιχτός για ενοικίαση",
-        "Let landlords know you’re looking and share your criteria.": "Ενημερώνει τους ιδιοκτήτες ότι αναζητάτε και εμφανίζει τα κριτήριά σας.",
-
-        # Toggle + toggle help
-        "I’m looking for a place": "Αναζητώ κατοικία",
-        "Turn on to appear in landlord searches. You can hide this anytime.": "Ενεργοποιήστε για να εμφανίζεστε στις αναζητήσεις ιδιοκτητών. Μπορείτε να το κρύψετε οποτεδήποτε.",
-
-        # Filters group + filters help
-        "Property characteristics": "Χαρακτηριστικά ακινήτου",
-        "Any": "Οποιοδήποτε",
-        "Pick region → unit → municipality. Use ‘Any’ to skip. Set 0 for no minimum. Max must be ≥ min.": "Επιλέξτε Περιφέρεια → Ενότητα → Δήμο. Χρησιμοποιήστε «Οποιοδήποτε» για παράλειψη. Θέστε 0 για χωρίς ελάχιστο. Το μέγιστο πρέπει να είναι ≥ του ελάχιστου.",
-
-        # Ranged numeric fields
-        "Min size (m²)": "Ελάχιστο μέγεθος (τ.μ.)",
-        "Max size (m²)": "Μέγιστο μέγεθος (τ.μ.)",
-        "Min rooms": "Ελάχιστα δωμάτια",
-        "Max rooms": "Μέγιστα δωμάτια",
-        "Min floor": "Ελάχιστος όροφος",
-        "Max floor": "Μέγιστος όροφος",
-        "Min price (€)": "Ελάχιστη τιμή (€)",
-        "Max price (€)": "Μέγιστη τιμή (€)",
-
-        # Actions + validations
-        "Save preferences": "Αποθήκευση προτιμήσεων",
-        "Enter at least a city or a district.": "Εισαγάγετε τουλάχιστον πόλη ή περιφερειακή ενότητα.",
-        "Preferences saved.": "Οι προτιμήσεις αποθηκεύτηκαν.",
-        "Reset": "Επαναφορά",
-
-        # Summary line
-        "Status:": "Κατάσταση:",
-        "Looking in": "Αναζητώ σε",
-        "Anywhere": "Οπουδήποτε",
-        "Active": "Ενεργό",
-        "Inactive": "Ανενεργό",
-
-        # Reused labels
-        "rooms": "δωμάτια",
-        "Floor": "Όροφος",
-        
-        # Location pickers
-        "Region": "Περιφέρεια",
-        "Regional unit": "Περιφερειακή Ενότητα",
-        "Municipality (City)": "Δήμος (Πόλη)",
-        "Municipality": "Δήμος",
-        "City": "Πόλη",
-        # Headers & sections
-        "Previous landlords & references": "Προηγούμενοι ιδιοκτήτες & συστάσεις",
-        "All reference requests": "Όλα τα αιτήματα σύστασης",
-
-        # Header tooltip
-        "Ask former landlords for references and manage each request here.": "Ζητήστε συστάσεις από προηγούμενους ιδιοκτήτες και διαχειριστείτε κάθε αίτημα εδώ.",
-
-        # Add landlord form
-        "Landlord email": "Email ιδιοκτήτη",
-        "Landlord name": "Όνομα ιδιοκτήτη",
-        "Address": "Διεύθυνση",
-        "Add previous landlord": "Προσθήκη προηγούμενου ιδιοκτήτη",
-        "Enter a valid email.": "Εισάγετε έγκυρο email.",
-        "Enter the landlord’s name.": "Εισαγάγετε το όνομα του ιδιοκτήτη.",
-        "Enter the landlord’s address.": "Εισαγάγετε τη διεύθυνση του ιδιοκτήτη.",
-        "Previous landlord added.": "Ο προηγούμενος ιδιοκτήτης προστέθηκε.",
-
-        # Empty states
-        "No previous landlords yet.": "Δεν έχουν προστεθεί προηγούμενοι ιδιοκτήτες.",
-        "No reference requests yet.": "Δεν υπάρχουν ακόμη αιτήματα σύστασης.",
-        "No active reference request.": "Δεν υπάρχει ενεργό αίτημα σύστασης.",
-
-        # Contract + answers
-        "Contract status:": "Κατάσταση συμβολαίου:",
-        "✅ Verified": "✅ Επιβεβαιωμένο",
-        "Download contract": "Λήψη συμβολαίου",
-        "Can’t read the saved file:": "Αδυναμία ανάγνωσης του αποθηκευμένου αρχείου:",
-        "Can’t read the saved file": "Αδυναμία ανάγνωσης του αποθηκευμένου αρχείου",
-        "Contract locked until landlord consents.": "Το συμβόλαιο είναι κλειδωμένο μέχρι να συναινέσει ο ιδιοκτήτης.",
-        "Overall tenant score": "Συνολική βαθμολογία ενοικιαστή",
-        "Paid on time?": "Πλήρωνε στην ώρα του;",
-        "Any unpaid utilities?": "Απλήρωτες υπηρεσίες κοινής ωφέλειας;",
-        "Left in good condition?": "Παραδόθηκε σε καλή κατάσταση;",
-        "Comments (optional)": "Σχόλια (προαιρετικά)",
-        "Yes": "Ναι",
-        "No": "Όχι",
-
-        # Start / delete landlord
-        "New reference request": "Νέο αίτημα σύστασης",
-        "Creates a unique link for your former landlord to submit a reference.": "Δημιουργεί μοναδικό σύνδεσμο για να συμπληρώσει σύσταση ο προηγούμενος ιδιοκτήτης.",
-        "Delete previous landlord": "Διαγραφή προηγούμενου ιδιοκτήτη",
-        "Delete this previous landlord and all related data?": "Διαγραφή αυτού του προηγούμενου ιδιοκτήτη και όλων των σχετικών δεδομένων;",
-        "Delete": "Διαγραφή",
-        "Keep": "Διατήρηση",
-        "Previous landlord deleted.": "Ο προηγούμενος ιδιοκτήτης διαγράφηκε.",
-        "Can’t delete": "Αδυναμία διαγραφής",
-        
-        "Find Landlords":"Αναζήτηση",
-        "My Contacts":"Επαφές",
-        "My References":"Συστατικές",
-        
-        # Headers & sections
-        "Previous landlords & references": "Προηγούμενοι ιδιοκτήτες & συστάσεις",
-        "All reference requests": "Όλα τα αιτήματα σύστασης",
-
-        # Add landlord form
-        "Landlord email": "Email ιδιοκτήτη",
-        "Landlord name": "Όνομα ιδιοκτήτη",
-        "Address": "Διεύθυνση",
-        "Add previous landlord": "Προσθήκη προηγούμενου ιδιοκτήτη",
-        "Enter a valid email.": "Εισάγετε έγκυρο email.",
-        "Enter the landlord’s name.": "Εισαγάγετε το όνομα του ιδιοκτήτη.",
-        "Enter the landlord’s address.": "Εισαγάγετε τη διεύθυνση του ιδιοκτήτη.",
-        "Previous landlord added.": "Ο προηγούμενος ιδιοκτήτης προστέθηκε.",
-
-        # Empty states
-        "No previous landlords yet.": "Δεν έχουν προστεθεί προηγούμενοι ιδιοκτήτες.",
-        "No reference requests yet.": "Δεν υπάρχουν ακόμη αιτήματα σύστασης.",
-        "No active reference request.": "Δεν υπάρχει ενεργό αίτημα σύστασης.",
-
-        # Contract + answers
-        "Contract status:": "Κατάσταση συμβολαίου:",
-        "✅ Verified": "✅ Επιβεβαιωμένο",
-        "Download contract": "Λήψη συμβολαίου",
-        "Can’t read the saved file:": "Αδυναμία ανάγνωσης του αποθηκευμένου αρχείου:",
-        "Can’t read the saved file": "Αδυναμία ανάγνωσης του αποθηκευμένου αρχείου",
-        "Contract locked until landlord consents.": "Το συμβόλαιο είναι κλειδωμένο μέχρι να συναινέσει ο ιδιοκτήτης.",
-        "Overall tenant score": "Συνολική βαθμολογία ενοικιαστή",
-        "Paid on time?": "Πλήρωνε στην ώρα του;",
-        "Any unpaid utilities?": "Απλήρωτες υπηρεσίες κοινής ωφέλειας;",
-        "Left in good condition?": "Παραδόθηκε σε καλή κατάσταση;",
-        "Comments (optional)": "Σχόλια (προαιρετικά)",
-        "Yes": "Ναι",
-        "No": "Όχι",
-
-        # Start / delete landlord
-        "New reference request": "Νέο αίτημα σύστασης",
-        "Delete previous landlord": "Διαγραφή προηγούμενου ιδιοκτήτη",
-        "Delete this previous landlord and all related data?": "Διαγραφή αυτού του προηγούμενου ιδιοκτήτη και όλων των σχετικών δεδομένων;",
-        "Delete": "Διαγραφή",
-        "Keep": "Διατήρηση",
-        "Previous landlord deleted.": "Ο προηγούμενος ιδιοκτήτης διαγράφηκε.",
-        "Can’t delete": "Αδυναμία διαγραφής",
-
-        # Request flow
-        "Request reference": "Αίτημα σύστασης",
-        "Reference request emailed.": "Το αίτημα σύστασης εστάλη με email.",
-        "Email delivery failed": "Αποτυχία αποστολής email",
-        "Share this link manually": "Μοιραστείτε αυτόν τον σύνδεσμο χειροκίνητα",
-        "Cancel request": "Ακύρωση αιτήματος",
-        "Cancel this reference request?": "Ακύρωση αυτού του αιτήματος σύστασης;",
-        "Request kept.": "Το αίτημα διατηρήθηκε.",
-        "Request cancelled. Landlord notified; contract and responses deleted.": "Το αίτημα ακυρώθηκε. Ο ιδιοκτήτης ειδοποιήθηκε· το συμβόλαιο και οι απαντήσεις διαγράφηκαν.",
-        "Request cancelled and data deleted, but email notification failed: ": "Το αίτημα ακυρώθηκε και τα δεδομένα διαγράφηκαν, αλλά η ειδοποίηση email απέτυχε: ",
-
-        # Upload flow
-        "Upload tenancy contract (PDF or image)": "Μεταφόρτωση συμβολαίου μίσθωσης (PDF ή εικόνα)",
-        "Contract uploaded. Email sent to landlord.": "Το συμβόλαιο μεταφορτώθηκε. Εστάλη email στον ιδιοκτήτη.",
-        "Contract uploaded, but email failed": "Το συμβόλαιο μεταφορτώθηκε, αλλά το email απέτυχε",
-        "Share this link manually or try again": "Μοιραστείτε τον σύνδεσμο χειροκίνητα ή δοκιμάστε ξανά",
-
-        # History
-       
-
-        
-         # Section & search
-        "Find tenants": "Εύρεση ενοικιαστών",
-        "Find Tenants": "Εύρεση Eνοικιαστών",
-        "Search by name or email": "Αναζήτηση με όνομα ή email",
-        "e.g. Maria or nikos@example.com": "π.χ. Μαρία ή nikos@example.com",
-        "Results limit": "Όριο αποτελεσμάτων",
-
-        # Filters
-        "Tenant preferences": "Προτιμήσεις ενοικιαστή",
-        "Min size (m²)": "Ελάχιστο μέγεθος (τ.μ.)",
-        "Max size (m²)": "Μέγιστο μέγεθος (τ.μ.)",
-        "Min rooms": "Ελάχιστα δωμάτια",
-        "Max rooms": "Μέγιστα δωμάτια",
-        "Min floor": "Ελάχιστος όροφος",
-        "Max floor": "Μέγιστος όροφος",
-        "Min price (€)": "Ελάχιστη τιμή (€)",
-        "Max price (€)": "Μέγιστη τιμή (€)",
-
-        # Results
-        "No matches.": "Δεν βρέθηκαν αποτελέσματα.",
-        "results": "αποτελέσματα",
-
-        # Status badges & actions
-        "Connected": "Συνδεδεμένος",
-        "Pending": "Εκκρεμεί",
-        "Disconnected": "Αποσυνδέθηκε",
-        "No relation": "Καμία σχέση",
-        "Cancel request": "Ακύρωση αιτήματος",
-        "Request cancelled.": "Το αίτημα ακυρώθηκε.",
-        "Connect": "Σύνδεση",
-        "Connected.": "Συνδέθηκε.",
-        "Reject": "Απόρριψη",
-        "Rejected.": "Απορρίφθηκε.",
-        "Request connection": "Αίτημα σύνδεσης",
-
-        # References
-        "References": "Συστάσεις",
-        "None": "Καμία",
-        "Latest status": "Τελευταία κατάσταση",
-        "Result": "Αποτέλεσμα",
-        "Average": "Μέσος όρος",
-        "Latest answers": "Τελευταίες απαντήσεις",
-        "Previous landlord": "Προηγούμενος ιδιοκτήτης",
-        "Paid on time": "Πλήρωνε στην ώρα του",
-        "Unpaid utilities": "Απλήρωτοι λογαριασμοί",
-        "Good condition": "Καλή κατάσταση",
-        "Comments": "Σχόλια",
-        "Connect to view full answers": "Συνδεθείτε για να δείτε όλες τις απαντήσεις",
-
-        # Reused
-        "Size": "Μέγεθος",
-        "Rooms": "Δωμάτια",
-        "Floor": "Όροφος",
-        "Price": "Τιμή",
-        "Search": "Αναζήτηση",
-        "Reset": "Επαναφορά",
-
-        # Request flow
-        "Request reference": "Αίτημα σύστασης",
-        "Emails a unique link to your former landlord to confirm and rate your tenancy.": "Στέλνει μοναδικό σύνδεσμο στον προηγούμενο ιδιοκτήτη για επιβεβαίωση και αξιολόγηση της μίσθωσης.",
-        "Reference request emailed.": "Το αίτημα σύστασης εστάλη με email.",
-        "Email delivery failed": "Αποτυχία αποστολής email",
-        "Share this link manually": "Μοιραστείτε αυτόν τον σύνδεσμο χειροκίνητα",
-        "Cancel request": "Ακύρωση αιτήματος",
-        "Stops this request and deletes the contract and responses. Landlord is notified.": "Σταματά το αίτημα και διαγράφει συμβόλαιο και απαντήσεις. Ο ιδιοκτήτης ενημερώνεται.",
-        "Cancel this reference request?": "Ακύρωση αυτού του αιτήματος σύστασης;",
-        "Request kept.": "Το αίτημα διατηρήθηκε.",
-        "Request cancelled. Landlord notified; contract and responses deleted.": "Το αίτημα ακυρώθηκε. Ο ιδιοκτήτης ειδοποιήθηκε· το συμβόλαιο και οι απαντήσεις διαγράφηκαν.",
-        "Request cancelled and data deleted, but email notification failed: ": "Το αίτημα ακυρώθηκε και τα δεδομένα διαγράφηκαν, αλλά η ειδοποίηση email απέτυχε: ",
-
-        # Upload flow
-        "Upload tenancy contract (PDF or image)": "Μεταφόρτωση συμβολαίου μίσθωσης (PDF ή εικόνα)",
-        "Stored encrypted. Used only to verify your landlord relationship.": "Αποθηκεύεται κρυπτογραφημένο. Χρησιμοποιείται μόνο για επαλήθευση της σχέσης σας με τον ιδιοκτήτη.",
-        "Contract uploaded. Email sent to landlord.": "Το συμβόλαιο μεταφορτώθηκε. Εστάλη email στον ιδιοκτήτη.",
-        "Contract uploaded, but email failed": "Το συμβόλαιο μεταφορτώθηκε, αλλά το email απέτυχε",
-        "Share this link manually or try again": "Μοιραστείτε τον σύνδεσμο χειροκίνητα ή δοκιμάστε ξανά",
-        
-           # Header & empty state
-        "Prospective tenants": "Υποψήφιοι ενοικιαστές",
-        "No prospective tenants yet.": "Δεν υπάρχουν ακόμη υποψήφιοι ενοικιαστές.",
-
-        # Status badges (kept for completeness)
-        "Connected": "Συνδεδεμένος",
-        "Rejected": "Απορρίφθηκε",
-        "Pending": "Εκκρεμεί",
-
-        # Actions + toasts
-        "Disconnect": "Αποσύνδεση",
-        "Disconnected.": "Αποσυνδέθηκε.",
-        "No actions": "Καμία ενέργεια",
-        "Cancel request": "Ακύρωση αιτήματος",
-        "Request cancelled.": "Το αίτημα ακυρώθηκε.",
-        "Connect": "Σύνδεση",
-        "Connected.": "Συνδέθηκε.",
-        "Reject": "Απόρριψη",
-        "Rejected.": "Απορρίφθηκε.",
-
-        # Open to rent chip
-
-        # References summary & details
-        "References": "Συστάσεις",
-        "Avg score": "Μ.Ο. βαθμολογίας",
-        "Reference details": "Λεπτομέρειες σύστασης",
-        "Score": "Βαθμολογία",
-        "Paid on time": "Πλήρωνε στην ώρα του",
-        "Unpaid utilities": "Απλήρωτοι λογαριασμοί",
-        "Good condition": "Καλή κατάσταση",
-        "Previous landlord": "Προηγούμενος ιδιοκτήτης",
-        "Comments": "Σχόλια",
-        "Reference details are visible after you connect.": "Οι λεπτομέρειες συστάσεων είναι ορατές μετά τη σύνδεση.",
-
-        # Reused labels
-        "rooms": "δωμάτια",
-        "Floor": "Όροφος",
-        "Yes": "Ναι",
-        "No": "Όχι",
-
-        # History
-        "Score": "Βαθμολογία",
-        "Contract verified — no upload needed.": "Το συμβόλαιο επιβεβαιώθηκε.",
-        # Future Landlords
-        "Future Landlords (Contacts)": "Μελλοντικοί Ιδιοκτήτες (Επαφές)",
-        "Enter a landlord’s email address": "Εισάγετε το email του ιδιοκτήτη",
-        "Add Contact": "Προσθήκη Επαφής",
-        "Contact added and invitation sent successfully.": "Η επαφή προστέθηκε και η πρόσκληση στάλθηκε με επιτυχία.",
-        "Contact added, but the email could not be sent:": "Η επαφή προστέθηκε, αλλά δεν ήταν δυνατή η αποστολή email:",
-        "Unable to add contact:": "Αδυναμία προσθήκης επαφής:",
-        "Delete Previous Landlord": "Διαγραφή Προηγούμενου Ιδιοκτήτη",
-        "Are you sure you want to delete this previous landlord and all related data?": "Θέλεις σίγουρα να διαγράψεις αυτόν τον προηγούμενο ιδιοκτήτη και όλα τα σχετικά δεδομένα;",
-        "Yes, delete": "Ναι, διαγραφή",
-        "No, keep it": "Όχι, διατήρησέ το",
-        "Previous landlord deleted permanently.": "Ο προηγούμενος ιδιοκτήτης διαγράφηκε οριστικά.",
-        "Unable to delete": "Αδυναμία διαγραφής",
-        "Send Invitation": "Αποστολή Πρόσκλησης",
-        "Invited": "Προσκλήθηκε",
-        "Invitation sent successfully.": "Η πρόσκληση στάλθηκε με επιτυχία.",
-        "Unable to send invitation:": "Αδυναμία αποστολής πρόσκλησης:",
-        "Contact removed.": "Η επαφή αφαιρέθηκε.",
-        "Name": "Ονοματεπώνυμο",
-        "Address": "Διεύθυνση",
-        "No future landlord contacts yet.": "Δεν υπάρχουν ακόμα επαφές μελλοντικών ιδιοκτητών.",
-        # Previous Landlords & References
-        "Previous Landlords and References": "Προηγούμενοι Ιδιοκτήτες και Συστάσεις",
-        "Reference submitted successfully. Thank you!":"Η αναφορά υποβλήθηκε με επιτυχία. Ευχαριστούμε!",
-        "Tax ID (9 digits)": "ΑΦΜ (9 ψηφία)",
-        "Add Previous Landlord": "Προσθήκη Προηγούμενου Ιδιοκτήτη",
-        "Are you sure you want to cancel this reference request?": "Είσαι σίγουρος ότι θέλεις να ακυρώσεις αυτό το αίτημα;",
-        "Yes, cancel it": "Ναι, ακύρωσε",
-        'Cancel Request': "Ακύρωση αιτήματος",
-        'Request cancelled — landlord notified, contract and responses permanently deleted.':'Αίτημα ακυρώθηκε — ο ιδιοκτήτης ειδοποιήθηκε, το συμβόλαιο και οι απαντήσεις διαγράφηκαν οριστικά.',
-        'No, keep it': "Όχι, διατήρησέ το",
-        'Start New Reference Request': 'Αίτημα Σύστασης',
-        "Please enter the landlord’s name.": "Παρακαλώ εισαγάγετε το όνομα του ιδιοκτήτη.",
-        "Please enter the landlord’s address.": "Παρακαλώ εισαγάγετε τη διεύθυνση του ιδιοκτήτη.",
-        "Previous landlord added successfully.": "Ο προηγούμενος ιδιοκτήτης προστέθηκε με επιτυχία.",
-        "Request Reference": "Αίτημα Σύστασης",
-        "Reference request sent successfully by email.": "Το αίτημα σύστασης στάλθηκε με επιτυχία μέσω email.",
-        "Email delivery failed (": "Η αποστολή email απέτυχε (",
-        "Please share this link manually:": "Παρακαλώ κοινοποιήστε αυτόν τον σύνδεσμο χειροκίνητα:",
-        # Contract
-        "Contract Status:": "Κατάσταση Συμβολαίου:",
-        "Contract is locked awaiting landlord consent.":"Το συμβόλαιο παραμένει κλειδωμένο, αναμένεται συναίνεση ιδιοκτήτη",
-        "Download Contract": "Λήψη Συμβολαίου",
-        "Replace Tenancy Contract (PDF or Image)": "Συμβολαίου Μίσθωσης (PDF ή Εικόνα)",
-        "Upload Tenancy Contract (PDF or Image)": "Ανέβασε Συμβόλαιο Μίσθωσης (PDF ή Εικόνα)",
-        "Contract uploaded. Status reset to Pending Review.": "Το συμβόλαιο μεταφορτώθηκε. Η κατάσταση επαναφέρθηκε σε Αναμονή Ελέγχου.",
-        "Contract uploaded. Status set to Pending Review.": "Το συμβόλαιο μεταφορτώθηκε. Η κατάσταση ορίστηκε σε Αναμονή Ελέγχου.",
-        "Unable to read the saved file:": "Δεν είναι δυνατή η ανάγνωση του αποθηκευμένου αρχείου:",
-        "⏳ Pending Review": "⏳ Αναμονή Ελέγχου",
-        "✅ Verified Contract": "✅ Επικυρωμένο Συμβόλαιο",
-        "❌ Rejected Contract": "❌ Απορριφθέν Συμβόλαιο",
-        "Thanks, your response is saved.": "Ευχαριστούμε, η απάντησή σας αποθηκεύτηκε.",
-        "Pending References (All Tenants)": "Εκκρεμείς Συστάσεις (Όλοι οι Ενοικιαστές)",
-        "No requests available.": "Δεν υπάρχουν διαθέσιμα αιτήματα.",
-        "Reference Link": "Σύνδεσμος Σύστασης",
-        "✅ Verify Contract": "✅ Επικύρωση Συμβολαίου",
-        "Contract verified successfully.": "Το συμβόλαιο επικυρώθηκε με επιτυχία.",
-        "Cancel Reference": "Ακύρωση Σύστασης",
-        "Reference cancelled.": "Η σύσταση ακυρώθηκε.",
-        # Landlord dashboard
-        "Prospective Tenants (Listed You as Future Landlord)": "Υποψήφιοι Ενοικιαστές (Σας έχουν δηλώσει ως μελλοντικό ιδιοκτήτη)",
-        "No tenants have listed you as a future landlord yet.": "Κανένας ενοικιαστής δεν σας έχει δηλώσει ακόμα ως μελλοντικό ιδιοκτήτη.",
-        "Respond Now": "Απάντηση Τώρα",
-        "Submit Reference": "Υποβολή Σύστασης",
-        "Not My Tenant / Cancel": "Δεν είναι ο ενοικιαστής μου / Ακύρωση",
-        "Please confirm you were the landlord.": "Παρακαλώ επιβεβαιώστε ότι ήσασταν ο ιδιοκτήτης.",
-        "Reference submitted successfully.": "Η σύσταση υποβλήθηκε με επιτυχία.",
-        "Request cancelled.": "Το αίτημα ακυρώθηκε.",
-        "View Submitted Reference": "Προβολή Υποβληθείσας Σύστασης",
-        # Public portal
-        "🏠 RentRight — Landlord Reference Portal": "🏠 RentRight — Συστατικές επιστολές Ιδιοκτήτη",
-        "Invalid or expired reference token.": "Μη έγκυρο ή ληγμένο διακριτικό σύστασης.",
-        "This reference has already been submitted. Thank you!": "Αυτή η σύσταση έχει ήδη υποβληθεί. Ευχαριστούμε!",
-        "Reference for": "Σύσταση για",
-        "I confirm I was the landlord for this tenant.": "Επιβεβαιώνω ότι ήμουν ο ιδιοκτήτης αυτού του ενοικιαστή.",
-        "Overall tenant score": "Συνολική αξιολόγηση ενοικιαστή",
-        "Did the tenant pay on time?": "Πλήρωνε ο ενοικιαστής στην ώρα του;",
-        "Did the tenant leave utilities unpaid?": "Άφησε απλήρωτους λογαριασμούς;",
-        "Did the tenant leave the apartment in good condition?": "Παραδόθηκε το διαμέρισμα σε καλή κατάσταση;",
-        "Optional comments": "Προαιρετικά σχόλια",
-        "All Reference Requests": "Όλα τα Αιτήματα Σύστασης",
-        "No reference requests have been created yet.": "Δεν έχουν δημιουργηθεί ακόμα αιτήματα σύστασης.",
-        # Settings
-        "Email & App Settings": "Ρυθμίσεις Email & Εφαρμογής",
-        "Email Settings (SMTP)": "Ρυθμίσεις Email (SMTP)",
-        "App Base URL": "Βασικό URL Εφαρμογής",
-        "Base URL for Links": "Βασικό URL για Συνδέσμους",
-        '**To landlord:**': 'Στον Ιδιοκτήτη',
-        # Misc labels
-        "Email": "Email",
-        "Password": "Κωδικός",
-        "Confirm password": "Επιβεβαίωση κωδικού",
-        "Full name": "Πλήρες όνομα",
-        "Role": "Ρόλος",
-        "Tenant": "Ενοικιαστής",
-        "Landlord": "Ιδιοκτήτης",
-        "Admin": "Διαχειριστής",
-        "completed": "Ολοκληρώθηκε",
-        "I confirm that I was the landlord for this tenant. "
-        "By checking this box, I consent to the use of the uploaded tenancy contract "
-        "solely for verifying my relationship with the tenant and for completing this reference. "
-        "The contract will remain encrypted and locked until I provide this confirmation. "
-        "It will not be shared or used for any other purpose, in accordance with GDPR.":
-
-        "Επιβεβαιώνω ότι ήμουν ο ιδιοκτήτης αυτού του ενοικιαστή. "
-        "Με την επιλογή αυτού του πλαισίου συναινώ στη χρήση του ανεβασμένου μισθωτηρίου συμβολαίου "
-        "αποκλειστικά για την επαλήθευση της σχέσης μου με τον ενοικιαστή και για τη συμπλήρωση αυτής της σύστασης. "
-        "Το συμβόλαιο θα παραμείνει κρυπτογραφημένο και κλειδωμένο έως ότου δώσω αυτήν την επιβεβαίωση. "
-        "Δεν θα κοινοποιηθεί ούτε θα χρησιμοποιηθεί για οποιονδήποτε άλλο σκοπό, σύμφωνα με τον GDPR.",
-        "Reference Requests Sent To You": "Αιτήματα σύστασης που σας στάλθηκαν",
-        "Pending": "Εκκρεμή",
-        "Completed": "Ολοκληρωμένα",
-        "Cancelled": "Ακυρωμένα",
-        "All": "Όλα",
-        "Tenant:": "Ενοικιαστής:",
-        "Email:": "Email:",
-        "Status:": "Κατάσταση:",
-        'Logged in with email': 'Συνδεθήκατε με email',
-        "Created:": "Δημιουργήθηκε:",
-        "Score:": "Βαθμολογία:",
-        "**Tenant:**": "**Ενοικιαστής:**",
-        "**Email:**": "**Email:**",
-        "**Status:**": "**Κατάσταση:**",
-        "**Created:**": "**Δημιουργήθηκε:**",
-        "**Score:**": "**Βαθμολογία:**",
-        "Yes": "Ναι",
-        "No": " Όχι",
-        "No previous landlords added yet.": "Δεν έχουν προστεθεί ακόμη προηγούμενοι ιδιοκτήτες.",
-        "No active reference request.": "Δεν υπάρχει ενεργό αίτημα σύστασης.",
-        'Reference from previous landlord': 'Σύσταση από προηγούμενο ιδιοκτήτη',
-        # === Reference Portal (info banner + consent) ===
-        "Reference for": "Σύσταση για",
-        "Address": "Διεύθυνση",
-
-        "I confirm I was the landlord for this tenant and consent to the use and disclosure of my full name solely for verification of this reference.":
-        "Επιβεβαιώνω ότι ήμουν ο/η ιδιοκτήτης/ιδιοκτήτρια αυτού του ενοικιαστή και συναινώ στη χρήση και κοινοποίηση του πλήρους ονόματός μου αποκλειστικά για την επαλήθευση αυτής της σύστασης.",
-
-        "Tenant: {tenant_name} — Address: {address}":
-        "Ενοικιαστής/στρια: {tenant_name} — Διεύθυνση: {address}",
-
-        "Privacy & verification details": "Λεπτομέρειες απορρήτου & επαλήθευσης",
-
-        "RentRight processes your responses, and if the tenant has uploaded a tenancy contract, may decrypt and review it after your confirmation solely to verify this reference (lawful basis: legitimate interests). The contract remains encrypted and is not shown to you. You may object at any time as described in the Privacy Notice.":
-        "Η RentRight επεξεργάζεται τις απαντήσεις σας και, αν ο ενοικιαστής έχει ανεβάσει μισθωτήριο συμβόλαιο, μπορεί να το αποκρυπτογραφήσει και να το εξετάσει μετά την επιβεβαίωσή σας, αποκλειστικά για να επαληθεύσει αυτή τη σύσταση (νομική βάση: έννομα συμφέροντα). Το συμβόλαιο παραμένει κρυπτογραφημένο και δεν εμφανίζεται σε εσάς. Μπορείτε να προβάλλετε αντίρρηση ανά πάσα στιγμή όπως περιγράφεται στην Πολιτική Απορρήτου.",
-
-        "Privacy Notice": "Πολιτική Απορρήτου",
-
-        # --- Form fields (in case any are missing) ---
-        "Overall tenant score": "Συνολική βαθμολογία ενοικιαστή",
-        "Did the tenant pay on time?": "Πλήρωνε ο ενοικιαστής στην ώρα του;",
-        "Did the tenant leave utilities unpaid?": "Άφησε ο ενοικιαστής απλήρωτους λογαριασμούς;",
-        "Did the tenant leave the apartment in good condition?": "Άφησε ο ενοικιαστής το διαμέρισμα σε καλή κατάσταση;",
-        "Optional comments": "Προαιρετικά σχόλια",
-        "Submit Reference": "Υποβολή σύστασης",
-        "Previous landlord:": "Προηγούμενος ιδιοκτήτης",
-        "Consent": "Συγκατάθεση",
-        # Open to Rent
-        "Open to Rent": "Ενοικίαση",
-        "I'm currently looking for a place": "Αναζητώ αυτήν την περίοδο σπίτι",
-        "City": "Πόλη",
-        "District": "Περιοχή",
-        "Min size (m²)": "Ελάχιστο μέγεθος (τ.μ.)",
-        "Max size (m²)": "Μέγιστο μέγεθος (τ.μ.)",
-        "Min rooms": "Ελάχιστα δωμάτια",
-        "Max rooms": "Μέγιστα δωμάτια",
-        "Min floor": "Ελάχιστος όροφος",
-        "Max floor": "Μέγιστος όροφος",
-        "Min price (€)": "Ελάχιστη τιμή (€)",
-        "Max price (€)": "Μέγιστη τιμή (€)",
-        "Save preferences": "Αποθήκευση προτιμήσεων",
-        "Preferences saved.": "Οι προτιμήσεις αποθηκεύτηκαν.",
-        "Please enter at least a city or a district.": "Καταχωρίστε τουλάχιστον πόλη ή περιοχή.",
-        "Please check your ranges: maximums must be greater than or equal to minimums.": "Ελέγξτε τα εύρη: τα μέγιστα πρέπει να είναι μεγαλύτερα ή ίσα από τα ελάχιστα.",
-        "Tip: leave a minimum as 0 if you have no minimum for that field.": "Συμβουλή: αφήστε το ελάχιστο ως 0 αν δεν έχετε ελάχιστο για το πεδίο.",
-        "rooms": "δωμάτια",
-        "Looking in": "Αναζήτηση σε",
-        "Active": "Ενεργό",
-        "Inactive": "Ανενεργό",
-
-    }
 
 
 
@@ -4380,9 +4009,9 @@ def tenant_dashboard():
 
                             # Contract status
                             if contract_i:
-                                st.markdown(f"**{tr('Contract status:')}** {contract_status_badge(contract_i['status'])}")
+                                st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract_i['status'])}")
                             else:
-                                st.markdown(f"**{tr('Contract status:')}** {tr('✅ Verified')}")
+                                st.markdown(f"**{tr('Contract Status:')}** {tr('✅ Verified')}")
 
                             # Answers
                             if details:
@@ -4399,7 +4028,7 @@ def tenant_dashboard():
                                 try:
                                     data_plain_i = load_contract_plaintext(latest_tok)
                                     if data_plain_i is None:
-                                        st.warning(tr("Contract locked until landlord consents."))
+                                        st.warning(tr("Contract locked until landlord consents"))
                                     else:
                                         st.download_button(
                                             tr("Download contract"),
@@ -4468,7 +4097,7 @@ def tenant_dashboard():
                             try:
                                 data_plain = load_contract_plaintext(tok)
                                 if data_plain is None:
-                                    st.warning(tr("Contract locked until landlord consents."))
+                                    st.warning(tr("Contract locked until landlord consents"))
                                 else:
                                     st.download_button(
                                         tr("Download contract"),
@@ -4606,7 +4235,7 @@ def tenant_dashboard():
                                             colB.write(f"{tr('Score')}: **{score_i}**/10")
 
                                         if contract_i:
-                                            st.markdown(f"**{tr('Contract status:')}** {contract_status_badge(contract_i['status'])}")
+                                            st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract_i['status'])}")
                                             try:
                                                 data_plain_i = load_contract_plaintext(tok_i)
                                                 if data_plain_i is None:
@@ -4630,7 +4259,7 @@ def tenant_dashboard():
                                 else:
                                     # Non-final historical entries: show status only
                                     if contract_i:
-                                        st.markdown(f"**{tr('Contract status:')}** {contract_status_badge(contract_i['status'])}")
+                                        st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract_i['status'])}")
                         else:
                             st.caption(tr("No reference requests yet."))
         else:
