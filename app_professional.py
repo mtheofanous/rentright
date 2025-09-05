@@ -3297,10 +3297,9 @@ def tenant_dashboard():
                                         st.rerun()
                                     except Exception as e:
                                         st.error(f"{tr('Can’t add contact')}: {e}")
-
-        # --- Search landlords by property --------------------------------------
+                
         with st.container(border=True):
-            c1, c2 = st.columns([6, 0.06])
+            c1, c2 = st.columns([6, 0.1])
             with c1:
                 st.markdown(f"**{tr('Search landlords by property')}**")
             with c2:
