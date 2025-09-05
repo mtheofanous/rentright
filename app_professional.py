@@ -300,6 +300,26 @@ TRANSLATIONS_EL = {
     "Can’t find the landlord? Send a request by email.": "Δεν βρίσκεις τον ιδιοκτήτη; Στείλε αίτημα μέσω email.",
     "Yes": "Ναι",
     "🏠 RentRight — Landlord Reference Portal": "🏠 RentRight — Συστατικές επιστολές Ιδιοκτήτη",
+    "Contract Status:": "Κατάσταση συμβολαίου:",
+    "✅ Verified": "✅ Επιβεβαιωμένο",
+    "Overall tenant score": "Συνολική αξιολόγηση ενοικιαστή",
+    "Paid on time?": "Πλήρωνε στην ώρα του;",
+    "Any unpaid utilities?": "Υπάρχουν απλήρωτοι λογαριασμοί κοινής ωφέλειας;",
+    "Left in good condition?": "Παραδόθηκε σε καλή κατάσταση;",
+    "Yes": "Ναι",
+    "No": "Όχι",
+    "Comments (optional)": "Σχόλια (προαιρετικά)",
+    "Contract locked until landlord consents": "Το συμβόλαιο είναι κλειδωμένο μέχρι να δώσει συγκατάθεση ο ιδιοκτήτης",
+    "Download contract": "Λήψη συμβολαίου",
+    "Can’t read the saved file:": "Δεν είναι δυνατή η ανάγνωση του αποθηκευμένου αρχείου:",
+    "No active reference request.": "Καμία ενεργή αίτηση σύστασης.",
+    "New reference request": "Νέα αίτηση σύστασης",
+    "Delete this previous landlord and all related data?": "Διαγραφή αυτού του προηγούμενου ιδιοκτήτη και όλων των σχετικών δεδομένων;",
+    "Delete": "Διαγραφή",
+    "Previous landlord deleted.": "Ο προηγούμενος ιδιοκτήτης διαγράφηκε.",
+    "Can’t delete": "Αδυναμία διαγραφής",
+    "Keep": "Διατήρηση",
+    "Delete previous landlord": "Διαγραφή προηγούμενου ιδιοκτήτη",
     "✅ Verify Contract": "✅ Επικύρωση Συμβολαίου",
     "✅ Verified": "✅ Επιβεβαιωμένο",
     "✅ Verified Contract": "✅ Επικυρωμένο Συμβόλαιο",
@@ -4486,7 +4506,7 @@ def tenant_dashboard():
                                 key="profile_age"
                             )
                             monthly_salary = st.number_input(
-                                tr("Monthly salary (€)"), min_value=0, max_value=1_000_000, step=1000,
+                                tr("Monthly salary (€)"), min_value=0, max_value=1_000_000, step=100,
                                 value=int((_prof or {}).get("monthly_salary") or 0),
                                 key="profile_salary"
                             )
