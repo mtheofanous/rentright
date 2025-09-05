@@ -4133,7 +4133,7 @@ def tenant_dashboard():
         # Header + compact help
         c1, c2 = st.columns([6, 0.3])
         with c1:
-            st.markdown(f"**{tr('Open to rent')}**")
+            st.subheader(f"**{tr('Open to rent')}**")
         with c2:
             help_icon(tr("Let landlords know you’re looking and share your criteria."), key="help_otr_header")
 
