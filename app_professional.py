@@ -1521,6 +1521,36 @@ def _initials_safe(name: str | None, email: str | None) -> str:
     if parts: return parts[0][:2].upper()
     return "?"
 
+def get_thread_id_if_exists(landlord_id: int, tenant_id: int) -> int | None:
+    c = get_conn()
+    row = c.execute(
+        "SELECT id FROM chat_threads WHERE landlord_id=? AND tenant_id=?",
+        (landlord_id, tenant_id)
+    ).fetchone()
+    return row[0] if row else None
+
+def get_unread_count(thread_id: int, reader_id: int) -> int:
+    if not thread_id:
+        return 0
+    c = get_conn()
+    row = c.execute(
+        "SELECT COUNT(*) FROM chat_messages "
+        "WHERE thread_id=? AND sender_id<>? AND read_at IS NULL",
+        (thread_id, reader_id)
+    ).fetchone()
+    return int(row[0] or 0)
+
+def mark_thread_read(thread_id: int, reader_id: int):
+    if not thread_id:
+        return
+    c = get_conn()
+    c.execute(
+        "UPDATE chat_messages SET read_at=datetime('now') "
+        "WHERE thread_id=? AND sender_id<>? AND read_at IS NULL",
+        (thread_id, reader_id)
+    )
+    c.commit()
+
 
 @st.cache_resource
 def _load_avatar_font():
@@ -4226,42 +4256,51 @@ def tenant_dashboard():
                 if status == "connected":
                     a1, a2 = colR.columns(2)
 
-                    # unique id for THIS landlord↔tenant pair
                     pair_key = f"{landlord_id}-{tenant_id}"
-
-                    # Is THIS card's chat open?
                     chat_is_open = (
                         st.session_state.get("chat_open", False)
                         and st.session_state.get("selected_thread") == pair_key
                     )
 
-                    btn_label = tr("Close Chat") if chat_is_open else tr("Message")
-                    btn_type  = "primary" if chat_is_open else "secondary"
+                    # calcular no leídos para este par
+                    me_id = st.session_state.user["id"]
+                    thread_id_existing = get_thread_id_if_exists(landlord_id, tenant_id)
+                    unread = get_unread_count(thread_id_existing, me_id)
+
+                    # label con badge cuando NO está abierto
+                    if chat_is_open:
+                        btn_label = tr("Close Chat")
+                        btn_type  = "primary"
+                    else:
+                        base = tr("Message")
+                        btn_label = f"{base} ({unread})" if unread > 0 else base
+                        btn_type  = "secondary" if unread == 0 else "primary"  # resalta si hay no leídos
 
                     if a1.button(btn_label, key=k(cid, "chat_toggle"), type=btn_type):
                         if chat_is_open:
-                            # close just this chat
                             st.session_state.chat_open = False
                             st.session_state.selected_thread = None
                         else:
-                            # open this chat (and close any other)
                             st.session_state["chat_role"] = "tenant"
                             st.session_state["chat_with_landlord_id"] = landlord_id
                             st.session_state["chat_with_tenant_id"] = tenant_id
                             st.session_state.selected_thread = pair_key
                             st.session_state.chat_open = True
+
+                            # asegúrate de que exista el thread y marca como leído al abrir
+                            tid = get_or_create_thread(landlord_id, tenant_id)
+                            mark_thread_read(tid, me_id)
+
                         st.rerun()
 
                     if a2.button(tr("Disconnect"), key=k(cid, "disconnect_connected")):
-                        if landlord_id:
-                            flc_disconnect(landlord_id, tenant_id)
-                        try:
-                            st.cache_data.clear()
-                        except Exception:
-                            pass
+                        if landlord_id: flc_disconnect(landlord_id, tenant_id)
+                        try: st.cache_data.clear()
+                        except Exception: pass
                         st.warning(tr("Disconnected."))
                         _clear_transient_search_flags()
                         st.rerun()
+
 
 
                 elif inbound_request:
@@ -5197,40 +5236,36 @@ def landlord_dashboard():
                 # Right: actions (now includes Message when connected)
                 if status == "connected":
                     a1, a2 = colR.columns(2)
-
-                    # unique id for THIS landlord↔tenant pair
                     pair_key = f"{landlord_id}-{tid}"
-
-                    # Is THIS card's chat open?
                     chat_is_open = (
                         st.session_state.get("chat_open", False)
                         and st.session_state.get("selected_thread") == pair_key
                     )
 
-                    btn_label = tr("Close Chat") if chat_is_open else tr("Message")
-                    btn_type  = "primary" if chat_is_open else "secondary"
+                    me_id = st.session_state.user["id"]
+                    thread_id_existing = get_thread_id_if_exists(landlord_id, tid)
+                    unread = get_unread_count(thread_id_existing, me_id)
+
+                    if chat_is_open:
+                        btn_label = tr("Close Chat")
+                        btn_type  = "primary"
+                    else:
+                        base = tr("Message")
+                        btn_label = f"{base} ({unread})" if unread > 0 else base
+                        btn_type  = "secondary" if unread == 0 else "primary"
 
                     if a1.button(btn_label, key=pk(tid, "chat_toggle"), type=btn_type):
                         if chat_is_open:
-                            # close just this chat
                             st.session_state.chat_open = False
                             st.session_state.selected_thread = None
                         else:
-                            # open this chat (and close any other)
                             st.session_state["chat_role"] = "landlord"
                             st.session_state["chat_with_tenant_id"] = tid
                             st.session_state["chat_with_landlord_id"] = landlord_id
                             st.session_state.selected_thread = pair_key
                             st.session_state.chat_open = True
-                        st.rerun()
-
-                    if a2.button(tr("Disconnect"), key=pk(tid, "disconnect")):
-                        flc_disconnect(landlord_id, tid)
-                        try:
-                            st.cache_data.clear()
-                        except Exception:
-                            pass
-                        st.warning(tr("Disconnected."))
+                            tid_real = get_or_create_thread(landlord_id, tid)
+                            mark_thread_read(tid_real, me_id)
                         st.rerun()
 
 
