@@ -77,6 +77,7 @@ TRANSLATIONS_EL = {
         "Can’t add contact": "Αδυναμία προσθήκης επαφής",
         
         "My properties": "Τα ακίνητά μου",
+        "My Properties": "Τα Aκίνητά μου",
 
         # Add property
         "Add property": "Προσθήκη ακινήτου",
@@ -350,6 +351,7 @@ TRANSLATIONS_EL = {
         
          # Section & search
         "Find tenants": "Εύρεση ενοικιαστών",
+        "Find Tenants": "Εύρεση Eνοικιαστών",
         "Search by name or email": "Αναζήτηση με όνομα ή email",
         "e.g. Maria or nikos@example.com": "π.χ. Μαρία ή nikos@example.com",
         "Results limit": "Όριο αποτελεσμάτων",
@@ -5802,196 +5804,7 @@ def landlord_dashboard():
                                             st.write(comments)
                                 elif status_label != "connected":
                                     st.caption(tr("Connect to view full answers"))
-    # def find_tenants():
-    #     st.subheader(tr("Find Tenants (Open to Rent)"))
 
-    #     with st.container(border=True):
-    #         c1, c2 = st.columns([3, 1])
-    #         with c1:
-    #             q = st.text_input(
-    #                 tr("Search by name or email"),
-    #                 placeholder="e.g. Maria, nikos@example.com",
-    #                 key="otr_q",
-    #             )
-    #         with c2:
-    #             limit = st.number_input(tr("Max results"), 1, 500, 100, key="otr_limit")
-
-    #         with st.expander(tr("Filters (based on tenants' preferences)"), True):
-    #             # Location pickers (Region → Regional Unit → Municipality)
-    #             lc1, lc2, lc3 = st.columns(3)
-    #             with lc1:
-    #                 region, regional_unit, municipality = greece_location_pickers(prefix="otr")
-    #             city = municipality            # Municipality (Dimos)
-    #             district = regional_unit       # Regional Unit (Perifereiaki Enotita)
-
-    #             # Ranges
-    #             r1c1, r1c2 = st.columns(2)
-    #             size_min = r1c1.number_input(tr("Min size (m²)"), min_value=0, max_value=10000, value=0, step=1, key="otr_size_min") or None
-    #             size_max = r1c2.number_input(tr("Max size (m²)"), min_value=0, max_value=10000, value=0, step=1, key="otr_size_max") or None
-
-    #             r2c1, r2c2 = st.columns(2)
-    #             rooms_min = r2c1.number_input(tr("Min rooms"), min_value=0, max_value=50, value=0, step=1, key="otr_rooms_min") or None
-    #             rooms_max = r2c2.number_input(tr("Max rooms"), min_value=0, max_value=50, value=0, step=1, key="otr_rooms_max") or None
-
-    #             r3c1, r3c2 = st.columns(2)
-    #             floor_min_val = r3c1.number_input(tr("Min floor"), min_value=-5, max_value=100, value=0, step=1, key="otr_floor_min")
-    #             floor_max_val = r3c2.number_input(tr("Max floor"), min_value=-5, max_value=100, value=0, step=1, key="otr_floor_max")
-    #             floor_min = floor_min_val if floor_min_val != 0 else None
-    #             floor_max = floor_max_val if floor_max_val != 0 else None
-
-    #             r4c1, r4c2 = st.columns(2)
-    #             price_min = r4c1.number_input(tr("Min price (€)"), min_value=0, max_value=1_000_000, value=0, step=50, key="otr_price_min") or None
-    #             price_max = r4c2.number_input(tr("Max price (€)"), min_value=0, max_value=1_000_000, value=0, step=50, key="otr_price_max") or None
-
-    #         # Sticky search flag so results persist after button clicks
-    #         if "ld_otr_do_search" not in st.session_state:
-    #             st.session_state["ld_otr_do_search"] = False
-
-    #         cbtn1, cbtn2 = st.columns([1, 1])
-    #         if cbtn1.button(tr("Search"), key="ld_otr_search_btn"):
-    #             st.session_state["ld_otr_do_search"] = True
-    #         if cbtn2.button(tr("Reset"), key="ld_otr_reset_btn"):
-    #             st.session_state["ld_otr_do_search"] = False
-    #             try: st.cache_data.clear()
-    #             except Exception: pass
-    #             st.rerun()
-
-    #         if st.session_state["ld_otr_do_search"]:
-    #             results = search_open_to_rent_tenants(
-    #                 q=q,
-    #                 city=city,
-    #                 district=district,
-    #                 size_min=size_min, size_max=size_max,
-    #                 rooms_min=rooms_min, rooms_max=rooms_max,
-    #                 floor_min=floor_min, floor_max=floor_max,
-    #                 price_min=price_min, price_max=price_max,
-    #                 limit=limit,
-    #             )
-
-    #             if not results:
-    #                 st.info(tr("No matching tenants found."))
-    #             else:
-    #                 st.caption(f"{len(results)} {tr('result(s)')}")
-    #                 for r in results:
-    #                     (
-    #                         tenant_id, tenant_name, tenant_email, updated_at,
-    #                         t_city, t_district,
-    #                         t_smin, t_smax, t_rmin, t_rmax, t_fmin, t_fmax, t_pmin, t_pmax
-    #                     ) = r
-
-    #                     with st.container(border=True):
-    #                         top = st.columns([5, 3, 4])
-
-    #                         # Left: identity + quick prefs recap
-    #                         title = tenant_name or f"Tenant #{tenant_id}"
-    #                         top[0].markdown(f"**{title}** — {tenant_email}")
-    #                         pref_bits = []
-    #                         if t_city:     pref_bits.append(t_city)
-    #                         if t_district: pref_bits.append(t_district)
-    #                         range_bits = []
-    #                         if t_smin or t_smax: range_bits.append(f"{tr('Size')} {t_smin or '—'}–{t_smax or '—'} m²")
-    #                         if t_rmin or t_rmax: range_bits.append(f"{tr('Rooms')} {t_rmin or '—'}–{t_rmax or '—'}")
-    #                         if t_fmin is not None or t_fmax is not None:
-    #                             range_bits.append(f"{tr('Floor')} {t_fmin if t_fmin is not None else '—'}–{t_fmax if t_fmax is not None else '—'}")
-    #                         if t_pmin or t_pmax: range_bits.append(f"{tr('Price')} €{t_pmin or '—'}–€{t_pmax or '—'}")
-    #                         sub = " · ".join([", ".join(pref_bits)] + ([" | ".join(range_bits)] if range_bits else []))
-    #                         if sub.strip(", · |"):
-    #                             top[0].caption(sub)
-                    
-
-    #                         # Hide only final states, not pending
-    #                         try:
-    #                             status = flc_get_status(landlord_id, tenant_id)
-    #                         except Exception:
-    #                             status = None
-    
-
-    #                         # Right: outbound pending logic (landlord -> tenant)
-    #                         # --- Status badge + actions (show for all: connected / pending / disconnected / none) ---
-    #                         status_label, pending_dir = flc_relation_status(landlord_id, tenant_id, landlord_email)
-
-    #                         # Middle column: status badge
-    #                         if status_label == "connected":
-    #                             top[1].success(tr("Connected"))
-    #                         elif status_label == "pending":
-    #                             top[1].info(tr("Pending"))
-    #                         elif status_label == "disconnected":
-    #                             top[1].error(tr("Disconnected"))
-    #                         else:
-    #                             top[1].caption(tr("No relation"))
-
-    #                         # Right column: actions, depending on status/origin
-    #                         if status_label == "connected":
-    #                             pass
-
-
-    #                         elif status_label == "pending":
-    #                             pass
-
-
-    #                         elif status_label == "disconnected":
-    #                             # Show the status AND allow sending a new request
-    #                             if top[2].button(tr("Ask to connect"), key=f"otr_req_{tenant_id}"):
-    #                                 flc_request_connect(landlord_id, tenant_id)
-    #                                 try: st.cache_data.clear()
-    #                                 except Exception: pass
-    #                                 st.rerun()
-
-    #                         else:
-    #                             # No relation yet
-    #                             if top[2].button(tr("Ask to connect"), key=f"otr_req_{tenant_id}"):
-    #                                 flc_request_connect(landlord_id, tenant_id)
-    #                                 try: st.cache_data.clear()
-    #                                 except Exception: pass
-    #                                 st.rerun()
-
-
-    #                         # --- References quick summary + (when connected) answers ---
-    #                         ref = quick_reference_summary(tenant_id)
-
-    #                         if not ref["have"]:
-    #                             st.caption(f"📄 {tr('References')}: {tr('None')}")
-    #                         else:
-    #                             # Pretty status label if you have a helper; fall back if not.
-    #                             try:
-    #                                 latest_status_label = display_status_label(ref["latest_status"])
-    #                             except Exception:
-    #                                 latest_status_label = (ref["latest_status"] or "").title() or "—"
-
-    #                             # Result priority: latest score (if latest completed) -> avg completed -> —
-    #                             if ref["latest_score"] is not None:
-    #                                 result_txt = f"{ref['latest_score']}/10"
-    #                             elif ref["avg_score"] is not None:
-    #                                 result_txt = f"{ref['avg_score']}/10 {tr('avg')}"
-    #                             else:
-    #                                 result_txt = "—"
-
-    #                             st.caption(
-    #                                 "📄 "
-    #                                 + f"{tr('References')}: {ref['total']}  ·  "
-    #                                 + f"{tr('Latest status')}: {latest_status_label}"
-    #                             )
-
-    #                             if status_label == "connected" and ref["latest_answers"]:
-    #                                 st.write(f"{tr('Result')}: {result_txt}")
-    #                                 ans = ref["latest_answers"]
-    #                                 prev_from = ans.get("prev_email") or "—"
-    #                                 comments  = ans.get("comments")
-    #                                 with st.expander(tr("Latest reference answers"), expanded=False):
-    #                                     st.write(
-    #                                         f"- {tr('From previous landlord')}: **{prev_from}**  \n"
-    #                                         f"- {tr('Paid on time')}: **{_yn(ans.get('paid_on_time'))}**  \n"
-    #                                         f"- {tr('Utilities unpaid')}: **{_yn(ans.get('utilities_unpaid'))}**  \n"
-    #                                         f"- {tr('Apartment in good condition')}: **{_yn(ans.get('good_condition'))}**"
-    #                                     )
-    #                                     if comments:
-    #                                         st.markdown(f"- {md_label('Comments:')}")
-    #                                         st.write(comments)
-
-    #                             elif status_label != "connected":
-    #                                 # keep privacy consistent with your dashboard: details only after connect
-    #                                 st.caption(f"🔒 {tr('Connect to view full answers')}")
-                                    
                                     
 
         # === Reference requests that were sent to this landlord ===
@@ -6142,13 +5955,13 @@ def landlord_dashboard():
                         with st.expander(tr('View Submitted Reference')):
                             details = get_reference_request_by_token(token)
                             if details:
-                                st.write(f"Confirmed landlord: {'Yes' if details['confirm_landlord'] else 'No'}")
-                                st.write(f"Score: {details['score']}/10")
-                                st.write(f"Paid on time: {'Yes' if details['paid_on_time'] else 'No'}")
-                                st.write(f"Utilities unpaid: {'Yes' if details['utilities_unpaid'] else 'No'}")
-                                st.write(f"Apartment in good condition: {'Yes' if details['good_condition'] else 'No'}")
+                                st.write(f"{tr("Confirmed landlord")}: {tr('Yes') if details['confirm_landlord'] else tr('No')}")
+                                st.write(f"{tr("Score")}: {details['score']}/10")
+                                st.write(f"{tr("Paid on time")}: {tr('Yes') if details['paid_on_time'] else 'No'}")
+                                st.write(f"{tr("Utilities unpaid")}: {tr('Yes') if details['utilities_unpaid'] else tr('No')}")
+                                st.write(f"{tr("Apartment in good condition")}: {tr('Yes') if details['good_condition'] else tr('No')}")
                                 if details.get('comments'):
-                                    st.write("**Comments:**")
+                                    st.write(f"**{tr("Comments")}:**")
                                     st.write(details['comments'])
 
 
