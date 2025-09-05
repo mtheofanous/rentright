@@ -48,6 +48,7 @@ TRANSLATIONS_EL = {
     "**Status:**": "**Κατάσταση:**",
     "**Tenant:**": "**Ενοικιαστής:**",
     "**To landlord:**": "Στον Ιδιοκτήτη",
+    "Property filters": "Φίλτρα αναζήτησης",
     "Phone (optional)": "Τηλέφωνο (προαιρετικό)",
     "Show phone to others?": "Εμφάνιση τηλεφώνου σε άλλους;",
     "Enter a valid phone number.": "Εισάγετε ένα έγκυρο τηλέφωνο.",
@@ -107,6 +108,7 @@ TRANSLATIONS_EL = {
     "Email": "Email",
     "Email & App Settings": "Ρυθμίσεις Email & Εφαρμογής",
     "Email delivery failed": "Αποτυχία αποστολής email",
+    "Profile details":"Προσωπικά στοιχεία",
     "Email Settings (SMTP)": "Ρυθμίσεις Email (SMTP)",
     "Enter a valid email.": "Εισάγετε έγκυρο email.",
     "Enter at least a city or a district.": "Εισαγάγετε τουλάχιστον πόλη ή περιφερειακή ενότητα.",
@@ -267,6 +269,7 @@ TRANSLATIONS_EL = {
     "Replace Tenancy Contract (PDF or Image)": "Αντικατάσταση Συμβολαίου Μίσθωσης (PDF ή Εικόνα)",
     "Updated": "Ενημερώθηκε",
     "Updated:": "Ενημερώθηκε:",
+    "Property characteristics": "Χαρακτηριστικά ακινήτου",
     "Use ‘Any’ to skip": "Χρησιμοποιήστε «Οποιοδήποτε» για παράλειψη",
     "Utilities unpaid": "Απλήρωτοι λογαριασμοί",
     "Valid or expired token error": "Μη έγκυρο ή ληγμένο διακριτικό σύστασης.",
@@ -4016,15 +4019,7 @@ def tenant_dashboard():
     
     
     def tenant_contacts():
-        # Header + small help icon (Option A: render-only helper in a second column)
-        # c1, c2 = st.columns([6, 0.3])
-        # with c1:
-        #     st.markdown(f"**{tr('Future landlords')}**")
-        # with c2:
-        #     help_icon(tr("Landlords you’ve added or connected with."), key="help_contacts_header")
-
-       
-
+    
         _ensure_tfl_css()
 
         # Namespace + key builder (LOCAL to this function)
@@ -4421,7 +4416,7 @@ def tenant_dashboard():
 
             with st.expander(tr("Profile details"), expanded=False):
                 # Header row with Edit / Save / Cancel
-                b1, _ = st.columns([2, 9])
+                b1, _ = st.columns([3, 9])
 
                 if not st.session_state["profile_editing"]:
                     # Read-only summary chips
