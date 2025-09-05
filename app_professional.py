@@ -5035,7 +5035,7 @@ def landlord_dashboard():
             region, district, city, size_m2, rooms, floor, price) in props:
 
             with st.container(border=True):
-                head = st.columns([4, 5, 5])
+                head = st.columns([4, 3, 5])
 
                 # Left: Address + link + compact spec line
                 head[0].markdown(f"**{address}**")
