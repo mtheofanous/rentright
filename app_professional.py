@@ -4407,7 +4407,7 @@ def tenant_dashboard():
 
             with st.expander(tr("Profile details"), expanded=False):
                 # Header row with Edit / Save / Cancel
-                b1, b2, _ = st.columns([1, 1, 6])
+                b1, b2, _ = st.columns([4, 1, 6])
 
                 if not st.session_state["profile_editing"]:
                     # Read-only summary chips
