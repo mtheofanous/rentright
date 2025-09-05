@@ -4211,7 +4211,7 @@ def tenant_dashboard():
 
     def tenant_open_to_rent_section():
         # Header + compact help
-        c1, c2 = st.columns([6, 0.08])
+        c1, c2 = st.columns([6, 0.6])
         with c1:
             st.subheader(f"**{tr('Open to rent')}**")
         with c2:
