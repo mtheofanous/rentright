@@ -4284,7 +4284,7 @@ def tenant_dashboard():
                 st.session_state["loc_city"] = ANY
 
             # Active / Inactive toggle with a small help icon (important UX)
-            cb1, cb2 = st.columns([1, 0.3])
+            cb1, cb2 = st.columns([1, 0.08])
             with cb1:
                 open_flag = st.checkbox(
                     tr("I’m looking for a place"),
