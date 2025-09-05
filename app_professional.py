@@ -4142,15 +4142,14 @@ def tenant_dashboard():
 
                 # actions
                 if status == "connected":
-                    # existing Disconnect button can stay
-                    # Add a Message button to open chat
-                    if colR.button(tr("Message"), key=k(cid, "chat_open")):
+                    a1, a2 = colR.columns(2)
+                    if a1.button(tr("Message"), key=k(cid, "chat_open")):
                         st.session_state["chat_with_landlord_id"] = landlord_id
                         st.session_state["chat_role"] = "tenant"
                         st.session_state["chat_open"] = True
                         st.rerun()
     
-                    if colR.button(tr("Disconnect"), key=k(cid, "disconnect_connected")):
+                    if a2.button(tr("Disconnect"), key=k(cid, "disconnect_connected")):
                         if landlord_id: flc_disconnect(landlord_id, tenant_id)
                         try: st.cache_data.clear()
                         except Exception: pass
