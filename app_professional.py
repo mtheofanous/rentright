@@ -388,6 +388,36 @@ div[data-testid="stSwitch"].thread-row label{
 </style>
 """, unsafe_allow_html=True)
 
+# ---- minimal CSS for Prospective Tenants cards ----
+def _ensure_pt_css():
+    st.markdown("""
+    <style>
+    .pt-title{display:flex;align-items:center;gap:12px;margin-bottom:4px}
+    .pt-avatar{width:40px;height:40px;border-radius:999px;display:flex;align-items:center;justify-content:center;
+            font-weight:700;color:#111;border:1px solid #e5e7eb;background:linear-gradient(135deg,#f8fafc,#e2e8f0)}
+    .pt-name{font-weight:700;font-size:1.05rem;margin:0}
+    .pt-email{color:#64748b;font-size:.9rem;margin-top:2px}
+    .pt-badge{padding:4px 10px;border-radius:999px;font-size:.85rem;font-weight:600;border:1px solid;display:inline-block}
+    .pt-badge--ok{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
+    .pt-badge--info{background:#eff6ff;color:#1e40af;border-color:#bfdbfe}
+    .pt-badge--err{background:#fef2f2;color:#7f1d1d;border-color:#fecaca}
+    .pt-meta{color:#94a3b8;font-size:.85rem;margin-top:2px}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#f1f5f9;color:#334155;font-size:.8rem;
+        margin-right:6px;margin-bottom:4px;border:1px solid #e2e8f0}
+    .pill-score{background:#eef2ff;color:#3730a3;border-color:#c7d2fe}
+    .pill-ok{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
+    .pill-no{background:#fef2f2;color:#7f1d1d;border-color:#fecaca}
+    .pill-na{background:#f1f5f9;color:#334155;border-color:#e2e8f0}
+    .ref-card{border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;margin-bottom:8px;background:#fff}
+    .ref-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .ref-title{font-weight:600;margin-bottom:2px}
+    .ref-row{display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:8px}
+    .ref-comments{border-left:3px solid #e2e8f0;padding-left:10px;margin-top:8px;color:#334155}
+    .ref-sub{color:#475569;font-size:.9rem;margin:4px 0 6px}
+    .ref-foot{color:#64748b;font-size:.85rem}
+    </style>
+    """, unsafe_allow_html=True)
+
 
 
 def help_icon(text: str, key: str | None = None):
@@ -1204,6 +1234,18 @@ def run_migrations(conn):
     add_column_if_missing(conn, "landlord_properties", "floor INTEGER")
     add_column_if_missing(conn, "landlord_properties", "price INTEGER")
     conn.commit()
+    
+    # --- Profile details on tenant_profiles ---
+    add_column_if_missing(conn, "tenant_profiles", "age INTEGER")
+    add_column_if_missing(conn, "tenant_profiles", "annual_salary INTEGER")
+    add_column_if_missing(conn, "tenant_profiles", "marital_status TEXT")
+    add_column_if_missing(conn, "tenant_profiles", "job_position TEXT")
+    add_column_if_missing(conn, "tenant_profiles", "contract_type TEXT")
+    add_column_if_missing(conn, "tenant_profiles", "pets INTEGER")
+    add_column_if_missing(conn, "tenant_profiles", "num_tenants INTEGER")
+    add_column_if_missing(conn, "tenant_profiles", "about TEXT")
+
+
 
 def run_chat_migrations(conn):
     cur = conn.cursor()
@@ -1935,6 +1977,42 @@ def save_open_to_rent_prefs(
         ),
     )
     conn.commit()
+    
+def load_profile_details(tenant_id: int) -> dict:
+    c = get_conn()
+    row = c.execute("""
+        SELECT age, job, annual_salary, marital_status, job_position,
+               contract_type, pets, num_tenants, about
+        FROM tenant_profiles WHERE tenant_id=?
+    """, (tenant_id,)).fetchone()
+    if not row:
+        return {}
+    return dict(row)
+
+def save_profile_details(tenant_id: int, **data):
+    c = get_conn()
+    # Ensure a profile row exists
+    c.execute("""
+        INSERT INTO tenant_profiles (tenant_id, updated_at)
+        VALUES (?, datetime('now'))
+        ON CONFLICT(tenant_id) DO NOTHING
+    """, (tenant_id,))
+    # Update provided keys only
+    fields = []
+    params = []
+    for k in ("age","job","annual_salary","marital_status","job_position",
+              "contract_type","pets","num_tenants","about"):
+        if k in data:
+            fields.append(f"{k}=?")
+            params.append(data[k])
+    if fields:
+        params.extend([tenant_id])
+        c.execute(f"""
+            UPDATE tenant_profiles SET {", ".join(fields)}, updated_at=datetime('now')
+            WHERE tenant_id=?
+        """, params)
+    c.commit()
+
 
 # properties helpers
 # Start here-------------------------------------------------------
@@ -4309,6 +4387,159 @@ def tenant_dashboard():
                     st.session_state["otr_force_defaults"]  = True
                     st.session_state["otr_reset_preselect"] = True
                     st.rerun()
+                    
+            # --- Profile details (own Edit/Save flow) -------------------------------------
+            tid = st.session_state.user["id"]
+            _prof = load_profile_details(tid)
+
+            # one-time default for edit mode
+            if "profile_editing" not in st.session_state:
+                st.session_state["profile_editing"] = False
+
+            
+            _ensure_pt_css()
+            
+            with st.expander(tr("Profile details"), expanded=False):
+                # Header row with Edit / Save / Cancel
+                b1, b2, b3 = st.columns([1, 1, 6])
+                # if not st.session_state["profile_editing"]:
+                if not st.session_state["profile_editing"]:
+                    # Build chips from saved profile (fallbacks to “—” where empty)
+                    p = _prof or {}
+                    def _val(x, dash="—"): return (str(x).strip() if (x not in (None, "", 0)) else dash)
+
+                    _pets = tr("Yes") if p.get("pets") in (1, True) else tr("No") if p.get("pets") in (0, False) else "—"
+
+                    chips = []
+                    if p.get("age"):              chips.append(f'<span class="pill">{tr("Age")}: {int(p["age"])}</span>')
+                    if p.get("marital_status"):   chips.append(f'<span class="pill">{tr("Marital status")}: {p["marital_status"]}</span>')
+                    if p.get("contract_type"):    chips.append(f'<span class="pill">{tr("Contract type")}: {p["contract_type"]}</span>')
+                    if p.get("annual_salary") is not None:
+                        chips.append(f'<span class="pill">{tr("Annual salary (€)")}: {int(p["annual_salary"]):,}</span>')
+                    chips.append(f'<span class="pill">{tr("Pets")}: {_pets}</span>')
+                    if p.get("num_tenants"):      chips.append(f'<span class="pill">{tr("Number of tenants")}: {int(p["num_tenants"])}</span>')
+
+                    about_html = ""
+                    if _val(p.get("about"), None):
+                        about_html = f"<div class='ref-comments'>{escape(p.get('about'))}</div>"
+
+                    st.markdown(
+                        f"""
+                        <div class="ref-card">
+                        <div class="ref-header">
+                            <div class="ref-title">{tr("Profile details")}</div>
+                        </div>
+                        <div class="ref-row">{' '.join(chips) or '—'}</div>
+                        {about_html}
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+                    if b1.button(tr("Edit profile details"), key="btn_profile_edit"):
+                        st.session_state["profile_editing"] = True
+                        st.rerun()
+                else:
+                    # Save lives inside the form below; provide a Cancel here
+                    if b2.button(tr("Cancel"), key="btn_profile_cancel"):
+                        st.session_state["profile_editing"] = False
+                        st.rerun()
+
+                # # Use a form so Save only runs when explicitly pressed here
+                # with st.form("profile_details_form", clear_on_submit=False):
+                #     disabled = not st.session_state["profile_editing"]
+
+                #     c1, c2 = st.columns(2)
+                #     with c1:
+                #         age = st.number_input(
+                #             tr("Age"), min_value=18, max_value=100, step=1,
+                #             value=int((_prof or {}).get("age") or 18),
+                #             key="profile_age", disabled=disabled
+                #         )
+                #         annual_salary = st.number_input(
+                #             tr("Annual salary (€)"), min_value=0, max_value=1_000_000, step=1000,
+                #             value=int((_prof or {}).get("annual_salary") or 0),
+                #             key="profile_salary", disabled=disabled
+                #         )
+                #         marital_status_opts = ["Single","Married","Divorced","Widowed"]
+                #         marital_status_idx = (
+                #             marital_status_opts.index(((_prof or {}).get("marital_status") or "Single"))
+                #             if ((_prof or {}).get("marital_status") in marital_status_opts) else 0
+                #         )
+                #         marital_status = st.selectbox(
+                #             tr("Marital status"),
+                #             [tr(x) for x in marital_status_opts],
+                #             index=marital_status_idx,
+                #             key="profile_marital", disabled=disabled
+                #         )
+                #         pets = st.radio(
+                #             tr("Pets"), [tr("Yes"), tr("No")], horizontal=True,
+                #             index=(0 if ((_prof or {}).get("pets") in (1, True)) else 1),
+                #             key="profile_pets", disabled=disabled
+                #         )
+                #         num_tenants = st.number_input(
+                #             tr("Number of tenants"), min_value=1, max_value=10, step=1,
+                #             value=int((_prof or {}).get("num_tenants") or 1),
+                #             key="profile_num_tenants", disabled=disabled
+                #         )
+                #     with c2:
+                #         job_position = st.text_input(
+                #             tr("Job position"), value=(_prof or {}).get("job_position") or "",
+                #             key="profile_job_position", disabled=disabled
+                #         )
+                #         contract_type_opts = ["Permanent","Temporary","Freelancer","Other"]
+                #         contract_type_idx = (
+                #             contract_type_opts.index(((_prof or {}).get("contract_type") or "Permanent"))
+                #             if ((_prof or {}).get("contract_type") in contract_type_opts) else 0
+                #         )
+                #         contract_type = st.selectbox(
+                #             tr("Contract type"),
+                #             [tr(x) for x in contract_type_opts],
+                #             index=contract_type_idx,
+                #             key="profile_contract", disabled=disabled
+                #         )
+                #     about = st.text_area(
+                #         tr("A few words about yourself"),
+                #         value=(_prof or {}).get("about") or "",
+                #         key="profile_about", disabled=disabled
+                #     )
+
+                    # Dedicated Save button for this expander
+                    save_clicked = st.form_submit_button(tr("Save profile details"))
+
+                    if save_clicked and st.session_state["profile_editing"]:
+                        # Map translated choices back to canonical values
+                        marital_map = {
+                            tr("Single"): "Single",
+                            tr("Married"): "Married",
+                            tr("Divorced"): "Divorced",
+                            tr("Widowed"): "Widowed",
+                        }
+                        contract_map = {
+                            tr("Permanent"): "Permanent",
+                            tr("Temporary"): "Temporary",
+                            tr("Freelancer"): "Freelancer",
+                            tr("Other"): "Other",
+                        }
+
+                        save_profile_details(
+                            tid,
+                            age=int(st.session_state["profile_age"]),
+                            annual_salary=int(st.session_state["profile_salary"]),
+                            marital_status=marital_map.get(st.session_state["profile_marital"], "Single"),
+                            job_position=st.session_state["profile_job_position"].strip(),
+                            contract_type=contract_map.get(st.session_state["profile_contract"], "Permanent"),
+                            pets=(1 if st.session_state["profile_pets"] == tr("Yes") else 0),
+                            num_tenants=int(st.session_state["profile_num_tenants"]),
+                            about=st.session_state["profile_about"].strip(),
+                        )
+                        try: st.cache_data.clear()
+                        except Exception: pass
+                        st.success(tr("Changes saved."))
+                        st.session_state["profile_editing"] = False
+                        st.rerun()
+
+
 
         # --- Compact summary (uses current widget values) ---------------------------
         def _fmt_range(lo, hi, suffix=""):
@@ -4785,41 +5016,11 @@ def landlord_dashboard():
     # =============================================================================
     # Prospective Tenants (landlord view)
     # =============================================================================
-    # =============================================================================
-    # Prospective tenants (landlord view)
-    # =============================================================================
+
     def my_tenants():
         # st.subheader(tr("Prospective tenants"))
 
-        # ---- minimal CSS for Prospective Tenants cards ----
-        def _ensure_pt_css():
-            st.markdown("""
-            <style>
-            .pt-title{display:flex;align-items:center;gap:12px;margin-bottom:4px}
-            .pt-avatar{width:40px;height:40px;border-radius:999px;display:flex;align-items:center;justify-content:center;
-                    font-weight:700;color:#111;border:1px solid #e5e7eb;background:linear-gradient(135deg,#f8fafc,#e2e8f0)}
-            .pt-name{font-weight:700;font-size:1.05rem;margin:0}
-            .pt-email{color:#64748b;font-size:.9rem;margin-top:2px}
-            .pt-badge{padding:4px 10px;border-radius:999px;font-size:.85rem;font-weight:600;border:1px solid;display:inline-block}
-            .pt-badge--ok{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
-            .pt-badge--info{background:#eff6ff;color:#1e40af;border-color:#bfdbfe}
-            .pt-badge--err{background:#fef2f2;color:#7f1d1d;border-color:#fecaca}
-            .pt-meta{color:#94a3b8;font-size:.85rem;margin-top:2px}
-            .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#f1f5f9;color:#334155;font-size:.8rem;
-                margin-right:6px;margin-bottom:4px;border:1px solid #e2e8f0}
-            .pill-score{background:#eef2ff;color:#3730a3;border-color:#c7d2fe}
-            .pill-ok{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
-            .pill-no{background:#fef2f2;color:#7f1d1d;border-color:#fecaca}
-            .pill-na{background:#f1f5f9;color:#334155;border-color:#e2e8f0}
-            .ref-card{border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;margin-bottom:8px;background:#fff}
-            .ref-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
-            .ref-title{font-weight:600;margin-bottom:2px}
-            .ref-row{display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:8px}
-            .ref-comments{border-left:3px solid #e2e8f0;padding-left:10px;margin-top:8px;color:#334155}
-            .ref-sub{color:#475569;font-size:.9rem;margin:4px 0 6px}
-            .ref-foot{color:#64748b;font-size:.85rem}
-            </style>
-            """, unsafe_allow_html=True)
+
 
         _ensure_pt_css()
 
@@ -5150,7 +5351,25 @@ def landlord_dashboard():
                                 if comments:
                                     st.markdown(f"**{tr('Comments')}**")
                                     st.markdown(f"<div class='ref-comments'>{comments}</div>", unsafe_allow_html=True)
+                        # personal details -------------------------------------------------
+                        
+                        with st.expander(tr("Profile details"), expanded=False):
+                            
+                            left, right = st.columns(2)
+                            with left:
+                                st.caption(f"**{tr('Age')}**: {details.get('age') or '—'}")
+                                st.caption(f"**{tr('Annual salary (€)')}**: {int(details.get('annual_salary') or 0):,}" if details.get('annual_salary') is not None else f"**{tr('Annual salary (€)')}**: —")
+                                st.caption(f"**{tr('Marital status')}**: {details.get('marital_status') or '—'}")
+                                st.caption(f"**{tr('Pets')}**: {_pets_txt}")
+                                st.caption(f"**{tr('Number of tenants')}**: {details.get('num_tenants') or '—'}")
+                            with right:
+                                st.caption(f"**{tr('Job position')}**: {details.get('job_position') or '—'}")
+                                st.caption(f"**{tr('Contract type')}**: {details.get('contract_type') or '—'}")
+                            if details.get("about"):
+                                st.markdown(f"**{tr('A few words about yourself')}**")
+                                st.write(details.get("about"))
 
+                        
                 else:
                     # Optional: show lock note ONLY if there are refs at all
                     try:
