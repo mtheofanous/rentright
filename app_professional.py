@@ -196,6 +196,76 @@ TRANSLATIONS_EL = {
         "Municipality (City)": "Δήμος (Πόλη)",
         "Municipality": "Δήμος",
         "City": "Πόλη",
+        # Headers & sections
+        "Previous landlords & references": "Προηγούμενοι ιδιοκτήτες & συστάσεις",
+        "All reference requests": "Όλα τα αιτήματα σύστασης",
+
+        # Header tooltip
+        "Ask former landlords for references and manage each request here.": "Ζητήστε συστάσεις από προηγούμενους ιδιοκτήτες και διαχειριστείτε κάθε αίτημα εδώ.",
+
+        # Add landlord form
+        "Landlord email": "Email ιδιοκτήτη",
+        "Landlord name": "Όνομα ιδιοκτήτη",
+        "Address": "Διεύθυνση",
+        "Add previous landlord": "Προσθήκη προηγούμενου ιδιοκτήτη",
+        "Enter a valid email.": "Εισάγετε έγκυρο email.",
+        "Enter the landlord’s name.": "Εισαγάγετε το όνομα του ιδιοκτήτη.",
+        "Enter the landlord’s address.": "Εισαγάγετε τη διεύθυνση του ιδιοκτήτη.",
+        "Previous landlord added.": "Ο προηγούμενος ιδιοκτήτης προστέθηκε.",
+
+        # Empty states
+        "No previous landlords yet.": "Δεν έχουν προστεθεί προηγούμενοι ιδιοκτήτες.",
+        "No reference requests yet.": "Δεν υπάρχουν ακόμη αιτήματα σύστασης.",
+        "No active reference request.": "Δεν υπάρχει ενεργό αίτημα σύστασης.",
+
+        # Contract + answers
+        "Contract status:": "Κατάσταση συμβολαίου:",
+        "✅ Verified": "✅ Επιβεβαιωμένο",
+        "Download contract": "Λήψη συμβολαίου",
+        "Can’t read the saved file:": "Αδυναμία ανάγνωσης του αποθηκευμένου αρχείου:",
+        "Can’t read the saved file": "Αδυναμία ανάγνωσης του αποθηκευμένου αρχείου",
+        "Contract locked until landlord consents.": "Το συμβόλαιο είναι κλειδωμένο μέχρι να συναινέσει ο ιδιοκτήτης.",
+        "Overall tenant score": "Συνολική βαθμολογία ενοικιαστή",
+        "Paid on time?": "Πλήρωνε στην ώρα του;",
+        "Any unpaid utilities?": "Απλήρωτες υπηρεσίες κοινής ωφέλειας;",
+        "Left in good condition?": "Παραδόθηκε σε καλή κατάσταση;",
+        "Comments (optional)": "Σχόλια (προαιρετικά)",
+        "Yes": "Ναι",
+        "No": "Όχι",
+
+        # Start / delete landlord
+        "New reference request": "Νέο αίτημα σύστασης",
+        "Creates a unique link for your former landlord to submit a reference.": "Δημιουργεί μοναδικό σύνδεσμο για να συμπληρώσει σύσταση ο προηγούμενος ιδιοκτήτης.",
+        "Delete previous landlord": "Διαγραφή προηγούμενου ιδιοκτήτη",
+        "Delete this previous landlord and all related data?": "Διαγραφή αυτού του προηγούμενου ιδιοκτήτη και όλων των σχετικών δεδομένων;",
+        "Delete": "Διαγραφή",
+        "Keep": "Διατήρηση",
+        "Previous landlord deleted.": "Ο προηγούμενος ιδιοκτήτης διαγράφηκε.",
+        "Can’t delete": "Αδυναμία διαγραφής",
+
+        # Request flow
+        "Request reference": "Αίτημα σύστασης",
+        "Emails a unique link to your former landlord to confirm and rate your tenancy.": "Στέλνει μοναδικό σύνδεσμο στον προηγούμενο ιδιοκτήτη για επιβεβαίωση και αξιολόγηση της μίσθωσης.",
+        "Reference request emailed.": "Το αίτημα σύστασης εστάλη με email.",
+        "Email delivery failed": "Αποτυχία αποστολής email",
+        "Share this link manually": "Μοιραστείτε αυτόν τον σύνδεσμο χειροκίνητα",
+        "Cancel request": "Ακύρωση αιτήματος",
+        "Stops this request and deletes the contract and responses. Landlord is notified.": "Σταματά το αίτημα και διαγράφει συμβόλαιο και απαντήσεις. Ο ιδιοκτήτης ενημερώνεται.",
+        "Cancel this reference request?": "Ακύρωση αυτού του αιτήματος σύστασης;",
+        "Request kept.": "Το αίτημα διατηρήθηκε.",
+        "Request cancelled. Landlord notified; contract and responses deleted.": "Το αίτημα ακυρώθηκε. Ο ιδιοκτήτης ειδοποιήθηκε· το συμβόλαιο και οι απαντήσεις διαγράφηκαν.",
+        "Request cancelled and data deleted, but email notification failed: ": "Το αίτημα ακυρώθηκε και τα δεδομένα διαγράφηκαν, αλλά η ειδοποίηση email απέτυχε: ",
+
+        # Upload flow
+        "Upload tenancy contract (PDF or image)": "Μεταφόρτωση συμβολαίου μίσθωσης (PDF ή εικόνα)",
+        "Stored encrypted. Used only to verify your landlord relationship.": "Αποθηκεύεται κρυπτογραφημένο. Χρησιμοποιείται μόνο για επαλήθευση της σχέσης σας με τον ιδιοκτήτη.",
+        "Contract uploaded. Email sent to landlord.": "Το συμβόλαιο μεταφορτώθηκε. Εστάλη email στον ιδιοκτήτη.",
+        "Contract uploaded, but email failed": "Το συμβόλαιο μεταφορτώθηκε, αλλά το email απέτυχε",
+        "Share this link manually or try again": "Μοιραστείτε τον σύνδεσμο χειροκίνητα ή δοκιμάστε ξανά",
+
+        # History
+        "Score": "Βαθμολογία",
+        "Contract verified — no upload needed.": "Το συμβόλαιο επιβεβαιώθηκε.",
         # Future Landlords
         "Future Landlords (Contacts)": "Μελλοντικοί Ιδιοκτήτες (Επαφές)",
         "Enter a landlord’s email address": "Εισάγετε το email του ιδιοκτήτη",
@@ -3820,7 +3890,7 @@ def tenant_dashboard():
 
     def tenant_open_to_rent_section():
         # Header + compact help
-        c1, c2 = st.columns([6, 0.08])
+        c1, c2 = st.columns([6, 0.3])
         with c1:
             st.markdown(f"**{tr('Open to rent')}**")
         with c2:
@@ -4036,248 +4106,51 @@ def tenant_dashboard():
             st.caption(f"{tr('Status:')} {state_label} · {details_txt}")
         else:
             st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {tr('Anywhere')}")
-
-                                
-    # def tenant_open_to_rent_section():
-    #     st.subheader(tr("Open to Rent"))
-
-    #     tid = st.session_state.user["id"]
-    #     prefs = load_open_to_rent_prefs(tid)
-
-    #     # If reset asked, we force defaults (zeros/False) instead of loading prefs.
-    #     force_defaults = st.session_state.pop("otr_force_defaults", False)
-
-    #     if ("otr_keys_inited" not in st.session_state) or force_defaults:
-    #         if force_defaults:
-    #             # Defaults
-    #             st.session_state["otr_open_flag"]  = False
-    #             st.session_state["otr_size_min"]   = 0
-    #             st.session_state["otr_size_max"]   = 0
-    #             st.session_state["otr_rooms_min"]  = 0
-    #             st.session_state["otr_rooms_max"]  = 0
-    #             st.session_state["otr_floor_min"]  = 0
-    #             st.session_state["otr_floor_max"]  = 0
-    #             st.session_state["otr_price_min"]  = 0
-    #             st.session_state["otr_price_max"]  = 0
-    #         else:
-    #             # From saved prefs
-    #             st.session_state["otr_open_flag"]  = bool(prefs.get("open_to_rent"))
-    #             st.session_state["otr_size_min"]   = int(prefs.get("size_min")  or 0)
-    #             st.session_state["otr_size_max"]   = int(prefs.get("size_max")  or 0)
-    #             st.session_state["otr_rooms_min"]  = int(prefs.get("rooms_min") or 0)
-    #             st.session_state["otr_rooms_max"]  = int(prefs.get("rooms_max") or 0)
-    #             st.session_state["otr_floor_min"]  = int(prefs.get("floor_min") or 0)
-    #             st.session_state["otr_floor_max"]  = int(prefs.get("floor_max") or 0)
-    #             st.session_state["otr_price_min"]  = int(prefs.get("price_min") or 0)
-    #             st.session_state["otr_price_max"]  = int(prefs.get("price_max") or 0)
-
-    #         st.session_state["otr_keys_inited"] = True
-
-    #     # Defaults
-    #     region = district = city = ""
-
-    #     with st.container(border=True):
-    #         data, regions, muni_idx = load_ellada_index("ellada.json")
-
-    #         # If we just pressed Reset, skip preselect from saved prefs this run
-    #         reset_preselect = st.session_state.pop("otr_reset_preselect", False)
-
-    #         saved_city = "" if reset_preselect else (prefs.get("search_city") or "").strip()
-    #         saved_dist = "" if reset_preselect else (prefs.get("search_district") or "").strip()
             
-
-    #         # Try to infer Region/Unit from saved values
-    #         pre_region, pre_unit = (None, None)
-    #         if saved_city and saved_city in muni_idx:
-    #             pre_region, pre_unit = muni_idx[saved_city]
-    #         elif saved_dist:
-    #             for reg in data.get("Περιφέρειες", []):
-    #                 units = (reg.get("Περιφερειακές Ενότητες") or {})
-    #                 if saved_dist in units:
-    #                     pre_region = reg.get("όνομα")
-    #                     pre_unit = saved_dist
-    #                     break
-
-    #         ANY = tr("Any")
-
-    #         # If we just pressed Reset, or on first run (no key yet), seed pickers to Any
-    #         if reset_preselect or ("loc_region" not in st.session_state):
-    #             st.session_state["loc_region"] = ANY
-    #         if reset_preselect or ("loc_unit" not in st.session_state):
-    #             st.session_state["loc_unit"] = ANY
-    #         if reset_preselect or ("loc_city" not in st.session_state):
-    #             st.session_state["loc_city"] = ANY
-
-            
-    #                 # Active / Inactive
-    #         open_flag = st.checkbox(
-    #             tr("I'm currently looking for a place"),
-    #             key="otr_open_flag",
-    #         )
-            
-    #         with st.expander(tr("Property Charecteristics"), expanded=False):
-
-    #             # REGION
-    #             region_options = [ANY] + (regions or [])
-    #             region_index = (region_options.index(pre_region) if (pre_region in region_options and not reset_preselect) else 0)
-    #             region_sel = st.selectbox("Περιφέρεια", options=region_options, index=region_index, key="loc_region")
-
-    #             # REGIONAL UNIT (depends on Region)
-    #             units = list_units(data, region_sel) if (region_sel and region_sel != ANY) else []
-    #             unit_options = [ANY] + (units or [])
-    #             unit_index = (unit_options.index(pre_unit) if (pre_unit in unit_options and not reset_preselect) else 0)
-    #             unit_sel = st.selectbox("Περιφερειακή Ενότητα", options=unit_options, index=unit_index, key="loc_unit")
-
-    #             # MUNICIPALITY (depends on Unit)
-    #             municipalities = list_municipalities(data, region_sel, unit_sel) if (region_sel and region_sel != ANY and unit_sel and unit_sel != ANY) else []
-    #             city_options = [ANY] + (municipalities or [])
-    #             city_index = (city_options.index(saved_city) if (saved_city in city_options and not reset_preselect) else 0)
-    #             city_sel = st.selectbox("Δήμος (Πόλη)", options=city_options, index=city_index, key="loc_city")
-        
-
-    #             # Map to your schema (don’t save “Any” — treat as empty)
-    #             region   = "" if region_sel == ANY else region_sel
-    #             district = "" if unit_sel   == ANY else unit_sel
-    #             city     = "" if city_sel   == ANY else city_sel
-
-    #             c1, c2 = st.columns(2)
-    #             size_min = c1.number_input(tr("Min size (m²)"), 0, 10000, key="otr_size_min")
-    #             size_max = c2.number_input(tr("Max size (m²)"), 0, 10000, key="otr_size_max")
-
-    #             r1, r2 = st.columns(2)
-    #             rooms_min = r1.number_input(tr("Min rooms"), 0, 50, key="otr_rooms_min")
-    #             rooms_max = r2.number_input(tr("Max rooms"), 0, 50, key="otr_rooms_max")
-
-    #             f1, f2 = st.columns(2)
-    #             floor_min = f1.number_input(tr("Min floor"), -5, 100, key="otr_floor_min")
-    #             floor_max = f2.number_input(tr("Max floor"), -5, 100, key="otr_floor_max")
-
-    #             p1, p2 = st.columns(2)
-    #             price_min = p1.number_input(tr("Min price (€)"), 0, 1_000_000, key="otr_price_min")
-    #             price_max = p2.number_input(tr("Max price (€)"), 0, 1_000_000, key="otr_price_max")
-                
-
-
-    #             # ---- Save / Reset -------------------------------------------------------
-    #             col_save, col_reset = st.columns([1, 1])
-
-    #             if col_save.button(tr("Save")):
-    #                 city_clean = "" if (city == "—") else (city or "")
-    #                 district_clean = "" if (district == "—") else (district or "")
-    #                 if not city_clean and not district_clean:
-    #                     st.warning(tr("Please enter at least a city or a district."))
-    #                 else:
-    #                     try:
-    #                         save_open_to_rent_prefs(
-    #                             tid, bool(st.session_state["otr_open_flag"]),
-    #                             city_clean, district_clean,
-    #                             int(st.session_state["otr_size_min"]), int(st.session_state["otr_size_max"]),
-    #                             int(st.session_state["otr_rooms_min"]), int(st.session_state["otr_rooms_max"]),
-    #                             int(st.session_state["otr_floor_min"]), int(st.session_state["otr_floor_max"]),
-    #                             int(st.session_state["otr_price_min"]), int(st.session_state["otr_price_max"]),
-    #                             city_osm_id=None, city_osm_type=None,
-    #                             district_osm_id=None, district_osm_type=None,
-    #                         )
-    #                     except TypeError:
-    #                         save_open_to_rent_prefs(
-    #                             tid, bool(st.session_state["otr_open_flag"]),
-    #                             city_clean, district_clean,
-    #                             int(st.session_state["otr_size_min"]), int(st.session_state["otr_size_max"]),
-    #                             int(st.session_state["otr_rooms_min"]), int(st.session_state["otr_rooms_max"]),
-    #                             int(st.session_state["otr_floor_min"]), int(st.session_state["otr_floor_max"]),
-    #                             int(st.session_state["otr_price_min"]), int(st.session_state["otr_price_max"]),
-    #                         )
-    #                     try:
-    #                         st.cache_data.clear()
-    #                     except Exception:
-    #                         pass
-    #                     st.success(tr("Preferences saved!"))
-
-    #             if col_reset.button(tr("Reset")):
-    #                 for k in ("loc_region","loc_unit","loc_city",
-    #                         "otr_open_flag",
-    #                         "otr_size_min","otr_size_max",
-    #                         "otr_rooms_min","otr_rooms_max",
-    #                         "otr_floor_min","otr_floor_max",
-    #                         "otr_price_min","otr_price_max",
-    #                         "otr_keys_inited"):
-    #                     st.session_state.pop(k, None)
-
-    #                 st.session_state["otr_force_defaults"]  = True
-    #                 st.session_state["otr_reset_preselect"] = True
-    #                 st.rerun()
-
-
-    #     # --- Compact summary (uses current widget values) ---------------------------
-    #     def _fmt_range(lo, hi, suffix=""):
-    #         has_lo = lo not in (None, 0, "0", "")
-    #         has_hi = hi not in (None, 0, "0", "")
-    #         if not has_lo and not has_hi:
-    #             return None
-    #         lo_txt = f"{int(lo):,}" if has_lo else "—"
-    #         hi_txt = f"{int(hi):,}" if has_hi else "—"
-    #         return f"{lo_txt}–{hi_txt}{suffix}"
-
-    #     latest_region = region if (region and region != "—") else ""
-    #     latest_district = district if (district and district != "—") else ""
-    #     latest_city = city if (city and city != "—") else ""
-    #     loc_txt = " — ".join([x.strip() for x in [latest_region, latest_district, latest_city] if x])
-
-    #     size_txt  = _fmt_range(st.session_state["otr_size_min"],  st.session_state["otr_size_max"],  " m²")
-    #     rooms_txt = _fmt_range(st.session_state["otr_rooms_min"], st.session_state["otr_rooms_max"], f" {tr('rooms')}")
-    #     floor_txt = _fmt_range(st.session_state["otr_floor_min"], st.session_state["otr_floor_max"])
-    #     price_txt = _fmt_range(st.session_state["otr_price_min"], st.session_state["otr_price_max"])
-
-    #     bits = []
-    #     if size_txt:  bits.append(size_txt)
-    #     if rooms_txt: bits.append(rooms_txt)
-    #     if floor_txt: bits.append(tr("Floor") + " " + floor_txt)
-    #     if price_txt: bits.append("€" + price_txt.replace("–", "–€"))
-
-    #     details_txt = " · ".join(bits)
-    #     state_label = tr("Active") if st.session_state["otr_open_flag"] else tr("Inactive")
-
-    #     if loc_txt and details_txt:
-    #         st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {loc_txt} · {details_txt}")
-    #     elif loc_txt:
-    #         st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {loc_txt}")
-    #     elif details_txt:
-    #         st.caption(f"{tr('Status:')} {state_label} · {details_txt}")
-    #     else:
-    #         st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {tr('Anywhere')}")
-                                
     # === Previous landlords + reference requests ===    
-    def previous_landlords_references():    
-        st.subheader(tr('Previous Landlords and References'))
+            
+    def previous_landlords_references():
+        # Header + focused help
+        h1, h2 = st.columns([6, 0.08])
+        with h1:
+            st.markdown(f"**{tr('Previous landlords & references')}**")
+        with h2:
+            help_icon(tr("Ask former landlords for references and manage each request here."), key="help_prev_refs_header")
+
+        # --- Add previous landlord form -------------------------------------------------
         with st.form("previous_landlord_form"):
             col1, col2 = st.columns([1, 1])
             with col1:
-                pl_email = st.text_input(tr('Email'))
+                pl_email = st.text_input(tr("Landlord email"))
                 # pl_afm = st.text_input(tr('Tax ID (9 digits)'))
             with col2:
-                pl_name = st.text_input(tr('Name'))
-                pl_address = st.text_input(tr('Address'))
-            add = st.form_submit_button(tr('Add Previous Landlord'))
+                pl_name = st.text_input(tr("Landlord name"))
+                pl_address = st.text_input(tr("Address"))
+            add = st.form_submit_button(tr("Add previous landlord"))
+
         if add:
             if not (pl_email and is_valid_email(pl_email)):
-                st.error(tr('Please enter a valid email address.'))
+                st.error(tr("Enter a valid email."))
             # elif not is_valid_afm(pl_afm):
             #     st.error(tr('Tax ID must be exactly 9 digits.'))
             elif not pl_name.strip():
-                st.error(tr('Please enter your full name.'))
+                st.error(tr("Enter the landlord’s name."))
             elif not pl_address.strip():
-                st.error(tr('Please enter the landlord’s address.'))
+                st.error(tr("Enter the landlord’s address."))
             else:
-                add_previous_landlord(st.session_state.user["id"], pl_email, pl_name, pl_address) # pl_afm,
-                st.success(tr('Previous landlord added successfully.'))
+                add_previous_landlord(st.session_state.user["id"], pl_email, pl_name, pl_address)  # pl_afm,
+                st.success(tr("Previous landlord added."))
 
         rows = list_previous_landlords(st.session_state.user["id"]) or []
-        st.subheader(tr('All Reference Requests'))
-        if rows:
-            for (pid, email, name, address, created_at) in rows: # afm,
-                with st.expander(f"{name} • {email} • {address} ", False):
 
-                    # --- Load all requests for this landlord
+        # --- List of all requests per previous landlord --------------------------------
+        st.subheader(tr("All reference requests"))
+
+        if rows:
+            for (pid, email, name, address, created_at) in rows:  # afm,
+                with st.expander(f"{name} • {email} • {address}", False):
+
+                    # Load all requests for this landlord
                     cur = conn.cursor()
                     cur.execute(
                         "SELECT token, status, created_at, score FROM reference_requests WHERE prev_landlord_id=? ORDER BY id DESC",
@@ -4285,7 +4158,6 @@ def tenant_dashboard():
                     )
                     reqs = cur.fetchall()
 
-            
                     # Helper: find an active (non-final) request
                     def pick_active_request(reqs_list):
                         for (tok, status, created_at2, score) in reqs_list:
@@ -4295,9 +4167,7 @@ def tenant_dashboard():
                         return None
 
                     active_req = pick_active_request(reqs)
-                    suppress_key = f'suppress_autodraft_{pid}'
-
-                    # ⛔️ Do NOT auto-create here — we want Start/Delete if nothing is active.
+                    suppress_key = f"suppress_autodraft_{pid}"
 
                     # ===== No active request path =====
                     if not active_req:
@@ -4317,18 +4187,18 @@ def tenant_dashboard():
 
                             # Contract status
                             if contract_i:
-                                st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract_i['status'])}")
+                                st.markdown(f"**{tr('Contract status:')}** {contract_status_badge(contract_i['status'])}")
                             else:
-                                st.markdown(f"**{tr('Contract Status:')}** {tr('✅ Verified Contract')}")
+                                st.markdown(f"**{tr('Contract status:')}** {tr('✅ Verified')}")
 
                             # Answers
                             if details:
                                 st.write(f"**{tr('Overall tenant score')}:** {details.get('score')}/10")
-                                st.write(f"**{tr('Did the tenant pay on time?')}:** {tr('Yes') if details.get('paid_on_time') else tr('No')}")
-                                st.write(f"**{tr('Did the tenant leave utilities unpaid?')}:** {tr('Yes') if details.get('utilities_unpaid') else tr('No')}")
-                                st.write(f"**{tr('Did the tenant leave the apartment in good condition?')}:** {tr('Yes') if details.get('good_condition') else tr('No')}")
+                                st.write(f"**{tr('Paid on time?')}:** {tr('Yes') if details.get('paid_on_time') else tr('No')}")
+                                st.write(f"**{tr('Any unpaid utilities?')}:** {tr('Yes') if details.get('utilities_unpaid') else tr('No')}")
+                                st.write(f"**{tr('Left in good condition?')}:** {tr('Yes') if details.get('good_condition') else tr('No')}")
                                 if details.get('comments'):
-                                    st.write("**" + tr('Optional comments') + ":**")
+                                    st.write("**" + tr("Comments (optional)") + ":**")
                                     st.write(details['comments'])
 
                             # Optional download if consented
@@ -4336,54 +4206,55 @@ def tenant_dashboard():
                                 try:
                                     data_plain_i = load_contract_plaintext(latest_tok)
                                     if data_plain_i is None:
-                                        st.warning(tr('Contract is locked awaiting landlord consent.'))
+                                        st.warning(tr("Contract locked until landlord consents."))
                                     else:
                                         st.download_button(
-                                            tr('Download Contract'),
+                                            tr("Download contract"),
                                             data=data_plain_i,
-                                            file_name=contract_i['filename'],
-                                            mime=contract_i.get('content_type') or contract_i.get('mime_type'),
+                                            file_name=contract_i["filename"],
+                                            mime=contract_i.get("content_type") or contract_i.get("mime_type"),
                                             key=f"dl_{latest_tok}",
                                         )
                                 except Exception as e:
-                                    st.warning(f"{tr('Unable to read the saved file:')} {e}")
+                                    st.warning(f"{tr('Can’t read the saved file:')} {e}")
 
                         else:
                             # No requests OR latest was cancelled → show Start/Delete
-                            st.caption(tr('No active reference request.'))
-                            col_start, col_delete = st.columns([1, 1])
-
-                            # Start
-                            if col_start.button(tr('Start New Reference Request'), key=f"start_{pid}"):
-                                rec = create_reference_request(st.session_state.user["id"], pid, email)
-                                st.session_state.pop(suppress_key, None)
-                                st.rerun()
-
-                            # Delete (2-step)
-                            del_confirm_key = f"confirm_delete_prev_{pid}"
-                            if st.session_state.get(del_confirm_key, False):
-                                st.warning(tr('Are you sure you want to delete this previous landlord and all related data?'))
-                                col_yes, col_no = st.columns([1, 1])
-                                if col_yes.button(tr('Yes, delete'), key=f"yes_del_prev_{pid}"):
-                                    try:
-                                        delete_previous_landlord_completely(st.session_state.user["id"], pid)
-                                        st.success(tr('Previous landlord deleted permanently.'))
-                                    except Exception as e:
-                                        st.error(f"{tr('Unable to delete')}: {e}")
-                                    finally:
+                            st.caption(tr("No active reference request."))
+                            # Start (with a concise help icon – important UX)
+                            cs, ch, cd = st.columns([1, 0.08, 1])
+                            with cs:
+                                if st.button(tr("New reference request"), key=f"start_{pid}"):
+                                    rec = create_reference_request(st.session_state.user["id"], pid, email)
+                                    st.session_state.pop(suppress_key, None)
+                                    st.rerun()
+                            with ch:
+                                help_icon(tr("Creates a unique link for your former landlord to submit a reference."), key=f"help_start_{pid}")
+                            with cd:
+                                # Delete (2-step)
+                                del_confirm_key = f"confirm_delete_prev_{pid}"
+                                if st.session_state.get(del_confirm_key, False):
+                                    st.warning(tr("Delete this previous landlord and all related data?"))
+                                    col_yes, col_no = st.columns([1, 1])
+                                    if col_yes.button(tr("Delete"), key=f"yes_del_prev_{pid}"):
+                                        try:
+                                            delete_previous_landlord_completely(st.session_state.user["id"], pid)
+                                            st.success(tr("Previous landlord deleted."))
+                                        except Exception as e:
+                                            st.error(f"{tr('Can’t delete')}: {e}")
+                                        finally:
+                                            st.session_state.pop(del_confirm_key, None)
+                                        st.rerun()
+                                    if col_no.button(tr("Keep"), key=f"no_del_prev_{pid}"):
                                         st.session_state.pop(del_confirm_key, None)
-                                    st.rerun()
-                                if col_no.button(tr('No, keep it'), key=f"no_del_prev_{pid}"):
-                                    st.session_state.pop(del_confirm_key, None)
-                                    st.rerun()
-                            else:
-                                if col_delete.button(tr('Delete Previous Landlord'), key=f"del_prev_{pid}"):
-                                    st.session_state[del_confirm_key] = True
-                                    st.rerun()
-
+                                        st.rerun()
+                                else:
+                                    if st.button(tr("Delete previous landlord"), key=f"del_prev_{pid}"):
+                                        st.session_state[del_confirm_key] = True
+                                        st.rerun()
                         continue
 
-                    # Now we have an active request token we can use for uploads
+                    # ===== Active request path =============================================
                     tok, status, created_at2, score = active_req
                     final_status = effective_reference_status(status, tok)
 
@@ -4397,12 +4268,12 @@ def tenant_dashboard():
 
                     contract = get_contract_by_token(tok)
 
-                    # Layout: left = upload flow; right = history
+                    # Layout: left = upload/request; right = history
                     c_left, c_right = st.columns([1, 2])
-                    
+
                     with c_left:
                         if contract:
-                            # Show current contract info + download + replace-uploader
+                            # Current contract info + download + request
                             consent_row2 = conn.cursor().execute(
                                 "SELECT consent_status FROM reference_contracts WHERE token=?",
                                 (tok,)
@@ -4412,56 +4283,63 @@ def tenant_dashboard():
                             try:
                                 data_plain = load_contract_plaintext(tok)
                                 if data_plain is None:
-                                    st.warning(tr('Contract is locked awaiting landlord consent.'))
+                                    st.warning(tr("Contract locked until landlord consents."))
                                 else:
                                     st.download_button(
-                                        tr('Download Contract'),
+                                        tr("Download contract"),
                                         data=data_plain,
-                                        file_name=contract['filename'],
-                                        mime=contract.get('content_type') or contract.get('mime_type'),
+                                        file_name=contract["filename"],
+                                        mime=contract.get("content_type") or contract.get("mime_type"),
                                         key=f"dl_{tok}",
                                     )
                             except Exception as e:
-                                st.warning(f"{tr('Unable to read the saved file')}: {e}")
+                                st.warning(f"{tr('Can’t read the saved file')}: {e}")
 
+                            # Request reference (with help)
                             if contract and can_request:
-                                if st.button(tr('Request Reference'), key=f"req_{pid}"):
-                                    link = build_reference_link(tok)
-                                    ok, msg = email_reference_request(
-                                        st.session_state.user["name"], st.session_state.user["email"], email, link, address
-                                    )
-                                    if ok:
-                                        conn.execute(
-                                            "UPDATE reference_requests SET status=?, emailed_at=CURRENT_TIMESTAMP WHERE token=?",
-                                            ("pending", tok),
+                                rb1, rb2 = st.columns([1, 0.1])
+                                with rb1:
+                                    if st.button(tr("Request reference"), key=f"req_{pid}"):
+                                        link = build_reference_link(tok)
+                                        ok, msg = email_reference_request(
+                                            st.session_state.user["name"], st.session_state.user["email"], email, link, address
                                         )
-                                        conn.commit()
-                                        st.success(tr('Reference request sent successfully by email.'))
-                                        st.rerun()
-                                    else:
-                                        st.warning(f"{tr('Email delivery failed')} ({msg}). {tr('Please share this link manually')}:")
-                                        st.code(link)
+                                        if ok:
+                                            conn.execute(
+                                                "UPDATE reference_requests SET status=?, emailed_at=CURRENT_TIMESTAMP WHERE token=?",
+                                                ("pending", tok),
+                                            )
+                                            conn.commit()
+                                            st.success(tr("Reference request emailed."))
+                                            st.rerun()
+                                        else:
+                                            st.warning(f"{tr('Email delivery failed')} ({msg}). {tr('Share this link manually')}:")
+                                            st.code(link)
+                                with rb2:
+                                    help_icon(tr("Emails a unique link to your former landlord to confirm and rate your tenancy."), key=f"help_req_{pid}")
 
-
-                            # Only allow cancelling while still pending or pending review
-                            # Only allow cancelling while still pending or pending review
+                            # Cancel while pending/pending review
                             if final_norm in ("pending", "pending review", "pending_review"):
-                                confirm_key = f"confirm_cancel_{tok}"  # per-request flag
+                                confirm_key = f"confirm_cancel_{tok}"
 
-                                # Step 1: show the Cancel button
-                                if not st.session_state.get(confirm_key, False):
-                                    if st.button(tr('Cancel Request'), key=f"cancel_{pid}"):
-                                        st.session_state[confirm_key] = True
-                                        st.rerun()
+                                # Step 1: button + help icon
+                                cb1, cb2 = st.columns([1, 0.1])
+                                with cb1:
+                                    if not st.session_state.get(confirm_key, False):
+                                        if st.button(tr("Cancel request"), key=f"cancel_{pid}"):
+                                            st.session_state[confirm_key] = True
+                                            st.rerun()
+                                with cb2:
+                                    help_icon(tr("Stops this request and deletes the contract and responses. Landlord is notified."), key=f"help_cancel_{pid}")
 
-                                # Step 2: show confirmation UI
-                                else:
-                                    st.warning(tr('Are you sure you want to cancel this reference request?'))
+                                # Step 2: confirmation UI
+                                if st.session_state.get(confirm_key, False):
+                                    st.warning(tr("Cancel this reference request?"))
                                     col_yes, col_no = st.columns([1, 1])
 
                                     with col_yes:
-                                        if st.button(tr('Yes, cancel it'), key=f"confirm_cancel_yes_{pid}"):
-                                            # (A) Email landlord first (so we still have the data to mention)
+                                        if st.button(tr("Cancel request"), key=f"confirm_cancel_yes_{pid}"):
+                                            # (A) Email landlord first
                                             row = conn.execute("SELECT CURRENT_TIMESTAMP").fetchone()
                                             cancelled_at = row[0] if row else None
                                             ok_mail, msg_mail = email_reference_cancellation_smtp(
@@ -4474,43 +4352,46 @@ def tenant_dashboard():
                                                 cancelled_at=cancelled_at,
                                             )
 
-                                            # (B) Hard-delete their responses + contract + request row
-                                            delete_landlord_responses(tok)   # your helper from earlier
-                                            delete_contract_hard(tok)        # your hard-delete helper
+                                            # (B) Hard-delete data
+                                            delete_landlord_responses(tok)
+                                            delete_contract_hard(tok)
                                             conn.execute("DELETE FROM reference_requests WHERE token=?", (tok,))
                                             conn.commit()
 
-                                            # (C) Clean up UI state and prevent auto-draft recreation on this landlord
+                                            # (C) Clean up state
                                             st.session_state.pop(confirm_key, None)
-                                            st.session_state[f'suppress_autodraft_{pid}'] = True
+                                            st.session_state[f"suppress_autodraft_{pid}"] = True
 
                                             # (D) Feedback
                                             if ok_mail:
-                                                st.success(tr('Request cancelled — landlord notified, contract and responses permanently deleted.'))
+                                                st.success(tr("Request cancelled. Landlord notified; contract and responses deleted."))
                                             else:
-                                                st.warning(tr('Request cancelled and data deleted, but email notification failed: ') + str(msg_mail))
+                                                st.warning(tr("Request cancelled and data deleted, but email notification failed: ") + str(msg_mail))
 
                                             st.rerun()
-
 
                                     with col_no:
-                                        if st.button(tr('No, keep it'), key=f"confirm_cancel_no_{pid}"):
+                                        if st.button(tr("Keep"), key=f"confirm_cancel_no_{pid}"):
                                             st.session_state.pop(confirm_key, None)
-                                            st.info(tr('Request kept.'))
+                                            st.info(tr("Request kept."))
                                             st.rerun()
 
-
                         else:
-                            # No file yet → uploader only
-                            uploaded = st.file_uploader(
-                                tr('Upload Tenancy Contract (PDF or Image)'),
-                                type=["pdf", "png", "jpg", "jpeg", "webp"],
-                                key=f"up_{tok}",
-                            )
+                            # No file yet → uploader + help
+                            fu1, fu2 = st.columns([1, 0.1])
+                            with fu1:
+                                uploaded = st.file_uploader(
+                                    tr("Upload tenancy contract (PDF or image)"),
+                                    type=["pdf", "png", "jpg", "jpeg", "webp"],
+                                    key=f"up_{tok}",
+                                )
+                            with fu2:
+                                help_icon(tr("Stored encrypted. Used only to verify your landlord relationship."), key=f"help_upload_{pid}")
+
                             if uploaded is not None:
                                 ok, msg = save_contract_upload(tok, st.session_state.user["id"], uploaded)
                                 if ok:
-                                    # ✅ After saving, immediately email the landlord (first time only)
+                                    # After saving, immediately email the landlord (first time only)
                                     link = build_reference_link(tok)
                                     ok_mail, msg_mail = email_reference_request(
                                         st.session_state.user["name"],
@@ -4520,32 +4401,29 @@ def tenant_dashboard():
                                         address
                                     )
                                     if ok_mail:
-                                        # Mark as emailed so we never send twice
                                         conn.execute(
                                             "UPDATE reference_requests SET status=?, emailed_at=CURRENT_TIMESTAMP WHERE token=?",
                                             ("pending", tok),
                                         )
                                         conn.commit()
-                                        st.success(tr('Contract uploaded and email sent to the landlord.'))
+                                        st.success(tr("Contract uploaded. Email sent to landlord."))
                                         st.rerun()
                                     else:
-                                        # Keep as Pending Review so the tenant can retry sending
-                                        st.warning(f"{tr('Contract uploaded, but email delivery failed')} ({msg_mail}). "
-                                                f"{tr('You can share this link manually or try again')}:")
+                                        st.warning(
+                                            f"{tr('Contract uploaded, but email failed')} ({msg_mail}). "
+                                            f"{tr('Share this link manually or try again')}:"
+                                        )
                                         st.code(link)
-                                        # Do NOT set emailed_at → the Request button will remain visible after rerun
+                                        # Do NOT set emailed_at → the Request button remains visible after rerun
                                         st.rerun()
                                 else:
                                     st.error(msg)
 
                     with c_right:
-                        # st.markdown(f"**{tr('Request History')}**")
+                        # Request history
                         if reqs:
                             for (tok_i, status_i, created_at_i, score_i) in reqs:
                                 final_i = effective_reference_status(status_i, tok_i)
-    
-
-                                # Per-request contract block
                                 contract_i = get_contract_by_token(tok_i)
                                 final_i_lower = str(final_i).lower()
 
@@ -4554,38 +4432,381 @@ def tenant_dashboard():
                                         colA, colB, colC = st.columns([2, 2, 2])
                                         if score_i is not None:
                                             colB.write(f"{tr('Score')}: **{score_i}**/10")
-                                        
+
                                         if contract_i:
-                                            st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract_i['status'])}")
+                                            st.markdown(f"**{tr('Contract status:')}** {contract_status_badge(contract_i['status'])}")
                                             try:
                                                 data_plain_i = load_contract_plaintext(tok_i)
                                                 if data_plain_i is None:
-                                                    st.warning(tr('Contract is locked awaiting landlord consent'))
+                                                    st.warning(tr("Contract locked until landlord consents"))
                                                 else:
                                                     st.download_button(
-                                                        tr('Download Contract'),
+                                                        tr("Download contract"),
                                                         data=data_plain_i,
-                                                        file_name=contract_i['filename'],
-                                                        mime=contract_i.get('content_type') or contract_i.get('mime_type'),
+                                                        file_name=contract_i["filename"],
+                                                        mime=contract_i.get("content_type") or contract_i.get("mime_type"),
                                                         key=f"dl_{tok_i}",
                                                     )
                                             except Exception as e:
-                                                st.warning(f"{tr('Unable to read the saved file')}: {e}")
+                                                st.warning(f"{tr('Can’t read the saved file')}: {e}")
                                         else:
-                                            st.markdown(tr('Contract verified — no file upload needed.'))
+                                            st.markdown(tr("Contract verified — no upload needed."))
                                     else:
                                         details = get_reference_request_by_token(tok_i)
                                         cancelled_when = details.get("filled_at") if details else None
-            
+
                                 else:
-                                    # Non-final historical entries (rare): show status only
+                                    # Non-final historical entries: show status only
                                     if contract_i:
-                                        st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract_i['status'])}")
+                                        st.markdown(f"**{tr('Contract status:')}** {contract_status_badge(contract_i['status'])}")
                         else:
-                            st.caption(tr('No reference requests have been created yet.'))
+                            st.caption(tr("No reference requests yet."))
         else:
-            st.info(tr('No previous landlords added yet.'))
+            st.info(tr("No previous landlords yet."))
         st.divider()
+            
+
+                                
+    # # === Previous landlords + reference requests ===    
+    # def previous_landlords_references():    
+    #     st.subheader(tr('Previous Landlords and References'))
+    #     with st.form("previous_landlord_form"):
+    #         col1, col2 = st.columns([1, 1])
+    #         with col1:
+    #             pl_email = st.text_input(tr('Email'))
+    #             # pl_afm = st.text_input(tr('Tax ID (9 digits)'))
+    #         with col2:
+    #             pl_name = st.text_input(tr('Name'))
+    #             pl_address = st.text_input(tr('Address'))
+    #         add = st.form_submit_button(tr('Add Previous Landlord'))
+    #     if add:
+    #         if not (pl_email and is_valid_email(pl_email)):
+    #             st.error(tr('Please enter a valid email address.'))
+    #         # elif not is_valid_afm(pl_afm):
+    #         #     st.error(tr('Tax ID must be exactly 9 digits.'))
+    #         elif not pl_name.strip():
+    #             st.error(tr('Please enter your full name.'))
+    #         elif not pl_address.strip():
+    #             st.error(tr('Please enter the landlord’s address.'))
+    #         else:
+    #             add_previous_landlord(st.session_state.user["id"], pl_email, pl_name, pl_address) # pl_afm,
+    #             st.success(tr('Previous landlord added successfully.'))
+
+    #     rows = list_previous_landlords(st.session_state.user["id"]) or []
+    #     st.subheader(tr('All Reference Requests'))
+    #     if rows:
+    #         for (pid, email, name, address, created_at) in rows: # afm,
+    #             with st.expander(f"{name} • {email} • {address} ", False):
+
+    #                 # --- Load all requests for this landlord
+    #                 cur = conn.cursor()
+    #                 cur.execute(
+    #                     "SELECT token, status, created_at, score FROM reference_requests WHERE prev_landlord_id=? ORDER BY id DESC",
+    #                     (pid,),
+    #                 )
+    #                 reqs = cur.fetchall()
+
+            
+    #                 # Helper: find an active (non-final) request
+    #                 def pick_active_request(reqs_list):
+    #                     for (tok, status, created_at2, score) in reqs_list:
+    #                         final_status = effective_reference_status(status, tok)
+    #                         if str(final_status).lower() not in ("completed", "cancelled"):
+    #                             return (tok, status, created_at2, score)
+    #                     return None
+
+    #                 active_req = pick_active_request(reqs)
+    #                 suppress_key = f'suppress_autodraft_{pid}'
+
+    #                 # ⛔️ Do NOT auto-create here — we want Start/Delete if nothing is active.
+
+    #                 # ===== No active request path =====
+    #                 if not active_req:
+    #                     # Latest request (reqs are DESC by id)
+    #                     latest = reqs[0] if reqs else None
+    #                     latest_tok = latest_status = None
+    #                     if latest:
+    #                         latest_tok, latest_status, latest_created, latest_score = latest
+    #                         latest_final = effective_reference_status(latest_status, latest_tok).lower()
+    #                     else:
+    #                         latest_final = None
+
+    #                     if latest and latest_final == "completed":
+    #                         # ✅ Show completed summary (do NOT show Start/Delete)
+    #                         details = get_reference_request_by_token(latest_tok)
+    #                         contract_i = get_contract_by_token(latest_tok)
+
+    #                         # Contract status
+    #                         if contract_i:
+    #                             st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract_i['status'])}")
+    #                         else:
+    #                             st.markdown(f"**{tr('Contract Status:')}** {tr('✅ Verified Contract')}")
+
+    #                         # Answers
+    #                         if details:
+    #                             st.write(f"**{tr('Overall tenant score')}:** {details.get('score')}/10")
+    #                             st.write(f"**{tr('Did the tenant pay on time?')}:** {tr('Yes') if details.get('paid_on_time') else tr('No')}")
+    #                             st.write(f"**{tr('Did the tenant leave utilities unpaid?')}:** {tr('Yes') if details.get('utilities_unpaid') else tr('No')}")
+    #                             st.write(f"**{tr('Did the tenant leave the apartment in good condition?')}:** {tr('Yes') if details.get('good_condition') else tr('No')}")
+    #                             if details.get('comments'):
+    #                                 st.write("**" + tr('Optional comments') + ":**")
+    #                                 st.write(details['comments'])
+
+    #                         # Optional download if consented
+    #                         if contract_i:
+    #                             try:
+    #                                 data_plain_i = load_contract_plaintext(latest_tok)
+    #                                 if data_plain_i is None:
+    #                                     st.warning(tr('Contract is locked awaiting landlord consent.'))
+    #                                 else:
+    #                                     st.download_button(
+    #                                         tr('Download Contract'),
+    #                                         data=data_plain_i,
+    #                                         file_name=contract_i['filename'],
+    #                                         mime=contract_i.get('content_type') or contract_i.get('mime_type'),
+    #                                         key=f"dl_{latest_tok}",
+    #                                     )
+    #                             except Exception as e:
+    #                                 st.warning(f"{tr('Unable to read the saved file:')} {e}")
+
+    #                     else:
+    #                         # No requests OR latest was cancelled → show Start/Delete
+    #                         st.caption(tr('No active reference request.'))
+    #                         col_start, col_delete = st.columns([1, 1])
+
+    #                         # Start
+    #                         if col_start.button(tr('Start New Reference Request'), key=f"start_{pid}"):
+    #                             rec = create_reference_request(st.session_state.user["id"], pid, email)
+    #                             st.session_state.pop(suppress_key, None)
+    #                             st.rerun()
+
+    #                         # Delete (2-step)
+    #                         del_confirm_key = f"confirm_delete_prev_{pid}"
+    #                         if st.session_state.get(del_confirm_key, False):
+    #                             st.warning(tr('Are you sure you want to delete this previous landlord and all related data?'))
+    #                             col_yes, col_no = st.columns([1, 1])
+    #                             if col_yes.button(tr('Yes, delete'), key=f"yes_del_prev_{pid}"):
+    #                                 try:
+    #                                     delete_previous_landlord_completely(st.session_state.user["id"], pid)
+    #                                     st.success(tr('Previous landlord deleted permanently.'))
+    #                                 except Exception as e:
+    #                                     st.error(f"{tr('Unable to delete')}: {e}")
+    #                                 finally:
+    #                                     st.session_state.pop(del_confirm_key, None)
+    #                                 st.rerun()
+    #                             if col_no.button(tr('No, keep it'), key=f"no_del_prev_{pid}"):
+    #                                 st.session_state.pop(del_confirm_key, None)
+    #                                 st.rerun()
+    #                         else:
+    #                             if col_delete.button(tr('Delete Previous Landlord'), key=f"del_prev_{pid}"):
+    #                                 st.session_state[del_confirm_key] = True
+    #                                 st.rerun()
+
+    #                     continue
+
+    #                 # Now we have an active request token we can use for uploads
+    #                 tok, status, created_at2, score = active_req
+    #                 final_status = effective_reference_status(status, tok)
+
+    #                 # NEW: check if we already sent the email
+    #                 row = conn.execute("SELECT emailed_at FROM reference_requests WHERE token=?", (tok,)).fetchone()
+    #                 emailed_at = row[0] if row else None
+    #                 final_norm = str(final_status).strip().lower()
+
+    #                 # Only allow requesting if we haven't emailed yet and it's not final
+    #                 can_request = (emailed_at is None) and (final_norm not in ("completed", "cancelled"))
+
+    #                 contract = get_contract_by_token(tok)
+
+    #                 # Layout: left = upload flow; right = history
+    #                 c_left, c_right = st.columns([1, 2])
+                    
+    #                 with c_left:
+    #                     if contract:
+    #                         # Show current contract info + download + replace-uploader
+    #                         consent_row2 = conn.cursor().execute(
+    #                             "SELECT consent_status FROM reference_contracts WHERE token=?",
+    #                             (tok,)
+    #                         ).fetchone()
+    #                         consent_badge2 = f"Consent: {consent_row2[0] if consent_row2 else 'locked'}"
+
+    #                         try:
+    #                             data_plain = load_contract_plaintext(tok)
+    #                             if data_plain is None:
+    #                                 st.warning(tr('Contract is locked awaiting landlord consent.'))
+    #                             else:
+    #                                 st.download_button(
+    #                                     tr('Download Contract'),
+    #                                     data=data_plain,
+    #                                     file_name=contract['filename'],
+    #                                     mime=contract.get('content_type') or contract.get('mime_type'),
+    #                                     key=f"dl_{tok}",
+    #                                 )
+    #                         except Exception as e:
+    #                             st.warning(f"{tr('Unable to read the saved file')}: {e}")
+
+    #                         if contract and can_request:
+    #                             if st.button(tr('Request Reference'), key=f"req_{pid}"):
+    #                                 link = build_reference_link(tok)
+    #                                 ok, msg = email_reference_request(
+    #                                     st.session_state.user["name"], st.session_state.user["email"], email, link, address
+    #                                 )
+    #                                 if ok:
+    #                                     conn.execute(
+    #                                         "UPDATE reference_requests SET status=?, emailed_at=CURRENT_TIMESTAMP WHERE token=?",
+    #                                         ("pending", tok),
+    #                                     )
+    #                                     conn.commit()
+    #                                     st.success(tr('Reference request sent successfully by email.'))
+    #                                     st.rerun()
+    #                                 else:
+    #                                     st.warning(f"{tr('Email delivery failed')} ({msg}). {tr('Please share this link manually')}:")
+    #                                     st.code(link)
+
+
+    #                         # Only allow cancelling while still pending or pending review
+    #                         # Only allow cancelling while still pending or pending review
+    #                         if final_norm in ("pending", "pending review", "pending_review"):
+    #                             confirm_key = f"confirm_cancel_{tok}"  # per-request flag
+
+    #                             # Step 1: show the Cancel button
+    #                             if not st.session_state.get(confirm_key, False):
+    #                                 if st.button(tr('Cancel Request'), key=f"cancel_{pid}"):
+    #                                     st.session_state[confirm_key] = True
+    #                                     st.rerun()
+
+    #                             # Step 2: show confirmation UI
+    #                             else:
+    #                                 st.warning(tr('Are you sure you want to cancel this reference request?'))
+    #                                 col_yes, col_no = st.columns([1, 1])
+
+    #                                 with col_yes:
+    #                                     if st.button(tr('Yes, cancel it'), key=f"confirm_cancel_yes_{pid}"):
+    #                                         # (A) Email landlord first (so we still have the data to mention)
+    #                                         row = conn.execute("SELECT CURRENT_TIMESTAMP").fetchone()
+    #                                         cancelled_at = row[0] if row else None
+    #                                         ok_mail, msg_mail = email_reference_cancellation_smtp(
+    #                                             tenant_name=st.session_state.user["name"],
+    #                                             tenant_email=st.session_state.user["email"],
+    #                                             landlord_email=email,
+    #                                             landlord_name=name,
+    #                                             landlord_address=address,
+    #                                             token=tok,
+    #                                             cancelled_at=cancelled_at,
+    #                                         )
+
+    #                                         # (B) Hard-delete their responses + contract + request row
+    #                                         delete_landlord_responses(tok)   # your helper from earlier
+    #                                         delete_contract_hard(tok)        # your hard-delete helper
+    #                                         conn.execute("DELETE FROM reference_requests WHERE token=?", (tok,))
+    #                                         conn.commit()
+
+    #                                         # (C) Clean up UI state and prevent auto-draft recreation on this landlord
+    #                                         st.session_state.pop(confirm_key, None)
+    #                                         st.session_state[f'suppress_autodraft_{pid}'] = True
+
+    #                                         # (D) Feedback
+    #                                         if ok_mail:
+    #                                             st.success(tr('Request cancelled — landlord notified, contract and responses permanently deleted.'))
+    #                                         else:
+    #                                             st.warning(tr('Request cancelled and data deleted, but email notification failed: ') + str(msg_mail))
+
+    #                                         st.rerun()
+
+
+    #                                 with col_no:
+    #                                     if st.button(tr('No, keep it'), key=f"confirm_cancel_no_{pid}"):
+    #                                         st.session_state.pop(confirm_key, None)
+    #                                         st.info(tr('Request kept.'))
+    #                                         st.rerun()
+
+
+    #                     else:
+    #                         # No file yet → uploader only
+    #                         uploaded = st.file_uploader(
+    #                             tr('Upload Tenancy Contract (PDF or Image)'),
+    #                             type=["pdf", "png", "jpg", "jpeg", "webp"],
+    #                             key=f"up_{tok}",
+    #                         )
+    #                         if uploaded is not None:
+    #                             ok, msg = save_contract_upload(tok, st.session_state.user["id"], uploaded)
+    #                             if ok:
+    #                                 # ✅ After saving, immediately email the landlord (first time only)
+    #                                 link = build_reference_link(tok)
+    #                                 ok_mail, msg_mail = email_reference_request(
+    #                                     st.session_state.user["name"],
+    #                                     st.session_state.user["email"],
+    #                                     email,
+    #                                     link,
+    #                                     address
+    #                                 )
+    #                                 if ok_mail:
+    #                                     # Mark as emailed so we never send twice
+    #                                     conn.execute(
+    #                                         "UPDATE reference_requests SET status=?, emailed_at=CURRENT_TIMESTAMP WHERE token=?",
+    #                                         ("pending", tok),
+    #                                     )
+    #                                     conn.commit()
+    #                                     st.success(tr('Contract uploaded and email sent to the landlord.'))
+    #                                     st.rerun()
+    #                                 else:
+    #                                     # Keep as Pending Review so the tenant can retry sending
+    #                                     st.warning(f"{tr('Contract uploaded, but email delivery failed')} ({msg_mail}). "
+    #                                             f"{tr('You can share this link manually or try again')}:")
+    #                                     st.code(link)
+    #                                     # Do NOT set emailed_at → the Request button will remain visible after rerun
+    #                                     st.rerun()
+    #                             else:
+    #                                 st.error(msg)
+
+    #                 with c_right:
+    #                     # st.markdown(f"**{tr('Request History')}**")
+    #                     if reqs:
+    #                         for (tok_i, status_i, created_at_i, score_i) in reqs:
+    #                             final_i = effective_reference_status(status_i, tok_i)
+    
+
+    #                             # Per-request contract block
+    #                             contract_i = get_contract_by_token(tok_i)
+    #                             final_i_lower = str(final_i).lower()
+
+    #                             if final_i_lower in ("completed", "cancelled"):
+    #                                 if final_i_lower == "completed":
+    #                                     colA, colB, colC = st.columns([2, 2, 2])
+    #                                     if score_i is not None:
+    #                                         colB.write(f"{tr('Score')}: **{score_i}**/10")
+                                        
+    #                                     if contract_i:
+    #                                         st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract_i['status'])}")
+    #                                         try:
+    #                                             data_plain_i = load_contract_plaintext(tok_i)
+    #                                             if data_plain_i is None:
+    #                                                 st.warning(tr('Contract is locked awaiting landlord consent'))
+    #                                             else:
+    #                                                 st.download_button(
+    #                                                     tr('Download Contract'),
+    #                                                     data=data_plain_i,
+    #                                                     file_name=contract_i['filename'],
+    #                                                     mime=contract_i.get('content_type') or contract_i.get('mime_type'),
+    #                                                     key=f"dl_{tok_i}",
+    #                                                 )
+    #                                         except Exception as e:
+    #                                             st.warning(f"{tr('Unable to read the saved file')}: {e}")
+    #                                     else:
+    #                                         st.markdown(tr('Contract verified — no file upload needed.'))
+    #                                 else:
+    #                                     details = get_reference_request_by_token(tok_i)
+    #                                     cancelled_when = details.get("filled_at") if details else None
+            
+    #                             else:
+    #                                 # Non-final historical entries (rare): show status only
+    #                                 if contract_i:
+    #                                     st.markdown(f"**{tr('Contract Status:')}** {contract_status_badge(contract_i['status'])}")
+    #                     else:
+    #                         st.caption(tr('No reference requests have been created yet.'))
+    #     else:
+    #         st.info(tr('No previous landlords added yet.'))
+    #     st.divider()
 
 
     with nav2:
