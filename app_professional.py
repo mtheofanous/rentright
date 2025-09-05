@@ -4413,11 +4413,11 @@ def tenant_dashboard():
                     if b1.button(tr("Edit"), key="profile_edit_btn"):
                         st.session_state["profile_editing"] = True
                         st.rerun()
-                #     # (optional) a disabled Save here is fine, actual save happens in the form mode
-                # else:
-                #     if b2.button(tr("Cancel"), key="profile_cancel_btn"):
-                #         st.session_state["profile_editing"] = False
-                #         st.rerun()
+                    # (optional) a disabled Save here is fine, actual save happens in the form mode
+                else:
+                    if b2.button(tr("Cancel"), key="profile_cancel_btn"):
+                        st.session_state["profile_editing"] = False
+                        st.rerun()
 
                     with st.form("profile_form", clear_on_submit=False):
                         disabled = False
