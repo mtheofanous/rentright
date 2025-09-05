@@ -3777,18 +3777,14 @@ def tenant_dashboard():
 
                 # actions
                 if status == "connected":
-                    # Disconnect + help
-                    a1, a2 = colR.columns([1, 0.3])
-                    with a1:
-                        if st.button(tr("Disconnect"), key=k(cid, "disconnect_connected")):
-                            if landlord_id: flc_disconnect(landlord_id, tenant_id)
-                            try: st.cache_data.clear()
-                            except Exception: pass
-                            st.warning(tr("Disconnected."))
-                            _clear_transient_search_flags()
-                            st.rerun()
-                    with a2:
-                        help_icon(tr("Stop sharing status with this landlord."), key=k(cid, "help_disconnect"))
+    
+                    if colR.button(tr("Disconnect"), key=k(cid, "disconnect_connected")):
+                        if landlord_id: flc_disconnect(landlord_id, tenant_id)
+                        try: st.cache_data.clear()
+                        except Exception: pass
+                        st.warning(tr("Disconnected."))
+                        _clear_transient_search_flags()
+                        st.rerun()
 
                 elif inbound_request:
                     # Connect / Disconnect + help
@@ -3818,18 +3814,15 @@ def tenant_dashboard():
                         st.rerun()
 
                 elif invited:
-                    # Remove + help
-                    a1, a2 = colR.columns([1, 0.18])
-                    with a1:
-                        if st.button(tr("Remove"), key=k(cid, "remove_invited")):
-                            remove_future_landlord_contact(cid, tenant_id)
-                            try: st.cache_data.clear()
-                            except Exception: pass
-                            _clear_transient_search_flags()
-                            st.info(tr("Contact removed."))
-                            st.rerun()
-                    with a2:
-                        help_icon(tr("Remove this contact from your list."), key=k(cid, "help_remove_invited"))
+  
+                    if colR.button(tr("Remove"), key=k(cid, "remove_invited")):
+                        remove_future_landlord_contact(cid, tenant_id)
+                        try: st.cache_data.clear()
+                        except Exception: pass
+                        _clear_transient_search_flags()
+                        st.info(tr("Contact removed."))
+                        st.rerun()
+
 
                 else:
                     # Send invitation / Remove + help
