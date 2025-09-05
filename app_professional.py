@@ -1479,12 +1479,14 @@ def _avatar_image_from_initials(initials: str, size: int = 48,
 
 # ---------- Chat UI (bubble style) ----------
 
+def _html_escape(s: str) -> str:
+    # Minimal escape so user content can't inject HTML
+    return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
 def _ensure_chat_css():
     st.markdown("""
     <style>
-      /* wrapper */
       .chat-wrap { margin-top: 10px; }
-      /* scroll area */
       .chat-scroll {
         max-height: 50vh;
         overflow-y: auto;
@@ -1497,53 +1499,56 @@ def _ensure_chat_css():
         border-radius: 12px;
         background: #fff;
       }
-      /* message bubble */
       .chat-msg {
         max-width: 70%;
         padding: 8px 12px;
         border-radius: 14px;
         line-height: 1.35;
         word-wrap: break-word;
-        white-space: pre-wrap; /* keep newlines */
+        white-space: pre-wrap;
       }
       .chat-msg.me {
         align-self: flex-end;
-        background: #DCF8C6;       /* WhatsApp-like green */
-        text-align: left;          /* text stays left inside the bubble */
+        background: #DCF8C6;
         border-top-right-radius: 6px;
       }
       .chat-msg.other {
         align-self: flex-start;
-        background: #F1F0F0;       /* light gray */
+        background: #F1F0F0;
         border-top-left-radius: 6px;
       }
-      /* timestamp */
       .chat-time {
         font-size: 0.75rem;
         color: #6b7280;
         margin-top: 4px;
         text-align: right;
       }
-      /* header row (name next to title) */
-      .chat-header {
-        display:flex; align-items:center; gap:8px;
-      }
-      .chat-name {
-        font-weight: 600; color:#111827;
-      }
+      .chat-header { display:flex; align-items:center; gap:8px; }
+      .chat-name { font-weight: 600; color:#111827; }
     </style>
     """, unsafe_allow_html=True)
 
-def _initials(name: str | None, email: str | None) -> str:
-    base = (name or "").strip() or (email or "").split("@")[0]
-    parts = [p for p in (base or "").replace(".", " ").split() if p]
-    if len(parts) >= 2: return (parts[0][0] + parts[1][0]).upper()
-    if parts: return parts[0][:2].upper()
-    return "?"
-
-def _html_escape(s: str) -> str:
-    # Minimal escape so user content can't inject HTML
-    return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+def _row_val(row, key: str, idx: int):
+    """Get value from sqlite3.Row/dict/tuple using key or index."""
+    # sqlite3.Row: has keys()
+    try:
+        if hasattr(row, "keys"):
+            ks = row.keys()
+            if key in ks:
+                return row[key]
+    except Exception:
+        pass
+    # dict
+    try:
+        if isinstance(row, dict):
+            return row.get(key)
+    except Exception:
+        pass
+    # tuple/list fallback by position
+    try:
+        return row[idx]
+    except Exception:
+        return None
 
 def chat_panel():
     if not st.session_state.get("chat_open"):
@@ -1586,23 +1591,29 @@ def chat_panel():
 
     _ensure_chat_css()
     st.divider()
-    st.markdown(f'<div class="chat-header"><h3>💬 {tr("Chat with")} <span class="chat-name">{_html_escape(partner_display)}</span></h3></div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="chat-header"><h3>💬 {tr("Chat with")} '
+        f'<span class="chat-name">{_html_escape(partner_display)}</span></h3></div>',
+        unsafe_allow_html=True
+    )
 
     # Messages (right/left bubbles)
-    msgs = list_messages(thread_id, limit=500)  # increase if needed
+    # list_messages SELECT columns order: id, sender_id, body, created_at, read_at
+    msgs = list_messages(thread_id, limit=500)
 
-    # Scrollable chat area
     st.markdown('<div class="chat-wrap"><div class="chat-scroll" id="chat-scroll">', unsafe_allow_html=True)
     for m in msgs:
-        is_me = (m["sender_id"] == me["id"])
+        sender_id = _row_val(m, "sender_id", 1)
+        body      = _row_val(m, "body", 2) or ""
+        created   = _row_val(m, "created_at", 3) or ""
+        is_me = (sender_id == me["id"])
         cls = "me" if is_me else "other"
-        body = _html_escape(m["body"])
-        ts   = _html_escape(m.get("created_at") or "")
+
         st.markdown(
             f"""
             <div class="chat-msg {cls}">
-              <div>{body}</div>
-              <div class="chat-time">{ts}</div>
+              <div>{_html_escape(str(body))}</div>
+              <div class="chat-time">{_html_escape(str(created))}</div>
             </div>
             """,
             unsafe_allow_html=True
@@ -1612,9 +1623,10 @@ def chat_panel():
     # Input
     text = st.chat_input(placeholder=tr("Type a message…"))
     if text is not None:
-        # Store exactly what user typed; rendering will escape it
         post_message(thread_id, me["id"], text)
         st.rerun()
+
+
 
 # def _initials(name: str | None, email: str | None) -> str:
 #     base = (name or "").strip() or (email or "").split("@")[0]
