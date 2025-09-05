@@ -325,6 +325,13 @@ TRANSLATIONS_EL = {
     "✅ Verified Contract": "✅ Επικυρωμένο Συμβόλαιο",
     "⏳ Pending Review": "⏳ Αναμονή Ελέγχου",
     "ΑFΜ (9 digits)": "ΑΦΜ (9 ψηφία)",
+    "Did the tenant pay on time?": "Πλήρωνε ο ενοικιαστής στην ώρα του;",
+    "Did the tenant leave utilities unpaid?": "Άφησε ο ενοικιαστής απλήρωτους λογαριασμούς;",
+    "Did the tenant leave the apartment in good condition?": "Άφησε ο ενοικιαστής το διαμέρισμα σε καλή κατάσταση;",
+    "Optional comments": "Προαιρετικά σχόλια",
+    "Tenant: {tenant_name} — Address: {address}": "Ενοικιαστής: {tenant_name} — Διεύθυνση: {address}",
+    "I confirm I was the landlord for this tenant and consent to the use and disclosure of my full name solely for verification of this reference.": "Επιβεβαιώνω ότι ήμουν ο ιδιοκτήτης αυτού του ενοικιαστή και συναινώ στη χρήση και γνωστοποίηση του πλήρους ονόματός μου αποκλειστικά για την επαλήθευση αυτής της σύστασης.",
+    "RentRight processes your responses, and if the tenant has uploaded a tenancy contract, may decrypt and review it after your confirmation solely to verify this reference (lawful basis: legitimate interests). The contract remains encrypted and is not shown to you. You may object at any time as described in the Privacy Notice.": "Η RentRight επεξεργάζεται τις απαντήσεις σας και, εάν ο ενοικιαστής έχει ανεβάσει μισθωτήριο συμβόλαιο, μπορεί να το αποκρυπτογραφήσει και να το εξετάσει μετά την επιβεβαίωσή σας αποκλειστικά για την επαλήθευση αυτής της σύστασης (νομική βάση: έννομο συμφέρον). Το συμβόλαιο παραμένει κρυπτογραφημένο και δεν εμφανίζεται σε εσάς. Μπορείτε να αντιταχθείτε οποιαδήποτε στιγμή, όπως περιγράφεται στη Δήλωση Απορρήτου.",
 }
 
 
