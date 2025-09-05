@@ -66,6 +66,52 @@ TRANSLATIONS_EL = {
         "Tenant Dashboard": "Πίνακας Ενοικιαστή",
         "Landlord Dashboard": "Πίνακας Ιδιοκτήτη",
         "Administrator Dashboard": "Πίνακας Διαχειριστή",
+         # --- Search by name/email ---
+        "Search landlords": "Αναζήτηση ιδιοκτητών",
+        "Type a name or email": "Πληκτρολογήστε όνομα ή email",
+        "e.g. Maria Papadopoulou or papadop": "π.χ. Μαρία Παπαδοπούλου ή papadop",
+        "Search unavailable.": "Η αναζήτηση δεν είναι διαθέσιμη.",
+        "No matches.": "Δεν βρέθηκαν αποτελέσματα.",
+        "Add contact": "Προσθήκη επαφής",
+        "Contact added.": "Η επαφή προστέθηκε.",
+        "Can’t add contact": "Αδυναμία προσθήκης επαφής",
+
+        # --- Property search ---
+        "Search landlords by property": "Αναζήτηση ιδιοκτητών ανά ακίνητο",
+        "Property filters": "Φίλτρα ακινήτων",
+        "Min size (m²)": "Ελάχιστο μέγεθος (τ.μ.)",
+        "Max size (m²)": "Μέγιστο μέγεθος (τ.μ.)",
+        "Min rooms": "Ελάχιστα δωμάτια",
+        "Max rooms": "Μέγιστα δωμάτια",
+        "Min floor": "Ελάχιστος όροφος",
+        "Max floor": "Μέγιστος όροφος",
+        "Min price (€)": "Ελάχιστη τιμή (€)",
+        "Max price (€)": "Μέγιστη τιμή (€)",
+        "Search": "Αναζήτηση",
+        "Reset": "Επαναφορά",
+        "result(s)": "αποτέλεσμα(τα)",
+        "rooms": "δωμάτια",
+        "Floor": "Όροφος",
+        "Open listing": "Προβολή αγγελίας",
+        "Updated": "Ενημερώθηκε",
+        "For more details": "Για περισσότερες λεπτομέρειες",
+
+        # --- Add-by-email ---
+        "Can’t find the landlord? Send a request by email.": "Δεν βρίσκετε τον ιδιοκτήτη; Στείλτε αίτημα μέσω email.",
+        "Send request by email": "Αίτημα μέσω email",
+        "Landlord email": "Email ιδιοκτήτη",
+        "Enter a valid email.": "Εισάγετε έγκυρο email.",
+
+        # --- Status badges ---
+        "Connected": "Συνδεδεμένος",
+        "Rejected": "Απορρίφθηκε",
+        "Pending": "Εκκρεμεί",
+        "Invited": "Προσκεκλημένος",
+        "In contacts": "Στις επαφές",
+        "No relation": "Καμία σχέση",
+        # --- Help icon tooltips ---
+        "Find landlords already in the system by name or email.": "Βρείτε ιδιοκτήτες που υπάρχουν ήδη στο σύστημα με όνομα ή email.",
+        "Filter landlords by visible property listings.": "Φιλτράρετε ιδιοκτήτες μέσω των εμφανών αγγελιών τους.",
         # Future Landlords
         "Future Landlords (Contacts)": "Μελλοντικοί Ιδιοκτήτες (Επαφές)",
         "Enter a landlord’s email address": "Εισάγετε το email του ιδιοκτήτη",
@@ -3226,7 +3272,7 @@ def tenant_dashboard():
             with c1:
                 st.markdown(f"**{tr('Search landlords')}**")
             with c2:
-                help_icon("Find landlords already in the system by name or email.", key="help_search_name")
+                help_icon(tr("Find landlords already in the system by name or email."), key="help_search_name")
 
             q = st.text_input(
                 tr("Type a name or email"),
@@ -3303,7 +3349,7 @@ def tenant_dashboard():
             with c1:
                 st.markdown(f"**{tr('Search landlords by property')}**")
             with c2:
-                help_icon("Filter landlords by visible property listings.", key="help_search_property")
+                help_icon(tr("Filter landlords by visible property listings."), key="help_search_property")
 
             with st.expander(tr("Property filters"), True):
                 # Location pickers
