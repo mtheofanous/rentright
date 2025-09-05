@@ -3826,7 +3826,7 @@ def tenant_dashboard():
 
                 else:
 
-                    b1, b2 = colR.columns(2)
+                    b1, b2 = colR.columns([3,3])
                     if b1.button(tr("Send invitation"), key=k(cid, "send_invite_plain")):
                         ok, msg = invite_future_landlord(
                             tenant_id, fl_email,
