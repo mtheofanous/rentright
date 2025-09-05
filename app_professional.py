@@ -3226,7 +3226,7 @@ def tenant_dashboard():
             with c1:
                 st.markdown(f"**{tr('Search landlords')}**")
             with c2:
-                help_icon("?", help="Find landlords already in the system by name or email.", key="help_search_name")
+                help_icon("Find landlords already in the system by name or email.", key="help_search_name")
 
             q = st.text_input(
                 tr("Type a name or email"),
@@ -3304,7 +3304,7 @@ def tenant_dashboard():
             with c1:
                 st.markdown(f"**{tr('Search landlords by property')}**")
             with c2:
-                help_icon("?", help="Filter landlords by visible property listings.", key="help_search_property")
+                help_icon("Filter landlords by visible property listings.", key="help_search_property")
 
             with st.expander(tr("Property filters"), True):
                 # Location pickers
