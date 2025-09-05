@@ -3572,20 +3572,22 @@ def tenant_dashboard():
     # ---------- NAV BUTTONS (set active page only) ----------
     nav1, nav2, nav3, nav4 = st.columns(4)
 
-    # default page
+    # ---------- NAV STATE (TENANT) ----------
     if "tenant_page" not in st.session_state:
-        st.session_state.tenant_page = "find_landlords"
-        
-    if "page" not in st.session_state:
-        st.session_state["page"] = "my_contacts"  # default landing page
+        st.session_state["tenant_page"] = "find_landlords"  # default
+
+    # keep any legacy "page" readers in sync (optional but safe)
+    st.session_state["page"] = st.session_state["tenant_page"]
 
     def _go(page_key: str):
-        # optional: clear any per-page transient UI flags when switching
+        # clean transient UI flags if you want
         for k in list(st.session_state.keys()):
             if k.startswith(("tfl:", "tfl_", "tfl_contacts:", "ld_otr_", "otr_", "prospects")):
                 st.session_state.pop(k, None)
-        st.session_state.tenant_page = page_key
-        # no immediate st.rerun() needed; Streamlit reruns automatically after button click
+        st.session_state["tenant_page"] = page_key
+        st.session_state["page"] = page_key
+        st.rerun()
+
 
     def tenant_future_landlords_section():
         """
@@ -4680,25 +4682,39 @@ def tenant_dashboard():
         st.divider()
 
 
-    with nav2:
-        if st.button(tr("Search"), key="btn_find_landlords", use_container_width=True):
-            _go("find_landlords")
+    current_page = st.session_state.get("tenant_page", "find_landlords")
 
     with nav1:
-        if st.button(tr("My Contacts"), key="btn_my_contacts", use_container_width=True):
+        is_active = current_page == "my_contacts"
+        if st.button(tr("My Contacts"), key="btn_my_contacts",
+                    use_container_width=True,
+                    type=("primary" if is_active else "secondary")):
             _go("my_contacts")
 
+    with nav2:
+        is_active = current_page == "find_landlords"
+        if st.button(tr("Search"), key="btn_find_landlords",
+                    use_container_width=True,
+                    type=("primary" if is_active else "secondary")):
+            _go("find_landlords")
+
     with nav3:
-        if st.button(tr("Open to Rent"), key="btn_open_to_rent", use_container_width=True):
+        is_active = current_page == "open_to_rent"
+        if st.button(tr("Open to Rent"), key="btn_open_to_rent",
+                    use_container_width=True,
+                    type=("primary" if is_active else "secondary")):
             _go("open_to_rent")
 
     with nav4:
-        if st.button(tr("My References"), key="btn_prev_refs", use_container_width=True):
+        is_active = current_page == "prev_refs"
+        if st.button(tr("My References"), key="btn_prev_refs",
+                    use_container_width=True,
+                    type=("primary" if is_active else "secondary")):
             _go("prev_refs")
+
 
     # st.divider()
 
-    # ---------- FULL-WIDTH PAGE RENDER ----------
     page = st.session_state.tenant_page
     if page == "my_contacts":
         tenant_contacts()
@@ -4708,9 +4724,7 @@ def tenant_dashboard():
         tenant_open_to_rent_section()
     elif page == "prev_refs":
         previous_landlords_references()
-    else:
-        # fallback (shouldn't happen)
-        tenant_contacts()
+
     chat_panel()
         
 
@@ -5698,8 +5712,6 @@ def landlord_dashboard():
                                     st.write(comments)
                             else:
                                 st.caption(tr('No reference found.'))
-
-
 
         with tab_all:
             render_requests(all_reqs, "all")
