@@ -3365,7 +3365,7 @@ def admin_dashboard():
             st.rerun()
     with col_h3: logout_button()
     
-    st.caption(f"Logged in as {st.session_state.user['email']}")
+    st.caption(f"{tr('Logged in as')} {st.session_state.user['email']}")
 
     # ---------------- Settings moved from sidebar ----------------
     with st.expander(tr('Email & App Settings')):
