@@ -3195,6 +3195,31 @@ def admin_dashboard():
 #------------------------------------------------------------------------------------------------------------------------------
     
 def tenant_dashboard():
+    
+     # CSS every run (kept, with tiny header-inline util already covered by columns above)
+    def _ensure_tfl_css():
+        st.markdown("""
+        <style>
+        .tfl-title{display:flex;align-items:center;gap:12px;margin-bottom:4px}
+        .tfl-avatar{width:40px;height:40px;border-radius:999px;display:flex;align-items:center;justify-content:center;
+                    font-weight:700;color:#111;border:1px solid #e5e7eb;background:linear-gradient(135deg,#f8fafc,#e2e8f0)}
+        .tfl-name{font-weight:700;font-size:1.05rem;margin:0}
+        .tfl-email{color:#64748b;font-size:.9rem;margin-top:2px}
+        .tfl-badge{padding:4px 10px;border-radius:999px;font-size:.85rem;font-weight:600;border:1px solid;display:inline-block}
+        .tfl-badge--ok{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
+        .tfl-badge--info{background:#eff6ff;color:#1e40af;border-color:#bfdbfe}
+        .tfl-badge--err{background:#fef2f2;color:#7f1d1d;border-color:#fecaca}
+        .tfl-meta{color:#94a3b8;font-size:.85rem;margin-top:2px}
+        .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#f1f5f9;color:#334155;font-size:.8rem;
+            margin-right:6px;margin-bottom:4px;border:1px solid #e2e8f0}
+        .prop-card{border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;margin-bottom:8px;background:#fff}
+        .prop-title{font-weight:600;margin-bottom:2px}
+        .prop-sub{color:#475569;font-size:.9rem;margin:4px 0 6px}
+        .prop-foot{color:#64748b;font-size:.85rem}
+        </style>
+        """, unsafe_allow_html=True)
+    
+    
     col_h1, col_h2, col_h3 = st.columns([5,1,2])
     with col_h1: st.header(tr('Tenant Dashboard'))
     with col_h2:
@@ -3236,12 +3261,12 @@ def tenant_dashboard():
         st.session_state.tenant_page = page_key
         # no immediate st.rerun() needed; Streamlit reruns automatically after button click
 
-
     def tenant_future_landlords_section():
         """
         Tenant dashboard: manage future landlords (contacts).
         - Namespaced widget keys to avoid Streamlit duplicate-key errors.
         - Shows landlord name (if available) + email.
+        - Uses the same CSS/badge styling as tenant_contancts() via _ensure_tfl_css().
         """
         st.header(tr("Future landlords"))
 
@@ -3252,10 +3277,22 @@ def tenant_dashboard():
                 if k.startswith(("ld_otr_", "otr_", "prospects")):
                     del st.session_state[k]
 
+        # Ensure shared CSS (avatar, badges, chips, property cards) is loaded
+        _ensure_tfl_css()
+
         # Namespace for widget keys in this section
         NS = "tfl"
         def k(cid, name):
             return f"{NS}:{name}:{cid}"
+
+        def _initials(name: str | None, email: str | None) -> str:
+            base = (name or "").strip() or (email or "").split("@")[0]
+            parts = [p for p in (base or "").replace(".", " ").split() if p]
+            if len(parts) >= 2:
+                return (parts[0][0] + parts[1][0]).upper()
+            if parts:
+                return parts[0][:2].upper()
+            return "?"
 
         # --- Search landlords by name or email ---------------------------------
         with st.container(border=True):
@@ -3299,31 +3336,41 @@ def tenant_dashboard():
                         inbound_req = int(rowc[2]) if rowc else 0
 
                         with st.container(border=True):
-                            cols = st.columns([5, 3, 4])
+                            colL, colM, colR = st.columns([5, 3, 4])
 
-                            # Left: identity
-                            title = (ll_name or ll_email or f"Landlord #{ll_id}").strip()
-                            cols[0].markdown(f"**{title}**")
-                            if ll_name and ll_email:
-                                cols[0].caption(ll_email)
+                            # Left: avatar + identity (same look as Contacts)
+                            display_title = (ll_name or ll_email or f"Landlord #{ll_id}").strip()
+                            initials = _initials(ll_name, ll_email)
+                            colL.markdown(
+                                f"""
+                                <div class="tfl-title">
+                                <div class="tfl-avatar">{initials}</div>
+                                <div>
+                                    <div class="tfl-name">{display_title}</div>
+                                    <div class="tfl-email"><a href="mailto:{ll_email}">{ll_email}</a></div>
+                                </div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
 
-                            # Middle: status badge
+                            # Middle: styled status badge
                             if rel_status == "connected":
-                                cols[1].success(tr("Connected"))
+                                colM.markdown(f'<span class="tfl-badge tfl-badge--ok">{tr("Connected")}</span>', unsafe_allow_html=True)
                             elif rel_status == "rejected":
-                                cols[1].error(tr("Rejected"))
+                                colM.markdown(f'<span class="tfl-badge tfl-badge--err">{tr("Rejected")}</span>', unsafe_allow_html=True)
                             elif inbound_req:
-                                cols[1].info(tr("Pending"))
+                                colM.markdown(f'<span class="tfl-badge tfl-badge--info">{tr("Pending")}</span>', unsafe_allow_html=True)
                             elif invited:
-                                cols[1].info(tr("Invited"))
+                                colM.markdown(f'<span class="tfl-badge tfl-badge--info">{tr("Invited")}</span>', unsafe_allow_html=True)
                             elif in_contacts:
-                                cols[1].caption(tr("In contacts"))
+                                colM.markdown(f'<span class="tfl-badge">{tr("In contacts")}</span>', unsafe_allow_html=True)
                             else:
-                                cols[1].caption(tr("No relation"))
+                                colM.markdown(f'<span class="tfl-badge">{tr("No relation")}</span>', unsafe_allow_html=True)
 
                             # Right: action
                             if not in_contacts:
-                                if cols[2].button(tr("Add contact"), key=k(ll_id, "search_add")):
+                                if colR.button(tr("Add contact"), key=k(ll_id, "search_add")):
                                     try:
                                         add_future_landlord_contact(tenant_id, ll_email)
                                         try:
@@ -3334,7 +3381,11 @@ def tenant_dashboard():
                                         st.rerun()
                                     except Exception as e:
                                         st.error(f"{tr('Can’t add contact')}: {e}")
-                
+                            else:
+                                # Optional: show "In contacts" or offer secondary actions if you add them later
+                                pass
+
+        # --- Search landlords by property (with filters) ------------------------
         with st.container(border=True):
             c1, c2 = st.columns([6, 0.3])
             with c1:
@@ -3424,28 +3475,41 @@ def tenant_dashboard():
                         inbound_req = int(rowc[2]) if rowc else 0
 
                         with st.container(border=True):
-                            cols = st.columns([5, 3, 4])
+                            colL, colM, colR = st.columns([5, 3, 4])
 
-                            title = (ll_name or ll_email or f"Landlord #{ll_id}").strip()
-                            cols[0].markdown(f"**{title}**")
-                            if ll_name and ll_email:
-                                cols[0].caption(ll_email)
+                            # Left: avatar + identity
+                            display_title = (ll_name or ll_email or f"Landlord #{ll_id}").strip()
+                            initials = _initials(ll_name, ll_email)
+                            colL.markdown(
+                                f"""
+                                <div class="tfl-title">
+                                <div class="tfl-avatar">{initials}</div>
+                                <div>
+                                    <div class="tfl-name">{display_title}</div>
+                                    <div class="tfl-email"><a href="mailto:{ll_email}">{ll_email}</a></div>
+                                </div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
 
+                            # Middle: styled status badge
                             if rel_status == "connected":
-                                cols[1].success(tr("Connected"))
+                                colM.markdown(f'<span class="tfl-badge tfl-badge--ok">{tr("Connected")}</span>', unsafe_allow_html=True)
                             elif rel_status == "rejected":
-                                cols[1].error(tr("Rejected"))
+                                colM.markdown(f'<span class="tfl-badge tfl-badge--err">{tr("Rejected")}</span>', unsafe_allow_html=True)
                             elif inbound_req:
-                                cols[1].info(tr("Pending"))
+                                colM.markdown(f'<span class="tfl-badge tfl-badge--info">{tr("Pending")}</span>', unsafe_allow_html=True)
                             elif invited:
-                                cols[1].info(tr("Invited"))
+                                colM.markdown(f'<span class="tfl-badge tfl-badge--info">{tr("Invited")}</span>', unsafe_allow_html=True)
                             elif in_contacts:
-                                cols[1].caption(tr("In contacts"))
+                                colM.markdown(f'<span class="tfl-badge">{tr("In contacts")}</span>', unsafe_allow_html=True)
                             else:
-                                cols[1].caption(tr("No relation"))
+                                colM.markdown(f'<span class="tfl-badge">{tr("No relation")}</span>', unsafe_allow_html=True)
 
+                            # Right: action
                             if not in_contacts:
-                                if cols[2].button(tr("Add contact"), key=f"{NS}:prop_add_{prop_id}_{ll_id}"):
+                                if colR.button(tr("Add contact"), key=f"{NS}:prop_add_{prop_id}_{ll_id}"):
                                     try:
                                         add_future_landlord_contact(tenant_id, ll_email)
                                         try:
@@ -3456,8 +3520,11 @@ def tenant_dashboard():
                                         st.rerun()
                                     except Exception as e:
                                         st.error(f"{tr('Can’t add contact')}: {e}")
+                            else:
+                                # Optional: offer actions for existing contacts if needed
+                                pass
 
-                            # Property chips
+                            # Property chips (styled pills)
                             where = " — ".join([x for x in [reg, ru, muni] if x])
                             chips = []
                             if where:   chips.append(f'<span class="pill">{where}</span>')
@@ -3507,10 +3574,285 @@ def tenant_dashboard():
                             st.rerun()
                         except Exception as e:
                             st.error(f"{tr('Can’t add contact')}: {e}")
+
+    # def tenant_future_landlords_section():
+    #     """
+    #     Tenant dashboard: manage future landlords (contacts).
+    #     - Namespaced widget keys to avoid Streamlit duplicate-key errors.
+    #     - Shows landlord name (if available) + email.
+    #     """
+    #     st.header(tr("Future landlords"))
+
+    #     tenant_id = st.session_state.user["id"]
+
+    #     def _clear_transient_search_flags():
+    #         for k in list(st.session_state.keys()):
+    #             if k.startswith(("ld_otr_", "otr_", "prospects")):
+    #                 del st.session_state[k]
+                    
+    #     _ensure_tfl_css()
+
+    #     # Namespace for widget keys in this section
+    #     NS = "tfl"
+    #     def k(cid, name):
+    #         return f"{NS}:{name}:{cid}"
+
+    #     # --- Search landlords by name or email ---------------------------------
+    #     with st.container(border=True):
+    #         c1, c2 = st.columns([6, 0.3])
+    #         with c1:
+    #             st.markdown(f"**{tr('Search landlords')}**")
+    #         with c2:
+    #             help_icon(tr("Find landlords already in the system by name or email."), key="help_search_name")
+
+    #         q = st.text_input(
+    #             tr("Type a name or email"),
+    #             key=f"{NS}:search_q",
+    #             placeholder=tr("e.g. Maria Papadopoulou or papadop"),
+    #         )
+            
+        
+
+    #         if q and len(q.strip()) >= 2:
+    #             try:
+    #                 results = search_landlords_by_name_or_email(q, limit=25)
+    #             except Exception:
+    #                 results = []
+    #                 st.warning(tr("Search unavailable."))
+
+    #             if not results:
+    #                 st.caption(tr("No matches."))
+    #             else:
+    #                 for (ll_id, ll_name, ll_email) in results:
+    #                     # relation/contacts state
+    #                     try:
+    #                         rel_status = flc_get_status(ll_id, tenant_id)  # 'connected' | 'rejected' | None
+    #                     except Exception:
+    #                         rel_status = None
+
+    #                     c = get_conn()
+    #                     rowc = c.execute(
+    #                         "SELECT id, invited, inbound_request FROM future_landlord_contacts "
+    #                         "WHERE tenant_id=? AND LOWER(email)=LOWER(?) LIMIT 1",
+    #                         (tenant_id, (ll_email or "").strip().lower()),
+    #                     ).fetchone()
+    #                     in_contacts = bool(rowc)
+    #                     invited = int(rowc[1]) if rowc else 0
+    #                     inbound_req = int(rowc[2]) if rowc else 0
+
+    #                     with st.container(border=True):
+    #                         cols = st.columns([5, 3, 4])
+
+    #                         # Left: identity
+    #                         title = (ll_name or ll_email or f"Landlord #{ll_id}").strip()
+    #                         cols[0].markdown(f"**{title}**")
+    #                         if ll_name and ll_email:
+    #                             cols[0].caption(ll_email)
+
+    #                         # Middle: status badge
+    #                         if rel_status == "connected":
+    #                             cols[1].success(tr("Connected"))
+    #                         elif rel_status == "rejected":
+    #                             cols[1].error(tr("Rejected"))
+    #                         elif inbound_req:
+    #                             cols[1].info(tr("Pending"))
+    #                         elif invited:
+    #                             cols[1].info(tr("Invited"))
+    #                         elif in_contacts:
+    #                             cols[1].caption(tr("In contacts"))
+    #                         else:
+    #                             cols[1].caption(tr("No relation"))
+
+    #                         # Right: action
+    #                         if not in_contacts:
+    #                             if cols[2].button(tr("Add contact"), key=k(ll_id, "search_add")):
+    #                                 try:
+    #                                     add_future_landlord_contact(tenant_id, ll_email)
+    #                                     try:
+    #                                         st.cache_data.clear()
+    #                                     except Exception:
+    #                                         pass
+    #                                     st.success(tr("Contact added."))
+    #                                     st.rerun()
+    #                                 except Exception as e:
+    #                                     st.error(f"{tr('Can’t add contact')}: {e}")
+                
+    #     with st.container(border=True):
+    #         c1, c2 = st.columns([6, 0.3])
+    #         with c1:
+    #             st.markdown(f"**{tr('Search landlords by property')}**")
+    #         with c2:
+    #             help_icon(tr("Filter landlords by visible property listings."), key="help_search_property")
+
+    #         with st.expander(tr("Property filters"), True):
+    #             # Location pickers
+    #             lc1, lc2, lc3 = st.columns(3)
+    #             with lc1:
+    #                 p_region, p_regional_unit, p_municipality = greece_location_pickers(prefix=f"{NS}_prop")
+
+    #             # Ranged numeric filters
+    #             r1c1, r1c2 = st.columns(2)
+    #             p_size_min = r1c1.number_input(tr("Min size (m²)"), min_value=0, max_value=10000, value=0, step=1, key=f"{NS}:p_size_min") or None
+    #             p_size_max = r1c2.number_input(tr("Max size (m²)"), min_value=0, max_value=10000, value=0, step=1, key=f"{NS}:p_size_max") or None
+
+    #             r2c1, r2c2 = st.columns(2)
+    #             p_rooms_min = r2c1.number_input(tr("Min rooms"), min_value=0, max_value=50, value=0, step=1, key=f"{NS}:p_rooms_min") or None
+    #             p_rooms_max = r2c2.number_input(tr("Max rooms"), min_value=0, max_value=50, value=0, step=1, key=f"{NS}:p_rooms_max") or None
+
+    #             r3c1, r3c2 = st.columns(2)
+    #             _floor_min_val = r3c1.number_input(tr("Min floor"), min_value=-5, max_value=100, value=0, step=1, key=f"{NS}:p_floor_min")
+    #             _floor_max_val = r3c2.number_input(tr("Max floor"), min_value=-5, max_value=100, value=0, step=1, key=f"{NS}:p_floor_max")
+    #             p_floor_min = _floor_min_val if _floor_min_val != 0 else None
+    #             p_floor_max = _floor_max_val if _floor_max_val != 0 else None
+
+    #             r4c1, r4c2 = st.columns(2)
+    #             p_price_min = r4c1.number_input(tr("Min price (€)"), min_value=0, max_value=1_000_000, value=0, step=50, key=f"{NS}:p_price_min") or None
+    #             p_price_max = r4c2.number_input(tr("Max price (€)"), min_value=0, max_value=1_000_000, value=0, step=50, key=f"{NS}:p_price_max") or None
+
+    #         # sticky flag
+    #         flag_key = f"{NS}:prop_do_search"
+    #         if flag_key not in st.session_state:
+    #             st.session_state[flag_key] = False
+
+    #         cbtn1, cbtn2 = st.columns([1, 1])
+    #         if cbtn1.button(tr("Search"), key=f"{NS}:prop_search_btn"):
+    #             st.session_state[flag_key] = True
+    #         if cbtn2.button(tr("Reset"), key=f"{NS}:prop_reset_btn"):
+    #             st.session_state[flag_key] = False
+    #             try:
+    #                 st.cache_data.clear()
+    #             except Exception:
+    #                 pass
+    #             st.rerun()
+
+    #         if st.session_state[flag_key]:
+    #             try:
+    #                 prop_results = search_landlords_by_property_location(
+    #                     region=p_region,
+    #                     regional_unit=p_regional_unit,
+    #                     municipality=p_municipality,
+    #                     size_min=p_size_min, size_max=p_size_max,
+    #                     rooms_min=p_rooms_min, rooms_max=p_rooms_max,
+    #                     floor_min=p_floor_min, floor_max=p_floor_max,
+    #                     price_min=p_price_min, price_max=p_price_max,
+    #                     limit=50,
+    #                 )
+    #             except Exception:
+    #                 prop_results = []
+    #                 st.warning(tr("Search unavailable."))
+
+    #             if not prop_results:
+    #                 st.caption(tr("No matches."))
+    #             else:
+    #                 st.caption(f"{len(prop_results)} {tr('result(s)')}")
+    #                 for (
+    #                     prop_id, ll_id, ll_name, ll_email,
+    #                     addr, url, reg, ru, muni, size_m2, rooms, floor, price, updated_at
+    #                 ) in prop_results:
+
+    #                     try:
+    #                         rel_status = flc_get_status(ll_id, tenant_id)
+    #                     except Exception:
+    #                         rel_status = None
+
+    #                     c = get_conn()
+    #                     rowc = c.execute(
+    #                         "SELECT id, invited, inbound_request FROM future_landlord_contacts "
+    #                         "WHERE tenant_id=? AND LOWER(email)=LOWER(?) LIMIT 1",
+    #                         (tenant_id, (ll_email or "").strip().lower()),
+    #                     ).fetchone()
+    #                     in_contacts = bool(rowc)
+    #                     invited = int(rowc[1]) if rowc else 0
+    #                     inbound_req = int(rowc[2]) if rowc else 0
+
+    #                     with st.container(border=True):
+    #                         cols = st.columns([5, 3, 4])
+
+    #                         title = (ll_name or ll_email or f"Landlord #{ll_id}").strip()
+    #                         cols[0].markdown(f"**{title}**")
+    #                         if ll_name and ll_email:
+    #                             cols[0].caption(ll_email)
+
+    #                         if rel_status == "connected":
+    #                             cols[1].success(tr("Connected"))
+    #                         elif rel_status == "rejected":
+    #                             cols[1].error(tr("Rejected"))
+    #                         elif inbound_req:
+    #                             cols[1].info(tr("Pending"))
+    #                         elif invited:
+    #                             cols[1].info(tr("Invited"))
+    #                         elif in_contacts:
+    #                             cols[1].caption(tr("In contacts"))
+    #                         else:
+    #                             cols[1].caption(tr("No relation"))
+
+    #                         if not in_contacts:
+    #                             if cols[2].button(tr("Add contact"), key=f"{NS}:prop_add_{prop_id}_{ll_id}"):
+    #                                 try:
+    #                                     add_future_landlord_contact(tenant_id, ll_email)
+    #                                     try:
+    #                                         st.cache_data.clear()
+    #                                     except Exception:
+    #                                         pass
+    #                                     st.success(tr("Contact added."))
+    #                                     st.rerun()
+    #                                 except Exception as e:
+    #                                     st.error(f"{tr('Can’t add contact')}: {e}")
+
+    #                         # Property chips
+    #                         where = " — ".join([x for x in [reg, ru, muni] if x])
+    #                         chips = []
+    #                         if where:   chips.append(f'<span class="pill">{where}</span>')
+    #                         if size_m2: chips.append(f'<span class="pill">{int(size_m2):,} m²</span>')
+    #                         if rooms:   chips.append(f'<span class="pill">{int(rooms)} {tr("rooms")}</span>')
+    #                         if floor not in (None, 0): chips.append(f'<span class="pill">{tr("Floor")} {int(floor)}</span>')
+    #                         if price:   chips.append(f'<span class="pill">€{int(price):,}</span>')
+    #                         chips_html = " ".join(chips)
+    #                         link_html = f' 🔗 <a href="{url}">{_url_domain(url) or tr("Open listing")}</a>' if url else ""
+    #                         st.markdown(
+    #                             f"""
+    #                             <div class="prop-card">
+    #                             <div class="prop-title">• {addr}</div>
+    #                             <div class="prop-sub">{chips_html}</div>
+    #                             <div class="prop-foot">{tr('Updated')}: {format_dt(updated_at)}</div>
+    #                             <div class="prop-foot">{tr('For more details')}: {link_html}</div>
+    #                             </div>
+    #                             """,
+    #                             unsafe_allow_html=True
+    #                         )
+
+    #     # Friendly hint + add-by-email
+    #     st.caption(tr("Can’t find the landlord? Send a request by email."))
+
+    #     with st.expander(tr("Send request by email"), expanded=False):
+    #         with st.form(f"{NS}:add_contact_form", clear_on_submit=True):
+    #             new_email = st.text_input(
+    #                 tr("Landlord email"),
+    #                 key=f"{NS}:new_email",
+    #                 placeholder="name@example.com",
+    #             )
+    #             col_a, _ = st.columns([3, 6])
+    #             submitted = col_a.form_submit_button(tr("Add contact"))
+    #             if submitted:
+    #                 email = (new_email or "").strip()
+    #                 if not email or "@" not in email:
+    #                     st.error(tr("Enter a valid email."))
+    #                 else:
+    #                     try:
+    #                         add_future_landlord_contact(tenant_id, email)
+    #                         try:
+    #                             st.cache_data.clear()
+    #                         except Exception:
+    #                             pass
+    #                         _clear_transient_search_flags()
+    #                         st.success(tr("Contact added."))
+    #                         st.rerun()
+    #                     except Exception as e:
+    #                         st.error(f"{tr('Can’t add contact')}: {e}")
                             
                             
     
-    def tenant_contancts():
+    def tenant_contacts():
         # Header + small help icon (Option A: render-only helper in a second column)
         c1, c2 = st.columns([6, 0.3])
         with c1:
@@ -3518,28 +3860,7 @@ def tenant_dashboard():
         with c2:
             help_icon(tr("Landlords you’ve added or connected with."), key="help_contacts_header")
 
-        # CSS every run (kept, with tiny header-inline util already covered by columns above)
-        def _ensure_tfl_css():
-            st.markdown("""
-            <style>
-            .tfl-title{display:flex;align-items:center;gap:12px;margin-bottom:4px}
-            .tfl-avatar{width:40px;height:40px;border-radius:999px;display:flex;align-items:center;justify-content:center;
-                        font-weight:700;color:#111;border:1px solid #e5e7eb;background:linear-gradient(135deg,#f8fafc,#e2e8f0)}
-            .tfl-name{font-weight:700;font-size:1.05rem;margin:0}
-            .tfl-email{color:#64748b;font-size:.9rem;margin-top:2px}
-            .tfl-badge{padding:4px 10px;border-radius:999px;font-size:.85rem;font-weight:600;border:1px solid;display:inline-block}
-            .tfl-badge--ok{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
-            .tfl-badge--info{background:#eff6ff;color:#1e40af;border-color:#bfdbfe}
-            .tfl-badge--err{background:#fef2f2;color:#7f1d1d;border-color:#fecaca}
-            .tfl-meta{color:#94a3b8;font-size:.85rem;margin-top:2px}
-            .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#f1f5f9;color:#334155;font-size:.8rem;
-                margin-right:6px;margin-bottom:4px;border:1px solid #e2e8f0}
-            .prop-card{border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;margin-bottom:8px;background:#fff}
-            .prop-title{font-weight:600;margin-bottom:2px}
-            .prop-sub{color:#475569;font-size:.9rem;margin:4px 0 6px}
-            .prop-foot{color:#64748b;font-size:.85rem}
-            </style>
-            """, unsafe_allow_html=True)
+       
 
         _ensure_tfl_css()
 
@@ -4289,7 +4610,7 @@ def tenant_dashboard():
     # ---------- FULL-WIDTH PAGE RENDER ----------
     page = st.session_state.tenant_page
     if page == "my_contacts":
-        tenant_contancts()
+        tenant_contacts()
     elif page == "find_landlords":
         tenant_future_landlords_section()
     elif page == "open_to_rent":
@@ -4298,7 +4619,7 @@ def tenant_dashboard():
         previous_landlords_references()
     else:
         # fallback (shouldn't happen)
-        tenant_contancts()
+        tenant_contacts()
         
         
 
