@@ -1558,8 +1558,6 @@ def _avatar_image_from_initials(initials: str, size: int = 48,
     buf.seek(0)
     return buf
 
-# ---------- Chat UI (bubble style) ----------
-
 
 def _initials(name: str | None, email: str | None) -> str:
     base = (name or "").strip() or (email or "").split("@")[0]
@@ -1638,7 +1636,7 @@ def chat_panel():
         st.rerun()
 
 
-
+#-------finish------------------------------------------------------------------------------------------------------------
 
 def flc_get_status(landlord_id: int, tenant_id: int):
     """
