@@ -1114,32 +1114,6 @@ def run_migrations(conn):
 
 
 
-
-
-        
-def delete_previous_landlord_completely(tenant_id: int, prev_landlord_id: int):
-    """
-    Fully remove a previous landlord and ALL related data for this tenant.
-    """
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT token FROM reference_requests WHERE tenant_id=? AND prev_landlord_id=?",
-        (tenant_id, prev_landlord_id),
-    )
-    tokens = [r[0] for r in cur.fetchall()]
-
-    for tok in tokens:
-        try: delete_landlord_responses(tok)
-        except Exception: pass
-        try: delete_contract_hard(tok)
-        except Exception: pass
-        cur.execute("DELETE FROM reference_requests WHERE token=?", (tok,))
-
-    delete_previous_landlord(prev_landlord_id, tenant_id)
-    conn.commit()
-
-
-
 def init_db():
     conn = get_conn()
     conn.execute("PRAGMA foreign_keys = ON;")
@@ -1276,6 +1250,34 @@ def _table_has_column(conn_or_none, table: str, column: str) -> bool:
     cur = c.execute(f"PRAGMA table_info({table})")
     return any(row[1].lower() == column.lower() for row in cur.fetchall())
 
+
+
+#---------TENANT DASHBOARD HELPERS---------------------------------------------------
+#-STARTS HERE-----------------------------------------------------------------------
+
+        
+def delete_previous_landlord_completely(tenant_id: int, prev_landlord_id: int):
+    """
+    Fully remove a previous landlord and ALL related data for this tenant.
+    """
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT token FROM reference_requests WHERE tenant_id=? AND prev_landlord_id=?",
+        (tenant_id, prev_landlord_id),
+    )
+    tokens = [r[0] for r in cur.fetchall()]
+
+    for tok in tokens:
+        try: delete_landlord_responses(tok)
+        except Exception: pass
+        try: delete_contract_hard(tok)
+        except Exception: pass
+        cur.execute("DELETE FROM reference_requests WHERE token=?", (tok,))
+
+    delete_previous_landlord(prev_landlord_id, tenant_id)
+    conn.commit()
+
+
 def list_future_landlord_contacts(tenant_id: int):
     """
     Always returns 7 columns:
@@ -1308,6 +1310,8 @@ def list_future_landlord_contacts(tenant_id: int):
         )
         base = cur.fetchall()
         return [(id_, em, cr, inv, inv_at, 0, None) for (id_, em, cr, inv, inv_at) in base]
+    
+#-FINISH HERE-----------------------------------------------------------------------
 
 def has_inbound_request(tenant_id: int, landlord_email: str) -> bool:
     c = get_conn()
@@ -1500,6 +1504,8 @@ def flc_relation_status(landlord_id: int, tenant_id: int, landlord_email: str):
 
     return None, None
 
+#---------------------TENANT DASHBOARD HELPER---------------------------------------------------------------------------------
+#-STARTS HERE---------------------------------------------------------------------------------------------------------------------
 
 def remove_future_landlord_contact(contact_id: int, tenant_id: int):
     cur = get_conn().cursor()
@@ -1510,43 +1516,13 @@ def remove_future_landlord_contact(contact_id: int, tenant_id: int):
     get_conn().commit()
 
 
-def invite_future_landlord(tenant_id: int, email: str, tenant_name: str, tenant_email: str):
-    base = st.session_state.get("app_base_url") or (st.secrets.get("APP_BASE_URL") if hasattr(st, "secrets") else "")
-    join_link = base if base else ""
 
-    subject = f"Πρόσκληση στο RentRight από τον/την {tenant_name}"
 
-    body = (
-        "Καλησπέρα σας,\n\n"
-        f"Ο/Η {tenant_name} ({tenant_email}) σας πρόσθεσε ως μελλοντικό/ή ιδιοκτήτη/ιδιοκτήτρια στο RentRight.\n"
-        "Με αυτόν τον τρόπο επιθυμεί να παραμείνετε σε επαφή για πιθανή μελλοντική μίσθωση.\n\n"
-        "Τι μπορείτε να κάνετε:\n"
-        "- Συνδεθείτε ή δημιουργήστε έναν λογαριασμό στο RentRight, ώστε να ενημερώνεστε εύκολα και με ασφάλεια.\n"
-        + (f"\nΣύνδεσμος πρόσβασης:\n{join_link}\n" if join_link else "")
-        + (
-            "\nΑν ο σύνδεσμος δεν εμφανίζεται, επισκεφθείτε την αρχική σελίδα του RentRight και συνδεθείτε/εγγραφείτε.\n"
-            if not join_link else ""
-        )
-        + "\nΓια οποιαδήποτε απορία, μπορείτε να απαντήσετε απευθείας σε αυτό το email.\n\n"
-        "Σας ευχαριστούμε,\n"
-        "Η ομάδα RentRight"
-    )
-
-    ok, msg = send_email_smtp(email, subject, body)
-    if ok:
-        conn = get_conn()
-        cur = conn.cursor()
-        cur.execute(
-            "UPDATE future_landlord_contacts SET invited = 1, invited_at = ? WHERE tenant_id = ? AND LOWER(email) = LOWER(?)",
-            (datetime.utcnow().isoformat(), tenant_id, email),
-        )
-        conn.commit()
-    return ok, msg
+#-FINISH HERE---------------------------------------------------------------------------------------------------------------------
 
 
 
-
-# ---------- Auth helpers ----------
+# ---------- Auth helpers ----------------------------------------------------------------------------------------------------------
 def hash_password(password: str, salt: str = "static_salt_change_me") -> str:
     return hashlib.sha256((salt + password).encode()).hexdigest()
 
@@ -1577,45 +1553,45 @@ def _table_has_column(table: str, col: str) -> bool:
     except Exception:
         return False
 
-def clear_tenant_future_landlord(tenant_id: int, landlord_email: str | None = None):
-    """
-    Clears the 'future landlord' reference from the tenant's profile so:
-      - they no longer appear under Prospective Tenants
-      - their own dashboard no longer shows the future landlord
-    Works defensively: updates only the columns that exist.
-    If landlord_email is provided and a matching email column exists, we match on it.
-    """
-    if not _table_has_column("tenant_profiles", "tenant_id"):
-        return  # nothing to do
+# def clear_tenant_future_landlord(tenant_id: int, landlord_email: str | None = None):
+#     """
+#     Clears the 'future landlord' reference from the tenant's profile so:
+#       - they no longer appear under Prospective Tenants
+#       - their own dashboard no longer shows the future landlord
+#     Works defensively: updates only the columns that exist.
+#     If landlord_email is provided and a matching email column exists, we match on it.
+#     """
+#     if not _table_has_column("tenant_profiles", "tenant_id"):
+#         return  # nothing to do
 
-    # Candidate columns that might be present in your schema
-    email_cols = ["future_landlord_email", "future_landlord"]      # pick whichever exists
-    extra_cols = ["future_landlord_name", "future_landlord_phone",
-                  "future_landlord_note", "future_landlord_status",
-                  "future_landlord_updated_at"]
+#     # Candidate columns that might be present in your schema
+#     email_cols = ["future_landlord_email", "future_landlord"]      # pick whichever exists
+#     extra_cols = ["future_landlord_name", "future_landlord_phone",
+#                   "future_landlord_note", "future_landlord_status",
+#                   "future_landlord_updated_at"]
 
-    # Build SET clause only for columns that exist
-    set_bits = []
-    for c in email_cols + extra_cols:
-        if _table_has_column("tenant_profiles", c):
-            set_bits.append(f"{c}=NULL")
+#     # Build SET clause only for columns that exist
+#     set_bits = []
+#     for c in email_cols + extra_cols:
+#         if _table_has_column("tenant_profiles", c):
+#             set_bits.append(f"{c}=NULL")
 
-    if not set_bits:
-        return  # no known columns to clear
+#     if not set_bits:
+#         return  # no known columns to clear
 
-    # WHERE clause: by tenant_id; optionally match email if both landlord_email and email column exist
-    where = "tenant_id=?"
-    params = [tenant_id]
+#     # WHERE clause: by tenant_id; optionally match email if both landlord_email and email column exist
+#     where = "tenant_id=?"
+#     params = [tenant_id]
 
-    match_col = next((c for c in email_cols if _table_has_column("tenant_profiles", c)), None)
-    if landlord_email and match_col:
-        # only clear if the stored email equals this landlord (protects against accidental clearing)
-        where += f" AND ({match_col} IS NULL OR {match_col} = ?)"
-        params.append(landlord_email)
+#     match_col = next((c for c in email_cols if _table_has_column("tenant_profiles", c)), None)
+#     if landlord_email and match_col:
+#         # only clear if the stored email equals this landlord (protects against accidental clearing)
+#         where += f" AND ({match_col} IS NULL OR {match_col} = ?)"
+#         params.append(landlord_email)
 
-    sql = f"UPDATE tenant_profiles SET {', '.join(set_bits)} WHERE {where}"
-    conn.execute(sql, tuple(params))
-    conn.commit()
+#     sql = f"UPDATE tenant_profiles SET {', '.join(set_bits)} WHERE {where}"
+#     conn.execute(sql, tuple(params))
+#     conn.commit()
 
 
 def ensure_tenant_profile_row(tenant_id: int):
@@ -1919,214 +1895,214 @@ def search_landlords_by_property_location(
     return c.execute(sql, params).fetchall() or []
 
 
-def tenant_open_to_rent_section():
-    st.subheader(tr("Open to Rent"))
+# def tenant_open_to_rent_section():
+#     st.subheader(tr("Open to Rent"))
 
-    tid = st.session_state.user["id"]
-    prefs = load_open_to_rent_prefs(tid)
+#     tid = st.session_state.user["id"]
+#     prefs = load_open_to_rent_prefs(tid)
 
-    # If reset asked, we force defaults (zeros/False) instead of loading prefs.
-    force_defaults = st.session_state.pop("otr_force_defaults", False)
+#     # If reset asked, we force defaults (zeros/False) instead of loading prefs.
+#     force_defaults = st.session_state.pop("otr_force_defaults", False)
 
-    if ("otr_keys_inited" not in st.session_state) or force_defaults:
-        if force_defaults:
-            # Defaults
-            st.session_state["otr_open_flag"]  = False
-            st.session_state["otr_size_min"]   = 0
-            st.session_state["otr_size_max"]   = 0
-            st.session_state["otr_rooms_min"]  = 0
-            st.session_state["otr_rooms_max"]  = 0
-            st.session_state["otr_floor_min"]  = 0
-            st.session_state["otr_floor_max"]  = 0
-            st.session_state["otr_price_min"]  = 0
-            st.session_state["otr_price_max"]  = 0
-        else:
-            # From saved prefs
-            st.session_state["otr_open_flag"]  = bool(prefs.get("open_to_rent"))
-            st.session_state["otr_size_min"]   = int(prefs.get("size_min")  or 0)
-            st.session_state["otr_size_max"]   = int(prefs.get("size_max")  or 0)
-            st.session_state["otr_rooms_min"]  = int(prefs.get("rooms_min") or 0)
-            st.session_state["otr_rooms_max"]  = int(prefs.get("rooms_max") or 0)
-            st.session_state["otr_floor_min"]  = int(prefs.get("floor_min") or 0)
-            st.session_state["otr_floor_max"]  = int(prefs.get("floor_max") or 0)
-            st.session_state["otr_price_min"]  = int(prefs.get("price_min") or 0)
-            st.session_state["otr_price_max"]  = int(prefs.get("price_max") or 0)
+#     if ("otr_keys_inited" not in st.session_state) or force_defaults:
+#         if force_defaults:
+#             # Defaults
+#             st.session_state["otr_open_flag"]  = False
+#             st.session_state["otr_size_min"]   = 0
+#             st.session_state["otr_size_max"]   = 0
+#             st.session_state["otr_rooms_min"]  = 0
+#             st.session_state["otr_rooms_max"]  = 0
+#             st.session_state["otr_floor_min"]  = 0
+#             st.session_state["otr_floor_max"]  = 0
+#             st.session_state["otr_price_min"]  = 0
+#             st.session_state["otr_price_max"]  = 0
+#         else:
+#             # From saved prefs
+#             st.session_state["otr_open_flag"]  = bool(prefs.get("open_to_rent"))
+#             st.session_state["otr_size_min"]   = int(prefs.get("size_min")  or 0)
+#             st.session_state["otr_size_max"]   = int(prefs.get("size_max")  or 0)
+#             st.session_state["otr_rooms_min"]  = int(prefs.get("rooms_min") or 0)
+#             st.session_state["otr_rooms_max"]  = int(prefs.get("rooms_max") or 0)
+#             st.session_state["otr_floor_min"]  = int(prefs.get("floor_min") or 0)
+#             st.session_state["otr_floor_max"]  = int(prefs.get("floor_max") or 0)
+#             st.session_state["otr_price_min"]  = int(prefs.get("price_min") or 0)
+#             st.session_state["otr_price_max"]  = int(prefs.get("price_max") or 0)
 
-        st.session_state["otr_keys_inited"] = True
+#         st.session_state["otr_keys_inited"] = True
 
-    # Defaults
-    # Defaults for summary
-    region = district = city = ""
+#     # Defaults
+#     # Defaults for summary
+#     region = district = city = ""
 
-    with st.container(border=True):
-        data, regions, muni_idx = load_ellada_index("ellada.json")
+#     with st.container(border=True):
+#         data, regions, muni_idx = load_ellada_index("ellada.json")
 
-        # If we just pressed Reset, skip preselect from saved prefs this run
-        reset_preselect = st.session_state.pop("otr_reset_preselect", False)
+#         # If we just pressed Reset, skip preselect from saved prefs this run
+#         reset_preselect = st.session_state.pop("otr_reset_preselect", False)
 
-        saved_city = "" if reset_preselect else (prefs.get("search_city") or "").strip()
-        saved_dist = "" if reset_preselect else (prefs.get("search_district") or "").strip()
+#         saved_city = "" if reset_preselect else (prefs.get("search_city") or "").strip()
+#         saved_dist = "" if reset_preselect else (prefs.get("search_district") or "").strip()
         
 
-        # Try to infer Region/Unit from saved values
-        pre_region, pre_unit = (None, None)
-        if saved_city and saved_city in muni_idx:
-            pre_region, pre_unit = muni_idx[saved_city]
-        elif saved_dist:
-            for reg in data.get("Περιφέρειες", []):
-                units = (reg.get("Περιφερειακές Ενότητες") or {})
-                if saved_dist in units:
-                    pre_region = reg.get("όνομα")
-                    pre_unit = saved_dist
-                    break
+#         # Try to infer Region/Unit from saved values
+#         pre_region, pre_unit = (None, None)
+#         if saved_city and saved_city in muni_idx:
+#             pre_region, pre_unit = muni_idx[saved_city]
+#         elif saved_dist:
+#             for reg in data.get("Περιφέρειες", []):
+#                 units = (reg.get("Περιφερειακές Ενότητες") or {})
+#                 if saved_dist in units:
+#                     pre_region = reg.get("όνομα")
+#                     pre_unit = saved_dist
+#                     break
 
-        ANY = tr("Any")
+#         ANY = tr("Any")
 
-        # If we just pressed Reset, or on first run (no key yet), seed pickers to Any
-        if reset_preselect or ("loc_region" not in st.session_state):
-            st.session_state["loc_region"] = ANY
-        if reset_preselect or ("loc_unit" not in st.session_state):
-            st.session_state["loc_unit"] = ANY
-        if reset_preselect or ("loc_city" not in st.session_state):
-            st.session_state["loc_city"] = ANY
+#         # If we just pressed Reset, or on first run (no key yet), seed pickers to Any
+#         if reset_preselect or ("loc_region" not in st.session_state):
+#             st.session_state["loc_region"] = ANY
+#         if reset_preselect or ("loc_unit" not in st.session_state):
+#             st.session_state["loc_unit"] = ANY
+#         if reset_preselect or ("loc_city" not in st.session_state):
+#             st.session_state["loc_city"] = ANY
 
         
-                # Active / Inactive
-        open_flag = st.checkbox(
-            tr("I'm currently looking for a place"),
-            key="otr_open_flag",
-        )
+#                 # Active / Inactive
+#         open_flag = st.checkbox(
+#             tr("I'm currently looking for a place"),
+#             key="otr_open_flag",
+#         )
         
-        with st.expander(tr("Property Charecteristics"), expanded=False):
+#         with st.expander(tr("Property Charecteristics"), expanded=False):
 
-            # REGION
-            region_options = [ANY] + (regions or [])
-            region_index = (region_options.index(pre_region) if (pre_region in region_options and not reset_preselect) else 0)
-            region_sel = st.selectbox("Περιφέρεια", options=region_options, index=region_index, key="loc_region")
+#             # REGION
+#             region_options = [ANY] + (regions or [])
+#             region_index = (region_options.index(pre_region) if (pre_region in region_options and not reset_preselect) else 0)
+#             region_sel = st.selectbox("Περιφέρεια", options=region_options, index=region_index, key="loc_region")
 
-            # REGIONAL UNIT (depends on Region)
-            units = list_units(data, region_sel) if (region_sel and region_sel != ANY) else []
-            unit_options = [ANY] + (units or [])
-            unit_index = (unit_options.index(pre_unit) if (pre_unit in unit_options and not reset_preselect) else 0)
-            unit_sel = st.selectbox("Περιφερειακή Ενότητα", options=unit_options, index=unit_index, key="loc_unit")
+#             # REGIONAL UNIT (depends on Region)
+#             units = list_units(data, region_sel) if (region_sel and region_sel != ANY) else []
+#             unit_options = [ANY] + (units or [])
+#             unit_index = (unit_options.index(pre_unit) if (pre_unit in unit_options and not reset_preselect) else 0)
+#             unit_sel = st.selectbox("Περιφερειακή Ενότητα", options=unit_options, index=unit_index, key="loc_unit")
 
-            # MUNICIPALITY (depends on Unit)
-            municipalities = list_municipalities(data, region_sel, unit_sel) if (region_sel and region_sel != ANY and unit_sel and unit_sel != ANY) else []
-            city_options = [ANY] + (municipalities or [])
-            city_index = (city_options.index(saved_city) if (saved_city in city_options and not reset_preselect) else 0)
-            city_sel = st.selectbox("Δήμος (Πόλη)", options=city_options, index=city_index, key="loc_city")
+#             # MUNICIPALITY (depends on Unit)
+#             municipalities = list_municipalities(data, region_sel, unit_sel) if (region_sel and region_sel != ANY and unit_sel and unit_sel != ANY) else []
+#             city_options = [ANY] + (municipalities or [])
+#             city_index = (city_options.index(saved_city) if (saved_city in city_options and not reset_preselect) else 0)
+#             city_sel = st.selectbox("Δήμος (Πόλη)", options=city_options, index=city_index, key="loc_city")
     
 
-            # Map to your schema (don’t save “Any” — treat as empty)
-            region   = "" if region_sel == ANY else region_sel
-            district = "" if unit_sel   == ANY else unit_sel
-            city     = "" if city_sel   == ANY else city_sel
+#             # Map to your schema (don’t save “Any” — treat as empty)
+#             region   = "" if region_sel == ANY else region_sel
+#             district = "" if unit_sel   == ANY else unit_sel
+#             city     = "" if city_sel   == ANY else city_sel
 
-            c1, c2 = st.columns(2)
-            size_min = c1.number_input(tr("Min size (m²)"), 0, 10000, key="otr_size_min")
-            size_max = c2.number_input(tr("Max size (m²)"), 0, 10000, key="otr_size_max")
+#             c1, c2 = st.columns(2)
+#             size_min = c1.number_input(tr("Min size (m²)"), 0, 10000, key="otr_size_min")
+#             size_max = c2.number_input(tr("Max size (m²)"), 0, 10000, key="otr_size_max")
 
-            r1, r2 = st.columns(2)
-            rooms_min = r1.number_input(tr("Min rooms"), 0, 50, key="otr_rooms_min")
-            rooms_max = r2.number_input(tr("Max rooms"), 0, 50, key="otr_rooms_max")
+#             r1, r2 = st.columns(2)
+#             rooms_min = r1.number_input(tr("Min rooms"), 0, 50, key="otr_rooms_min")
+#             rooms_max = r2.number_input(tr("Max rooms"), 0, 50, key="otr_rooms_max")
 
-            f1, f2 = st.columns(2)
-            floor_min = f1.number_input(tr("Min floor"), -5, 100, key="otr_floor_min")
-            floor_max = f2.number_input(tr("Max floor"), -5, 100, key="otr_floor_max")
+#             f1, f2 = st.columns(2)
+#             floor_min = f1.number_input(tr("Min floor"), -5, 100, key="otr_floor_min")
+#             floor_max = f2.number_input(tr("Max floor"), -5, 100, key="otr_floor_max")
 
-            p1, p2 = st.columns(2)
-            price_min = p1.number_input(tr("Min price (€)"), 0, 1_000_000, key="otr_price_min")
-            price_max = p2.number_input(tr("Max price (€)"), 0, 1_000_000, key="otr_price_max")
+#             p1, p2 = st.columns(2)
+#             price_min = p1.number_input(tr("Min price (€)"), 0, 1_000_000, key="otr_price_min")
+#             price_max = p2.number_input(tr("Max price (€)"), 0, 1_000_000, key="otr_price_max")
             
 
 
-            # ---- Save / Reset -------------------------------------------------------
-            col_save, col_reset = st.columns([1, 1])
+#             # ---- Save / Reset -------------------------------------------------------
+#             col_save, col_reset = st.columns([1, 1])
 
-            if col_save.button(tr("Save")):
-                city_clean = "" if (city == "—") else (city or "")
-                district_clean = "" if (district == "—") else (district or "")
-                if not city_clean and not district_clean:
-                    st.warning(tr("Please enter at least a city or a district."))
-                else:
-                    try:
-                        save_open_to_rent_prefs(
-                            tid, bool(st.session_state["otr_open_flag"]),
-                            city_clean, district_clean,
-                            int(st.session_state["otr_size_min"]), int(st.session_state["otr_size_max"]),
-                            int(st.session_state["otr_rooms_min"]), int(st.session_state["otr_rooms_max"]),
-                            int(st.session_state["otr_floor_min"]), int(st.session_state["otr_floor_max"]),
-                            int(st.session_state["otr_price_min"]), int(st.session_state["otr_price_max"]),
-                            city_osm_id=None, city_osm_type=None,
-                            district_osm_id=None, district_osm_type=None,
-                        )
-                    except TypeError:
-                        save_open_to_rent_prefs(
-                            tid, bool(st.session_state["otr_open_flag"]),
-                            city_clean, district_clean,
-                            int(st.session_state["otr_size_min"]), int(st.session_state["otr_size_max"]),
-                            int(st.session_state["otr_rooms_min"]), int(st.session_state["otr_rooms_max"]),
-                            int(st.session_state["otr_floor_min"]), int(st.session_state["otr_floor_max"]),
-                            int(st.session_state["otr_price_min"]), int(st.session_state["otr_price_max"]),
-                        )
-                    try:
-                        st.cache_data.clear()
-                    except Exception:
-                        pass
-                    st.success(tr("Preferences saved!"))
+#             if col_save.button(tr("Save")):
+#                 city_clean = "" if (city == "—") else (city or "")
+#                 district_clean = "" if (district == "—") else (district or "")
+#                 if not city_clean and not district_clean:
+#                     st.warning(tr("Please enter at least a city or a district."))
+#                 else:
+#                     try:
+#                         save_open_to_rent_prefs(
+#                             tid, bool(st.session_state["otr_open_flag"]),
+#                             city_clean, district_clean,
+#                             int(st.session_state["otr_size_min"]), int(st.session_state["otr_size_max"]),
+#                             int(st.session_state["otr_rooms_min"]), int(st.session_state["otr_rooms_max"]),
+#                             int(st.session_state["otr_floor_min"]), int(st.session_state["otr_floor_max"]),
+#                             int(st.session_state["otr_price_min"]), int(st.session_state["otr_price_max"]),
+#                             city_osm_id=None, city_osm_type=None,
+#                             district_osm_id=None, district_osm_type=None,
+#                         )
+#                     except TypeError:
+#                         save_open_to_rent_prefs(
+#                             tid, bool(st.session_state["otr_open_flag"]),
+#                             city_clean, district_clean,
+#                             int(st.session_state["otr_size_min"]), int(st.session_state["otr_size_max"]),
+#                             int(st.session_state["otr_rooms_min"]), int(st.session_state["otr_rooms_max"]),
+#                             int(st.session_state["otr_floor_min"]), int(st.session_state["otr_floor_max"]),
+#                             int(st.session_state["otr_price_min"]), int(st.session_state["otr_price_max"]),
+#                         )
+#                     try:
+#                         st.cache_data.clear()
+#                     except Exception:
+#                         pass
+#                     st.success(tr("Preferences saved!"))
 
-            if col_reset.button(tr("Reset")):
-                for k in ("loc_region","loc_unit","loc_city",
-                        "otr_open_flag",
-                        "otr_size_min","otr_size_max",
-                        "otr_rooms_min","otr_rooms_max",
-                        "otr_floor_min","otr_floor_max",
-                        "otr_price_min","otr_price_max",
-                        "otr_keys_inited"):
-                    st.session_state.pop(k, None)
+#             if col_reset.button(tr("Reset")):
+#                 for k in ("loc_region","loc_unit","loc_city",
+#                         "otr_open_flag",
+#                         "otr_size_min","otr_size_max",
+#                         "otr_rooms_min","otr_rooms_max",
+#                         "otr_floor_min","otr_floor_max",
+#                         "otr_price_min","otr_price_max",
+#                         "otr_keys_inited"):
+#                     st.session_state.pop(k, None)
 
-                st.session_state["otr_force_defaults"]  = True
-                st.session_state["otr_reset_preselect"] = True
-                st.rerun()
+#                 st.session_state["otr_force_defaults"]  = True
+#                 st.session_state["otr_reset_preselect"] = True
+#                 st.rerun()
 
 
-    # --- Compact summary (uses current widget values) ---------------------------
-    def _fmt_range(lo, hi, suffix=""):
-        has_lo = lo not in (None, 0, "0", "")
-        has_hi = hi not in (None, 0, "0", "")
-        if not has_lo and not has_hi:
-            return None
-        lo_txt = f"{int(lo):,}" if has_lo else "—"
-        hi_txt = f"{int(hi):,}" if has_hi else "—"
-        return f"{lo_txt}–{hi_txt}{suffix}"
+#     # --- Compact summary (uses current widget values) ---------------------------
+#     def _fmt_range(lo, hi, suffix=""):
+#         has_lo = lo not in (None, 0, "0", "")
+#         has_hi = hi not in (None, 0, "0", "")
+#         if not has_lo and not has_hi:
+#             return None
+#         lo_txt = f"{int(lo):,}" if has_lo else "—"
+#         hi_txt = f"{int(hi):,}" if has_hi else "—"
+#         return f"{lo_txt}–{hi_txt}{suffix}"
 
-    latest_region = region if (region and region != "—") else ""
-    latest_district = district if (district and district != "—") else ""
-    latest_city = city if (city and city != "—") else ""
-    loc_txt = " — ".join([x.strip() for x in [latest_region, latest_district, latest_city] if x])
+#     latest_region = region if (region and region != "—") else ""
+#     latest_district = district if (district and district != "—") else ""
+#     latest_city = city if (city and city != "—") else ""
+#     loc_txt = " — ".join([x.strip() for x in [latest_region, latest_district, latest_city] if x])
 
-    size_txt  = _fmt_range(st.session_state["otr_size_min"],  st.session_state["otr_size_max"],  " m²")
-    rooms_txt = _fmt_range(st.session_state["otr_rooms_min"], st.session_state["otr_rooms_max"], f" {tr('rooms')}")
-    floor_txt = _fmt_range(st.session_state["otr_floor_min"], st.session_state["otr_floor_max"])
-    price_txt = _fmt_range(st.session_state["otr_price_min"], st.session_state["otr_price_max"])
+#     size_txt  = _fmt_range(st.session_state["otr_size_min"],  st.session_state["otr_size_max"],  " m²")
+#     rooms_txt = _fmt_range(st.session_state["otr_rooms_min"], st.session_state["otr_rooms_max"], f" {tr('rooms')}")
+#     floor_txt = _fmt_range(st.session_state["otr_floor_min"], st.session_state["otr_floor_max"])
+#     price_txt = _fmt_range(st.session_state["otr_price_min"], st.session_state["otr_price_max"])
 
-    bits = []
-    if size_txt:  bits.append(size_txt)
-    if rooms_txt: bits.append(rooms_txt)
-    if floor_txt: bits.append(tr("Floor") + " " + floor_txt)
-    if price_txt: bits.append("€" + price_txt.replace("–", "–€"))
+#     bits = []
+#     if size_txt:  bits.append(size_txt)
+#     if rooms_txt: bits.append(rooms_txt)
+#     if floor_txt: bits.append(tr("Floor") + " " + floor_txt)
+#     if price_txt: bits.append("€" + price_txt.replace("–", "–€"))
 
-    details_txt = " · ".join(bits)
-    state_label = tr("Active") if st.session_state["otr_open_flag"] else tr("Inactive")
+#     details_txt = " · ".join(bits)
+#     state_label = tr("Active") if st.session_state["otr_open_flag"] else tr("Inactive")
 
-    if loc_txt and details_txt:
-        st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {loc_txt} · {details_txt}")
-    elif loc_txt:
-        st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {loc_txt}")
-    elif details_txt:
-        st.caption(f"{tr('Status:')} {state_label} · {details_txt}")
-    else:
-        st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {tr('Anywhere')}")
+#     if loc_txt and details_txt:
+#         st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {loc_txt} · {details_txt}")
+#     elif loc_txt:
+#         st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {loc_txt}")
+#     elif details_txt:
+#         st.caption(f"{tr('Status:')} {state_label} · {details_txt}")
+#     else:
+#         st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {tr('Anywhere')}")
  
 
 def storage_delete(storage_key: str):
@@ -2178,32 +2154,7 @@ def delete_landlord_responses(token: str):
     conn.commit()
 
 
-def email_reference_cancellation_smtp(
-    tenant_name: str,
-    tenant_email: str,
-    landlord_email: str,
-    landlord_name: str | None,
-    landlord_address: str | None,
-    token: str,
-    cancelled_at: str | None,
-):
-    subject = "Ακύρωση αιτήματος σύστασης — διαγραφή δεδομένων"
-    body = f"""Καλησπέρα {landlord_name or 'σας'},
 
-Ο/Η {tenant_name} ακύρωσε το αίτημα σύστασης ενοικίασης.
-
-Τι σημαίνει αυτό:
-• Ο σύνδεσμος σύστασης με το token {token} έχει πλέον απενεργοποιηθεί.
-• Το ανεβασμένο μισθωτήριο συμβόλαιο διαγράφηκε οριστικά.
-• Τυχόν απαντήσεις που υποβάλατε στη φόρμα σύστασης διαγράφηκαν οριστικά.
-
-Διεύθυνση στο αρχείο: {landlord_address or '—'}
-Ώρα ακύρωσης: {cancelled_at or '—'}
-
-Για οποιαδήποτε απορία, μπορείτε να απαντήσετε στο {tenant_email}.
-"""
-    # Χρήση του υπάρχοντος SMTP helper
-    return send_email_smtp(landlord_email, subject, body)
 
 
 def get_user_by_id(uid: int):
@@ -2754,7 +2705,8 @@ def _table_has_column(conn, table: str, column: str) -> bool:
     cur = conn.execute(f"PRAGMA table_info({table})")
     return any(row[1].lower() == column.lower() for row in cur.fetchall())
 
-#--------------LANDLORD HELPER-----------------------------------------------
+#-----------HELPER FOR LANDLOARD DASHBOARD -----------------------------------------------------------
+# STARTS HERE -------------------------------------------------------------------------------------------------
 
 def list_latest_references_for_tenant(tenant_id: int):
     """Return each previous landlord with the latest (most recent) reference request, if any, and its answers."""
@@ -2789,7 +2741,6 @@ def list_latest_references_for_tenant(tenant_id: int):
     )
     return cur.fetchall()
 
-#-----------HELPER FOR LANDLOARD DASHBOARD ------------------------------------------------
 
 def list_latest_references_for_tenant_dict(tenant_id: int) -> list[dict]:
     cur = conn.cursor()
@@ -2827,6 +2778,9 @@ def list_latest_references_for_tenant_dict(tenant_id: int) -> list[dict]:
     rows = cur.fetchall()  # sqlite3.Row objects
     return [dict(r) for r in rows]
 
+# FINISH HERE -------------------------------------------------------------------------------------------------
+
+
 #-----------HELPER FOR ADMIN AND TENANT DASHBOARD (BUILD REFERENCE LINK)------------------------------------------------
 
 def build_reference_link(token: str) -> str:
@@ -2840,6 +2794,39 @@ def build_reference_link(token: str) -> str:
 #-----------------------------------------------------------------------------------------------------------------------------
 #---------------EMAILS---------------------------------------------------------------------------------------------------------
 #-STARTS HERE-----------------------------------------------------------------------------------------------------------------------------
+
+def invite_future_landlord(tenant_id: int, email: str, tenant_name: str, tenant_email: str):
+    base = st.session_state.get("app_base_url") or (st.secrets.get("APP_BASE_URL") if hasattr(st, "secrets") else "")
+    join_link = base if base else ""
+
+    subject = f"Πρόσκληση στο RentRight από τον/την {tenant_name}"
+
+    body = (
+        "Καλησπέρα σας,\n\n"
+        f"Ο/Η {tenant_name} ({tenant_email}) σας πρόσθεσε ως μελλοντικό/ή ιδιοκτήτη/ιδιοκτήτρια στο RentRight.\n"
+        "Με αυτόν τον τρόπο επιθυμεί να παραμείνετε σε επαφή για πιθανή μελλοντική μίσθωση.\n\n"
+        "Τι μπορείτε να κάνετε:\n"
+        "- Συνδεθείτε ή δημιουργήστε έναν λογαριασμό στο RentRight, ώστε να ενημερώνεστε εύκολα και με ασφάλεια.\n"
+        + (f"\nΣύνδεσμος πρόσβασης:\n{join_link}\n" if join_link else "")
+        + (
+            "\nΑν ο σύνδεσμος δεν εμφανίζεται, επισκεφθείτε την αρχική σελίδα του RentRight και συνδεθείτε/εγγραφείτε.\n"
+            if not join_link else ""
+        )
+        + "\nΓια οποιαδήποτε απορία, μπορείτε να απαντήσετε απευθείας σε αυτό το email.\n\n"
+        "Σας ευχαριστούμε,\n"
+        "Η ομάδα RentRight"
+    )
+
+    ok, msg = send_email_smtp(email, subject, body)
+    if ok:
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE future_landlord_contacts SET invited = 1, invited_at = ? WHERE tenant_id = ? AND LOWER(email) = LOWER(?)",
+            (datetime.utcnow().isoformat(), tenant_id, email),
+        )
+        conn.commit()
+    return ok, msg
 
 def email_reference_request(
     tenant_name: str, tenant_email: str,
@@ -2871,6 +2858,33 @@ def email_reference_request(
         "Η ομάδα RentRight"
     )
 
+    return send_email_smtp(landlord_email, subject, body)
+
+def email_reference_cancellation_smtp(
+    tenant_name: str,
+    tenant_email: str,
+    landlord_email: str,
+    landlord_name: str | None,
+    landlord_address: str | None,
+    token: str,
+    cancelled_at: str | None,
+):
+    subject = "Ακύρωση αιτήματος σύστασης — διαγραφή δεδομένων"
+    body = f"""Καλησπέρα {landlord_name or 'σας'},
+
+Ο/Η {tenant_name} ακύρωσε το αίτημα σύστασης ενοικίασης.
+
+Τι σημαίνει αυτό:
+• Ο σύνδεσμος σύστασης με το token {token} έχει πλέον απενεργοποιηθεί.
+• Το ανεβασμένο μισθωτήριο συμβόλαιο διαγράφηκε οριστικά.
+• Τυχόν απαντήσεις που υποβάλατε στη φόρμα σύστασης διαγράφηκαν οριστικά.
+
+Διεύθυνση στο αρχείο: {landlord_address or '—'}
+Ώρα ακύρωσης: {cancelled_at or '—'}
+
+Για οποιαδήποτε απορία, μπορείτε να απαντήσετε στο {tenant_email}.
+"""
+    # Χρήση του υπάρχοντος SMTP helper
     return send_email_smtp(landlord_email, subject, body)
 
 #-FINISH HERE-----------------------------------------------------------------------------------------------------------------------------
@@ -3026,8 +3040,6 @@ def cleanup_old_contracts(days_locked: int = 30, days_rejected: int = 30):
     
 # FINISH HERE------------------------------------------------------------------------------------------------------------------------------------     
     
-    
-
 #------------------------------------------------------------------------------------------------------------------------------------    
 #---------HELPER OF LANDLORD DASHBOARD (SEARCH TENANTS)------------------------------------------------------------------------------- 
 # STARTS HERE------------------------------------------------------------------------------------------------------------------------------------     
@@ -3819,6 +3831,217 @@ def tenant_dashboard():
                                     unsafe_allow_html=True
                                 )
                                 
+                                
+    # =====
+    def tenant_open_to_rent_section():
+        st.subheader(tr("Open to Rent"))
+
+        tid = st.session_state.user["id"]
+        prefs = load_open_to_rent_prefs(tid)
+
+        # If reset asked, we force defaults (zeros/False) instead of loading prefs.
+        force_defaults = st.session_state.pop("otr_force_defaults", False)
+
+        if ("otr_keys_inited" not in st.session_state) or force_defaults:
+            if force_defaults:
+                # Defaults
+                st.session_state["otr_open_flag"]  = False
+                st.session_state["otr_size_min"]   = 0
+                st.session_state["otr_size_max"]   = 0
+                st.session_state["otr_rooms_min"]  = 0
+                st.session_state["otr_rooms_max"]  = 0
+                st.session_state["otr_floor_min"]  = 0
+                st.session_state["otr_floor_max"]  = 0
+                st.session_state["otr_price_min"]  = 0
+                st.session_state["otr_price_max"]  = 0
+            else:
+                # From saved prefs
+                st.session_state["otr_open_flag"]  = bool(prefs.get("open_to_rent"))
+                st.session_state["otr_size_min"]   = int(prefs.get("size_min")  or 0)
+                st.session_state["otr_size_max"]   = int(prefs.get("size_max")  or 0)
+                st.session_state["otr_rooms_min"]  = int(prefs.get("rooms_min") or 0)
+                st.session_state["otr_rooms_max"]  = int(prefs.get("rooms_max") or 0)
+                st.session_state["otr_floor_min"]  = int(prefs.get("floor_min") or 0)
+                st.session_state["otr_floor_max"]  = int(prefs.get("floor_max") or 0)
+                st.session_state["otr_price_min"]  = int(prefs.get("price_min") or 0)
+                st.session_state["otr_price_max"]  = int(prefs.get("price_max") or 0)
+
+            st.session_state["otr_keys_inited"] = True
+
+        # Defaults
+        # Defaults for summary
+        region = district = city = ""
+
+        with st.container(border=True):
+            data, regions, muni_idx = load_ellada_index("ellada.json")
+
+            # If we just pressed Reset, skip preselect from saved prefs this run
+            reset_preselect = st.session_state.pop("otr_reset_preselect", False)
+
+            saved_city = "" if reset_preselect else (prefs.get("search_city") or "").strip()
+            saved_dist = "" if reset_preselect else (prefs.get("search_district") or "").strip()
+            
+
+            # Try to infer Region/Unit from saved values
+            pre_region, pre_unit = (None, None)
+            if saved_city and saved_city in muni_idx:
+                pre_region, pre_unit = muni_idx[saved_city]
+            elif saved_dist:
+                for reg in data.get("Περιφέρειες", []):
+                    units = (reg.get("Περιφερειακές Ενότητες") or {})
+                    if saved_dist in units:
+                        pre_region = reg.get("όνομα")
+                        pre_unit = saved_dist
+                        break
+
+            ANY = tr("Any")
+
+            # If we just pressed Reset, or on first run (no key yet), seed pickers to Any
+            if reset_preselect or ("loc_region" not in st.session_state):
+                st.session_state["loc_region"] = ANY
+            if reset_preselect or ("loc_unit" not in st.session_state):
+                st.session_state["loc_unit"] = ANY
+            if reset_preselect or ("loc_city" not in st.session_state):
+                st.session_state["loc_city"] = ANY
+
+            
+                    # Active / Inactive
+            open_flag = st.checkbox(
+                tr("I'm currently looking for a place"),
+                key="otr_open_flag",
+            )
+            
+            with st.expander(tr("Property Charecteristics"), expanded=False):
+
+                # REGION
+                region_options = [ANY] + (regions or [])
+                region_index = (region_options.index(pre_region) if (pre_region in region_options and not reset_preselect) else 0)
+                region_sel = st.selectbox("Περιφέρεια", options=region_options, index=region_index, key="loc_region")
+
+                # REGIONAL UNIT (depends on Region)
+                units = list_units(data, region_sel) if (region_sel and region_sel != ANY) else []
+                unit_options = [ANY] + (units or [])
+                unit_index = (unit_options.index(pre_unit) if (pre_unit in unit_options and not reset_preselect) else 0)
+                unit_sel = st.selectbox("Περιφερειακή Ενότητα", options=unit_options, index=unit_index, key="loc_unit")
+
+                # MUNICIPALITY (depends on Unit)
+                municipalities = list_municipalities(data, region_sel, unit_sel) if (region_sel and region_sel != ANY and unit_sel and unit_sel != ANY) else []
+                city_options = [ANY] + (municipalities or [])
+                city_index = (city_options.index(saved_city) if (saved_city in city_options and not reset_preselect) else 0)
+                city_sel = st.selectbox("Δήμος (Πόλη)", options=city_options, index=city_index, key="loc_city")
+        
+
+                # Map to your schema (don’t save “Any” — treat as empty)
+                region   = "" if region_sel == ANY else region_sel
+                district = "" if unit_sel   == ANY else unit_sel
+                city     = "" if city_sel   == ANY else city_sel
+
+                c1, c2 = st.columns(2)
+                size_min = c1.number_input(tr("Min size (m²)"), 0, 10000, key="otr_size_min")
+                size_max = c2.number_input(tr("Max size (m²)"), 0, 10000, key="otr_size_max")
+
+                r1, r2 = st.columns(2)
+                rooms_min = r1.number_input(tr("Min rooms"), 0, 50, key="otr_rooms_min")
+                rooms_max = r2.number_input(tr("Max rooms"), 0, 50, key="otr_rooms_max")
+
+                f1, f2 = st.columns(2)
+                floor_min = f1.number_input(tr("Min floor"), -5, 100, key="otr_floor_min")
+                floor_max = f2.number_input(tr("Max floor"), -5, 100, key="otr_floor_max")
+
+                p1, p2 = st.columns(2)
+                price_min = p1.number_input(tr("Min price (€)"), 0, 1_000_000, key="otr_price_min")
+                price_max = p2.number_input(tr("Max price (€)"), 0, 1_000_000, key="otr_price_max")
+                
+
+
+                # ---- Save / Reset -------------------------------------------------------
+                col_save, col_reset = st.columns([1, 1])
+
+                if col_save.button(tr("Save")):
+                    city_clean = "" if (city == "—") else (city or "")
+                    district_clean = "" if (district == "—") else (district or "")
+                    if not city_clean and not district_clean:
+                        st.warning(tr("Please enter at least a city or a district."))
+                    else:
+                        try:
+                            save_open_to_rent_prefs(
+                                tid, bool(st.session_state["otr_open_flag"]),
+                                city_clean, district_clean,
+                                int(st.session_state["otr_size_min"]), int(st.session_state["otr_size_max"]),
+                                int(st.session_state["otr_rooms_min"]), int(st.session_state["otr_rooms_max"]),
+                                int(st.session_state["otr_floor_min"]), int(st.session_state["otr_floor_max"]),
+                                int(st.session_state["otr_price_min"]), int(st.session_state["otr_price_max"]),
+                                city_osm_id=None, city_osm_type=None,
+                                district_osm_id=None, district_osm_type=None,
+                            )
+                        except TypeError:
+                            save_open_to_rent_prefs(
+                                tid, bool(st.session_state["otr_open_flag"]),
+                                city_clean, district_clean,
+                                int(st.session_state["otr_size_min"]), int(st.session_state["otr_size_max"]),
+                                int(st.session_state["otr_rooms_min"]), int(st.session_state["otr_rooms_max"]),
+                                int(st.session_state["otr_floor_min"]), int(st.session_state["otr_floor_max"]),
+                                int(st.session_state["otr_price_min"]), int(st.session_state["otr_price_max"]),
+                            )
+                        try:
+                            st.cache_data.clear()
+                        except Exception:
+                            pass
+                        st.success(tr("Preferences saved!"))
+
+                if col_reset.button(tr("Reset")):
+                    for k in ("loc_region","loc_unit","loc_city",
+                            "otr_open_flag",
+                            "otr_size_min","otr_size_max",
+                            "otr_rooms_min","otr_rooms_max",
+                            "otr_floor_min","otr_floor_max",
+                            "otr_price_min","otr_price_max",
+                            "otr_keys_inited"):
+                        st.session_state.pop(k, None)
+
+                    st.session_state["otr_force_defaults"]  = True
+                    st.session_state["otr_reset_preselect"] = True
+                    st.rerun()
+
+
+        # --- Compact summary (uses current widget values) ---------------------------
+        def _fmt_range(lo, hi, suffix=""):
+            has_lo = lo not in (None, 0, "0", "")
+            has_hi = hi not in (None, 0, "0", "")
+            if not has_lo and not has_hi:
+                return None
+            lo_txt = f"{int(lo):,}" if has_lo else "—"
+            hi_txt = f"{int(hi):,}" if has_hi else "—"
+            return f"{lo_txt}–{hi_txt}{suffix}"
+
+        latest_region = region if (region and region != "—") else ""
+        latest_district = district if (district and district != "—") else ""
+        latest_city = city if (city and city != "—") else ""
+        loc_txt = " — ".join([x.strip() for x in [latest_region, latest_district, latest_city] if x])
+
+        size_txt  = _fmt_range(st.session_state["otr_size_min"],  st.session_state["otr_size_max"],  " m²")
+        rooms_txt = _fmt_range(st.session_state["otr_rooms_min"], st.session_state["otr_rooms_max"], f" {tr('rooms')}")
+        floor_txt = _fmt_range(st.session_state["otr_floor_min"], st.session_state["otr_floor_max"])
+        price_txt = _fmt_range(st.session_state["otr_price_min"], st.session_state["otr_price_max"])
+
+        bits = []
+        if size_txt:  bits.append(size_txt)
+        if rooms_txt: bits.append(rooms_txt)
+        if floor_txt: bits.append(tr("Floor") + " " + floor_txt)
+        if price_txt: bits.append("€" + price_txt.replace("–", "–€"))
+
+        details_txt = " · ".join(bits)
+        state_label = tr("Active") if st.session_state["otr_open_flag"] else tr("Inactive")
+
+        if loc_txt and details_txt:
+            st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {loc_txt} · {details_txt}")
+        elif loc_txt:
+            st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {loc_txt}")
+        elif details_txt:
+            st.caption(f"{tr('Status:')} {state_label} · {details_txt}")
+        else:
+            st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {tr('Anywhere')}")
+                                
     # === Previous landlords + reference requests ===    
     def previous_landlords_references():    
         st.subheader(tr('Previous Landlords and References'))
@@ -3996,11 +4219,6 @@ def tenant_dashboard():
                                     )
                             except Exception as e:
                                 st.warning(f"{tr('Unable to read the saved file')}: {e}")
-
-                            # # === NEW: control which buttons appear based on status ===
-                            # final_norm = str(final_status).strip().lower()
-
-            
 
                             if contract and can_request:
                                 if st.button(tr('Request Reference'), key=f"req_{pid}"):
