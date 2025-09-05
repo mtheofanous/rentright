@@ -48,6 +48,9 @@ TRANSLATIONS_EL = {
     "**Status:**": "**Κατάσταση:**",
     "**Tenant:**": "**Ενοικιαστής:**",
     "**To landlord:**": "Στον Ιδιοκτήτη",
+    "Phone (optional)": "Τηλέφωνο (προαιρετικό)",
+    "Show phone to others?": "Εμφάνιση τηλεφώνου σε άλλους;",
+    "Enter a valid phone number.": "Εισάγετε ένα έγκυρο τηλέφωνο.",
     "Admin": "Διαχειριστής",
     "Address": "Διεύθυνση",
     "Address is required.": "Απαιτείται διεύθυνση.",
@@ -1244,6 +1247,10 @@ def run_migrations(conn):
     add_column_if_missing(conn, "tenant_profiles", "pets INTEGER")
     add_column_if_missing(conn, "tenant_profiles", "num_tenants INTEGER")
     add_column_if_missing(conn, "tenant_profiles", "about TEXT")
+    
+    add_column_if_missing(conn, "users", "phone TEXT")
+    add_column_if_missing(conn, "users", "phone_visible INTEGER NOT NULL DEFAULT 0")
+
 
 
 
@@ -1293,9 +1300,12 @@ def init_db():
             name TEXT NOT NULL,
             password_hash TEXT NOT NULL,
             role TEXT CHECK(role IN ("tenant","landlord","admin")) NOT NULL,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            phone TEXT,
+            phone_visible INTEGER NOT NULL DEFAULT 0
         )
     """)
+
     cur.execute("""
         CREATE TABLE IF NOT EXISTS tenant_profiles (
             tenant_id INTEGER UNIQUE NOT NULL,
@@ -1873,23 +1883,33 @@ def flc_relation_status(landlord_id: int, tenant_id: int, landlord_email: str):
 def hash_password(password: str, salt: str = "static_salt_change_me") -> str:
     return hashlib.sha256((salt + password).encode()).hexdigest()
 
-def create_user(email: str, name: str, password: str, role: str):
+def create_user(email: str, name: str, password: str, role: str, *, phone: str | None = None, phone_visible: int = 0):
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO users(email, name, password_hash, role, created_at) VALUES (?,?,?,?,?)",
-        (email.lower().strip(), name.strip(), hash_password(password), role, datetime.utcnow().isoformat()),
+        "INSERT INTO users(email, name, password_hash, role, created_at, phone, phone_visible) VALUES (?,?,?,?,?,?,?)",
+        (
+            email.lower().strip(),
+            name.strip(),
+            hash_password(password),
+            role,
+            datetime.utcnow().isoformat(),
+            phone,
+            int(bool(phone_visible)),
+        ),
     )
     conn.commit()
 
 
+
 def get_user_by_email(email: str):
     cur = conn.cursor()
-    cur.execute("SELECT id, email, name, password_hash, role FROM users WHERE email = ?", (email.lower().strip(),))
+    cur.execute("SELECT id, email, name, password_hash, role, phone, phone_visible FROM users WHERE email = ?", (email.lower().strip(),))
     row = cur.fetchone()
     if row:
-        keys = ["id","email","name","password_hash","role"]
+        keys = ["id","email","name","password_hash","role","phone","phone_visible"]
         return dict(zip(keys, row))
     return None
+
 
 # Starts here
 
@@ -2349,6 +2369,8 @@ def signup_form():
     with st.form("signup_form"):
         name = st.text_input(tr('Full name'))
         email = st.text_input(tr('Email'))
+        phone = st.text_input(tr('Phone (optional)'), placeholder="+3069XXXXXXXX")
+        phone_visible = st.checkbox(tr('Show phone to others?'), value=False)
         role = st.selectbox(tr('Role'), ["tenant","landlord"], format_func=lambda x: x.capitalize())
         password = st.text_input(tr('Password'), type="password")
         password2 = st.text_input(tr('Confirm password'), type="password")
@@ -2360,13 +2382,17 @@ def signup_form():
         if not is_valid_email(email):
             st.error(tr('Please enter a valid email address.'))
             return
+            # NEW: basic phone validation (optional field)
+        if phone and not re.match(r"^\+?[0-9]{7,15}$", phone.strip()):
+            st.error(tr('Enter a valid phone number.'))
+            return
         if password != password2:
             st.error(tr('Passwords do not match. Please try again.'))
             return
         if get_user_by_email(email):
             st.error(tr('This email is already registered.'))
             return
-        create_user(email, name, password, role)
+        create_user(email, name, password, role, phone=phone.strip() or None, phone_visible=1 if phone_visible else 0)
         st.success(tr('Your account has been created. Please sign in to continue.'))
         # 🔁 redirect back to landing/login
         st.session_state.signup_done = True
@@ -5127,6 +5153,8 @@ def landlord_dashboard():
                 tenant_user = get_user_by_id(tid) or {}
                 tenant_name  = (tenant_user.get("name")  or "").strip()
                 tenant_email = (tenant_user.get("email") or "").strip()
+                tenant_phone = (tenant_user.get("phone") or "").strip()
+                tenant_phone_visible = int(tenant_user.get("phone_visible") or 0)
 
                 # Canonical connection status
                 try:
@@ -5140,6 +5168,11 @@ def landlord_dashboard():
                 # Left: avatar + name/email
                 display_title = tenant_name or tenant_email or f"Tenant #{tid}"
                 initials = _pt_initials(tenant_name, tenant_email)
+                
+                        # Build phone HTML if visible
+                phone_html = ""
+                if tenant_phone and tenant_phone_visible:
+                    phone_html = f'<div class="pt-phone">📞 {tenant_phone}</div>'
 
                 colL.markdown(
                     f"""
@@ -5148,6 +5181,7 @@ def landlord_dashboard():
                     <div>
                         <div class="pt-name">{display_title}</div>
                         <div class="pt-email">{tenant_email}</div>
+                        {phone_html}
                     </div>
                     </div>
                     """,
