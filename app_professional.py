@@ -3745,7 +3745,7 @@ def tenant_dashboard():
                 except Exception:
                     status = None
 
-                colL, colM, colR = st.columns([6, 3, 3])
+                colL, colM, colR = st.columns([6, 3, 5])
 
                 display_title = landlord_name or fl_email
                 initials = _initials(landlord_name, fl_email)
