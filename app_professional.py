@@ -120,6 +120,7 @@ TRANSLATIONS_EL = {
     "For more details visit": "Για περισσότερες λεπτομέρειες",
     "Full name": "Πλήρες όνομα",
     "Future Landlords (Contacts)": "Μελλοντικοί Ιδιοκτήτες (Επαφές)",
+    "Future landlords":"Υποψήφιοι Ιδιοκτήτες",
     "Good condition": "Καλή κατάσταση",
     "Hide": "Απόκρυψη",
     "I’m looking for a place": "Αναζητώ κατοικία",
@@ -1167,6 +1168,37 @@ def run_migrations(conn):
     add_column_if_missing(conn, "landlord_properties", "floor INTEGER")
     add_column_if_missing(conn, "landlord_properties", "price INTEGER")
     conn.commit()
+    
+        # --- Landlord properties: extra metadata ---
+    add_column_if_missing(conn, "landlord_properties", "region TEXT")
+    add_column_if_missing(conn, "landlord_properties", "district TEXT")
+    add_column_if_missing(conn, "landlord_properties", "city TEXT")
+    add_column_if_missing(conn, "landlord_properties", "size_m2 INTEGER")
+    add_column_if_missing(conn, "landlord_properties", "rooms INTEGER")
+    add_column_if_missing(conn, "landlord_properties", "floor INTEGER")
+    add_column_if_missing(conn, "landlord_properties", "price INTEGER")
+    conn.commit()
+
+    # >>> ADD THIS: normalized URL + unique index per landlord
+    add_column_if_missing(conn, "landlord_properties", "normalized_url TEXT")
+    conn.execute("""
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_landlord_props_normurl_uq
+    ON landlord_properties(landlord_id, normalized_url)
+    WHERE normalized_url IS NOT NULL
+    """)
+    conn.commit()
+
+    # >>> ADD THIS: tenant favorites (property bookmarks)
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS tenant_favorites (
+        tenant_id   INTEGER NOT NULL,
+        property_id INTEGER NOT NULL,
+        created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (tenant_id, property_id)
+    )
+    """)
+    conn.commit()
+
 
 
 
@@ -1650,18 +1682,66 @@ def lp_add_property(
     c = get_conn()
     now = _now_iso()
     listing_url = _norm_url(listing_url)
+    norm = listing_url  # use normalized url for uniqueness
     vis = 1 if visible else 0
     size_m2 = _none_if_blank_num(size_m2)
     rooms   = _none_if_blank_num(rooms)
     floor   = _none_if_blank_num(floor)
     price   = _none_if_blank_num(price)
+
+    # Try insert; if duplicate (same landlord_id + normalized_url), update and return existing id
     cur = c.execute(
         """
-        INSERT INTO landlord_properties
-        (landlord_id, address, listing_url, visible_to_tenants,
+        INSERT OR IGNORE INTO landlord_properties
+        (landlord_id, address, listing_url, normalized_url, visible_to_tenants,
          region, district, city, size_m2, rooms, floor, price,
          created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            landlord_id, address.strip(), listing_url, norm, vis,
+            (region or None), (district or None), (city or None),
+            size_m2, rooms, floor, price,
+            now, now,
+        ),
+    )
+    if cur.rowcount and cur.lastrowid:
+        c.commit()
+        return cur.lastrowid
+
+    # If nothing inserted, check if it exists for this landlord and update it
+    if norm:
+        row = c.execute(
+            "SELECT id FROM landlord_properties WHERE landlord_id=? AND normalized_url=? LIMIT 1",
+            (landlord_id, norm)
+        ).fetchone()
+        if row:
+            pid = int(row[0])
+            c.execute(
+                """
+                UPDATE landlord_properties
+                SET address=?, listing_url=?, visible_to_tenants=?,
+                    region=?, district=?, city=?, size_m2=?, rooms=?, floor=?, price=?,
+                    updated_at=?
+                WHERE id=? AND landlord_id=?
+                """,
+                (
+                    address.strip(), listing_url, vis,
+                    (region or None), (district or None), (city or None),
+                    size_m2, rooms, floor, price,
+                    now, pid, landlord_id,
+                ),
+            )
+            c.commit()
+            return pid
+
+    # Fallback (no URL): insert without normalized_url uniqueness
+    cur2 = c.execute(
+        """
+        INSERT INTO landlord_properties
+        (landlord_id, address, listing_url, normalized_url, visible_to_tenants,
+         region, district, city, size_m2, rooms, floor, price, created_at, updated_at)
+        VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             landlord_id, address.strip(), listing_url, vis,
@@ -1671,7 +1751,8 @@ def lp_add_property(
         ),
     )
     c.commit()
-    return cur.lastrowid
+    return cur2.lastrowid
+
 
 def lp_list_properties(landlord_id: int):
     c = get_conn()
@@ -1705,6 +1786,7 @@ def lp_update_property(
     c = get_conn()
     now = _now_iso()
     listing_url = _norm_url(listing_url)
+    norm = listing_url
     vis = 1 if visible else 0
     size_m2 = _none_if_blank_num(size_m2)
     rooms   = _none_if_blank_num(rooms)
@@ -1713,19 +1795,20 @@ def lp_update_property(
     c.execute(
         """
         UPDATE landlord_properties
-        SET address=?, listing_url=?, visible_to_tenants=?,
+        SET address=?, listing_url=?, normalized_url=?, visible_to_tenants=?,
             region=?, district=?, city=?, size_m2=?, rooms=?, floor=?, price=?,
             updated_at=?
         WHERE id=? AND landlord_id=?
         """,
         (
-            address.strip(), listing_url, vis,
+            address.strip(), listing_url, norm, vis,
             (region or None), (district or None), (city or None),
             size_m2, rooms, floor, price,
             now, prop_id, landlord_id,
         ),
     )
     c.commit()
+
 
 def lp_toggle_visibility(prop_id: int, landlord_id: int, visible: bool):
     c = get_conn()
@@ -1769,6 +1852,29 @@ def lp_list_visible_properties(landlord_id: int):
         (landlord_id,),
     ).fetchall()
     return rows or []
+
+def fav_is_saved(tenant_id: int, property_id: int) -> bool:
+    c = get_conn()
+    row = c.execute(
+        "SELECT 1 FROM tenant_favorites WHERE tenant_id=? AND property_id=?",
+        (tenant_id, property_id)
+    ).fetchone()
+    return bool(row)
+
+def fav_toggle(tenant_id: int, property_id: int, add: bool) -> None:
+    c = get_conn()
+    if add:
+        c.execute(
+            "INSERT OR IGNORE INTO tenant_favorites (tenant_id, property_id) VALUES (?,?)",
+            (tenant_id, property_id)
+        )
+    else:
+        c.execute(
+            "DELETE FROM tenant_favorites WHERE tenant_id=? AND property_id=?",
+            (tenant_id, property_id)
+        )
+    c.commit()
+
 
 #finish here ---------------------------------------------------------------------
 def search_landlords_by_property_location(
@@ -3221,7 +3327,7 @@ def tenant_dashboard():
     
    #
     # ---------- NAV BUTTONS (set active page only) ----------
-    nav1, nav2, nav3, nav4 = st.columns(4)
+    nav1, nav2, nav3, nav4, nav5 = st.columns(5)
 
     # default page
     if "tenant_page" not in st.session_state:
@@ -3234,6 +3340,160 @@ def tenant_dashboard():
                 st.session_state.pop(k, None)
         st.session_state.tenant_page = page_key
         # no immediate st.rerun() needed; Streamlit reruns automatically after button click
+        
+        
+        
+    def tenant_explore_properties():
+        st.header(tr("All Properties"))
+        NS = "explore_props"
+
+        with st.container(border=True):
+            c1, c2 = st.columns([6, 0.3])
+            with c1:
+                st.markdown(f"**{tr('Browse all visible listings in one place')}**")
+            with c2:
+                help_icon(tr("Aggregate view of landlord listings. Filter and click through to the external ad."), key=f"{NS}:help")
+
+            with st.expander(tr("Filters"), True):
+                lc1, lc2, lc3 = st.columns(3)
+                with lc1:
+                    region, regional_unit, municipality = greece_location_pickers(prefix=f"{NS}_loc")
+
+                r1c1, r1c2 = st.columns(2)
+                size_min = r1c1.number_input(tr("Min size (m²)"), 0, 10000, 0, key=f"{NS}:size_min") or None
+                size_max = r1c2.number_input(tr("Max size (m²)"), 0, 10000, 0, key=f"{NS}:size_max") or None
+
+                r2c1, r2c2 = st.columns(2)
+                rooms_min = r2c1.number_input(tr("Min rooms"), 0, 50, 0, key=f"{NS}:rooms_min") or None
+                rooms_max = r2c2.number_input(tr("Max rooms"), 0, 50, 0, key=f"{NS}:rooms_max") or None
+
+                r3c1, r3c2 = st.columns(2)
+                _fmin = r3c1.number_input(tr("Min floor"), -5, 100, 0, key=f"{NS}:floor_min")
+                _fmax = r3c2.number_input(tr("Max floor"), -5, 100, 0, key=f"{NS}:floor_max")
+                floor_min = _fmin if _fmin != 0 else None
+                floor_max = _fmax if _fmax != 0 else None
+
+                r4c1, r4c2 = st.columns(2)
+                price_min = r4c1.number_input(tr("Min price (€)"), 0, 1_000_000, 0, key=f"{NS}:price_min") or None
+                price_max = r4c2.number_input(tr("Max price (€)"), 0, 1_000_000, 0, key=f"{NS}:price_max") or None
+
+                lc, rc = st.columns([3, 1])
+                with lc:
+                    limit = st.number_input(tr("Results limit"), 1, 500, 100, key=f"{NS}:limit")
+                with rc:
+                    do_search = st.button(tr("Search"), key=f"{NS}:run")
+
+        run = st.session_state.get(f"{NS}:run_once", True) or do_search
+        st.session_state[f"{NS}:run_once"] = False
+
+        if run or do_search:
+            try:
+                rows = search_landlords_by_property_location(
+                    region=region, regional_unit=regional_unit, municipality=municipality,
+                    size_min=size_min, size_max=size_max,
+                    rooms_min=rooms_min, rooms_max=rooms_max,
+                    floor_min=floor_min, floor_max=floor_max,
+                    price_min=price_min, price_max=price_max,
+                    limit=int(limit or 100),
+                )
+            except Exception:
+                rows = []
+                st.warning(tr("Search unavailable."))
+
+            if not rows:
+                st.caption(tr("No matches."))
+                return
+
+            st.caption(f"{len(rows)} {tr('result(s)')}")
+            tenant_id = st.session_state.user["id"]
+
+            for (
+                prop_id, ll_id, ll_name, ll_email,
+                addr, url, reg, ru, muni, size_m2, rooms, floor, price, updated_at
+            ) in rows:
+
+                # relation/contact state (reuse your existing pattern)
+                try:
+                    rel_status = flc_get_status(ll_id, tenant_id)
+                except Exception:
+                    rel_status = None
+
+                c = get_conn()
+                rowc = c.execute(
+                    "SELECT id, invited, inbound_request FROM future_landlord_contacts "
+                    "WHERE tenant_id=? AND LOWER(email)=LOWER(?) LIMIT 1",
+                    (tenant_id, (ll_email or "").strip().lower()),
+                ).fetchone()
+                in_contacts = bool(rowc)
+                invited = int(rowc[1]) if rowc else 0
+                inbound_req = int(rowc[2]) if rowc else 0
+
+                with st.container(border=True):
+                    cols = st.columns([6, 3, 3])
+
+                    # Left: Property card
+                    cols[0].markdown(f"**{addr}**")
+                    chips = []
+                    where = " — ".join([x for x in [reg, ru, muni] if x])
+                    if where:   chips.append(f'<span class="pill">{where}</span>')
+                    if size_m2: chips.append(f'<span class="pill">{int(size_m2):,} m²</span>')
+                    if rooms:   chips.append(f'<span class="pill">{int(rooms)} {tr("rooms")}</span>')
+                    if floor not in (None, 0): chips.append(f'<span class="pill">{tr("Floor")} {int(floor)}</span>')
+                    if price:   chips.append(f'<span class="pill">€{int(price):,}</span>')
+                    chips_html = " ".join(chips)
+                    link_html = f' 🔗 <a href="{url}">{_url_domain(url) or tr("Open listing")}</a>' if url else ""
+                    cols[0].markdown(
+                        f"""
+                        <div class="prop-card">
+                        <div class="prop-sub">{chips_html}</div>
+                        <div class="prop-foot">{tr('Updated')}: {format_dt(updated_at)}</div>
+                        <div class="prop-foot">{tr('For more details')}: {link_html}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+                    # Middle: Landlord + status badge
+                    title = (ll_name or ll_email or f"Landlord #{ll_id}").strip()
+                    cols[1].markdown(f"**{title}**")
+                    if ll_name and ll_email:
+                        cols[1].caption(ll_email)
+                    if rel_status == "connected":
+                        cols[1].success(tr("Connected"))
+                    elif rel_status == "rejected":
+                        cols[1].error(tr("Rejected"))
+                    elif inbound_req:
+                        cols[1].info(tr("Pending"))
+                    elif invited:
+                        cols[1].info(tr("Invited"))
+                    elif in_contacts:
+                        cols[1].caption(tr("In contacts"))
+                    else:
+                        cols[1].caption(tr("No relation"))
+
+                    # Right: actions (⭐ Save + Add contact)
+                    act1, act2 = cols[2].columns(2)
+                    is_fav = fav_is_saved(tenant_id, prop_id)
+                    if is_fav:
+                        if act1.button("★ " + tr("Saved"), key=f"{NS}:unfav_{tenant_id}_{prop_id}"):
+                            fav_toggle(tenant_id, prop_id, add=False)
+                            st.rerun()
+                    else:
+                        if act1.button("☆ " + tr("Save"), key=f"{NS}:fav_{tenant_id}_{prop_id}"):
+                            fav_toggle(tenant_id, prop_id, add=True)
+                            st.rerun()
+
+                    if not in_contacts:
+                        if act2.button(tr("Add contact"), key=f"{NS}:add_{prop_id}_{ll_id}"):
+                            try:
+                                add_future_landlord_contact(tenant_id, ll_email)
+                                try: st.cache_data.clear()
+                                except Exception: pass
+                                st.success(tr("Contact added."))
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"{tr('Can’t add contact')}: {e}")
+
 
 
     def tenant_future_landlords_section():
@@ -4267,21 +4527,21 @@ def tenant_dashboard():
         st.divider()
 
 
-    with nav2:
-        if st.button(tr("Search"), key="btn_find_landlords", use_container_width=True):
-            _go("find_landlords")
-
     with nav1:
         if st.button(tr("My Contacts"), key="btn_my_contacts", use_container_width=True):
             _go("my_contacts")
-
+    with nav2:
+        if st.button(tr("Search"), key="btn_find_landlords", use_container_width=True):
+            _go("find_landlords")
     with nav3:
         if st.button(tr("Open to Rent"), key="btn_open_to_rent", use_container_width=True):
             _go("open_to_rent")
-
     with nav4:
         if st.button(tr("My References"), key="btn_prev_refs", use_container_width=True):
             _go("prev_refs")
+    with nav5:
+        if st.button(tr("Explore Properties"), key="btn_explore_props", use_container_width=True):
+            _go("explore_properties")
 
     # st.divider()
 
@@ -4295,9 +4555,11 @@ def tenant_dashboard():
         tenant_open_to_rent_section()
     elif page == "prev_refs":
         previous_landlords_references()
+    elif page == "explore_properties":
+        tenant_explore_properties()   # <— NEW
     else:
-        # fallback (shouldn't happen)
         tenant_contancts()
+
         
         
 
