@@ -3825,10 +3825,7 @@ def tenant_dashboard():
 
 
                 else:
-                    # Send invitation / Remove + help
-                    ahelp, _ = colR.columns([0.18, 1])
-                    with ahelp:
-                        help_icon(tr("Send a secure link so this landlord can connect with you."), key=k(cid, "help_send_invite"))
+
                     b1, b2 = colR.columns(2)
                     if b1.button(tr("Send invitation"), key=k(cid, "send_invite_plain")):
                         ok, msg = invite_future_landlord(
