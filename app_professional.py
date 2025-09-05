@@ -4185,11 +4185,7 @@ def tenant_dashboard():
                     vprops = lp_list_visible_properties(landlord_id)
                     if vprops:
                         with st.expander(tr("Visible properties"), expanded=False):
-                            hc1, hc2 = st.columns([1, 0.3])
-                            with hc1:
-                                st.empty()
-                            with hc2:
-                                help_icon(tr("Properties this landlord has publicly listed."), key=k(cid, "help_visible_props"))
+
                             for pid, addr, url, upd, region, district, city, size_m2, rooms, floor, price in vprops:
                                 where = " — ".join([x for x in [region, district, city] if x])
                                 chips = []
@@ -4219,7 +4215,7 @@ def tenant_dashboard():
         with c1:
             st.subheader(f"**{tr('Open to rent')}**")
         with c2:
-            help_icon(tr("Let landlords know you’re looking and share your criteria."), key="help_otr_header")
+            help_icon(tr("Let landlords know what you’re looking and share your criteria."), key="help_otr_header")
 
         tid = st.session_state.user["id"]
         prefs = load_open_to_rent_prefs(tid)
@@ -4394,7 +4390,6 @@ def tenant_dashboard():
                     st.session_state["otr_reset_preselect"] = True
                     st.rerun()
                     
-            # --- Profile details (own Edit/Save flow) -------------------------------------
             # --- Profile details (own Edit/Save flow) -------------------------------------
             tid = st.session_state.user["id"]
             _prof = load_profile_details(tid)
@@ -4925,7 +4920,7 @@ def tenant_dashboard():
 
     with nav3:
         is_active = current_page == "open_to_rent"
-        if st.button(tr("Open to Rent"), key="btn_open_to_rent",
+        if st.button(tr("Profile"), key="btn_open_to_rent",
                     use_container_width=True,
                     type=("primary" if is_active else "secondary")):
             _go("open_to_rent")
