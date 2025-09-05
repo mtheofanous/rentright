@@ -4407,7 +4407,7 @@ def tenant_dashboard():
 
             with st.expander(tr("Profile details"), expanded=False):
                 # Header row with Edit / Save / Cancel
-                b1, b2, _ = st.columns([4, 1, 6])
+                b1, _ = st.columns([2, 9])
 
                 if not st.session_state["profile_editing"]:
                     # Read-only summary chips
@@ -4441,15 +4441,11 @@ def tenant_dashboard():
                         unsafe_allow_html=True
                     )
 
-                    if b1.button(tr("Edit profile details"), key="btn_profile_edit"):
+                    if b1.button(tr("Edit"), key="btn_profile_edit"):
                         st.session_state["profile_editing"] = True
                         st.rerun()
 
                 else:
-                    # Cancel button in edit mode
-                    if b2.button(tr("Cancel"), key="btn_profile_cancel"):
-                        st.session_state["profile_editing"] = False
-                        st.rerun()
 
                     # ✅ Actual form (submit button MUST be inside this context)
                     with st.form("profile_details_form", clear_on_submit=False):
