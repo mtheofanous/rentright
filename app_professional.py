@@ -62,6 +62,12 @@ TRANSLATIONS_EL = {
     "Add property": "Προσθήκη ακινήτου",
     "Administrator Dashboard": "Πίνακας Διαχειριστή",
     "All": "Όλα",
+    "Age": "Ηλικία",
+    "Marital Status": "Οικογενειακή κατάσταση",
+    "Monthly salary (€)":"Μηνιαίος μισθός (€)",
+    "Pets": "Κατοικίδια",
+    "Number of tenants": "Αριθμός ενοίκων",
+    "Contract type": "Tύπος σύμβασης",
     "All reference requests": "Όλα τα αιτήματα σύστασης",
     "All Reference Requests": "Όλα τα Αιτήματα Σύστασης",
     "Any": "Οποιοδήποτε",
@@ -72,6 +78,14 @@ TRANSLATIONS_EL = {
     "Avg score": "Μ.Ο. βαθμολογίας",
     "Average": "Μέσος όρος",
     "Base URL for Links": "Βασικό URL για Συνδέσμους",
+    "Single": "Ελεύθερος/η",
+    "Married": "Παντρεμένος/η",
+    "Divorced": "Διαζευγμένος/η",
+    "Widowed": "Χήρος/α",
+    "Permanent": "Μόνιμη",
+    "Temporary": "Προσωρινή",
+    "Freelancer": "Ελεύθερος επαγγελματίας",
+    "Other": "Άλλο",
     "Cancel Reference": "Ακύρωση Σύστασης",
     "Cancel request": "Ακύρωση αιτήματος",
     "Cancel this reference request?": "Ακύρωση αυτού του αιτήματος σύστασης;",
@@ -4430,7 +4444,7 @@ def tenant_dashboard():
                     if p.get("monthly_salary") is not None:
                         chips.append(f'<span class="pill">{tr("Monthly salary (€)")}: {int(p["monthly_salary"]):,}</span>')
                     chips.append(f'<span class="pill">{tr("Pets")}: {_pets}</span>')
-                    if p.get("num_tenants"):      chips.append(f'<span class="pill">{tr("Number of tenants")}: {int(p["num_tenants"])}</span>')
+                    if p.get("num_tenants"):      chips.append(f'<span class="pill">{tr("Number of occupants")}: {int(p["num_tenants"])}</span>')
 
                     about_html = ""
                     if _val(p.get("about"), None):
@@ -4487,7 +4501,7 @@ def tenant_dashboard():
                                 key="profile_pets"
                             )
                             num_tenants = st.number_input(
-                                tr("Number of tenants"), min_value=1, max_value=10, step=1,
+                                tr("Number of occupants"), min_value=1, max_value=10, step=1,
                                 value=int((_prof or {}).get("num_tenants") or 1),
                                 key="profile_num_tenants"
                             )
