@@ -16,6 +16,8 @@ import requests
 from functools import lru_cache
 from json import JSONDecodeError
 import json
+import io
+from PIL import Image, ImageDraw, ImageFont
 
 # Safe import: utils_vault may rely on missing secrets (KeyError)
 VAULT_OK = True
@@ -1436,8 +1438,46 @@ def post_message(thread_id: int, sender_id: int, body: str):
     )
     c.commit()
     
+import io
+from PIL import Image, ImageDraw, ImageFont
+
+@st.cache_resource
+def _load_avatar_font():
+    # Try a bundled font; fall back to default
+    try:
+        return ImageFont.truetype("DejaVuSans-Bold.ttf", 28)
+    except Exception:
+        return ImageFont.load_default()
+
+def _avatar_image_from_initials(initials: str, size: int = 48,
+                                bg: str = "#EEF2FF", fg: str = "#1F2937") -> io.BytesIO:
+    """Return a PNG image (BytesIO) of a circular avatar with initials."""
+    initials = (initials or "?")[:2].upper()
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    # circle background
+    draw.ellipse([0, 0, size - 1, size - 1], fill=bg)
+
+    # text
+    font = _load_avatar_font()
+    # textbbox is more accurate than textsize when available
+    try:
+        bbox = draw.textbbox((0, 0), initials, font=font)
+        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    except Exception:
+        tw, th = draw.textsize(initials, font=font)
+
+    tx = (size - tw) / 2
+    ty = (size - th) / 2 - 1
+    draw.text((tx, ty), initials, font=font, fill=fg)
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return buf
+
 def _initials(name: str | None, email: str | None) -> str:
-    """Return 1–2 letter initials from name or email prefix."""
     base = (name or "").strip() or (email or "").split("@")[0]
     parts = [p for p in (base or "").replace(".", " ").split() if p]
     if len(parts) >= 2:
@@ -1445,6 +1485,7 @@ def _initials(name: str | None, email: str | None) -> str:
     if parts:
         return parts[0][:2].upper()
     return "?"
+
 
 def chat_panel():
     if not st.session_state.get("chat_open"):
@@ -1483,23 +1524,26 @@ def chat_panel():
     partner_name = (partner_user.get("name") or "").strip() if partner_user else ""
     partner_email = (partner_user.get("email") or "").strip() if partner_user else ""
     partner_display = partner_name or partner_email or tr("Unknown")
+    
+    my_initials       = _initials(me.get("name"), me.get("email"))
+    partner_initials  = _initials(partner_name, partner_email)
+
+    # Build avatar images once
+    my_avatar_img      = _avatar_image_from_initials(my_initials)
+    partner_avatar_img = _avatar_image_from_initials(partner_initials)
 
     st.divider()
     st.subheader(f"💬 {tr('Chat with')} {partner_display}")
 
-    # 👇 Compute initials once
-    my_initials = _initials(me.get("name"), me.get("email"))
-    partner_initials = _initials(partner_name, partner_email)
 
     # Messages
+    
     msgs = list_messages(thread_id, limit=200)
     for m in msgs:
-        if m["sender_id"] == me["id"]:
-            avatar = my_initials
-        else:
-            avatar = partner_initials
+        is_me = (m["sender_id"] == me["id"])
+        avatar_img = my_avatar_img if is_me else partner_avatar_img
 
-        with st.chat_message("user", avatar=avatar):
+        with st.chat_message("user", avatar=avatar_img):
             st.markdown(m["body"])
             st.caption(m["created_at"])
 
