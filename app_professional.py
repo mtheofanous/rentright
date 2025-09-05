@@ -3479,7 +3479,7 @@ def tenant_dashboard():
                     elif rel_status == "rejected":
                         cols[1].error(tr("Rejected"))
                         # Offer to send a fresh request
-                        if cols[1].button(tr("Send request again"), key=f"{NS}:reinvite_{tenant_id}_{ll_id}"):
+                        if cols[1].button(tr("Send request again"), key=f"{NS}:reinvite_{tenant_id}_{ll_id}_{prop_id}"):
                             try:
                                 flc_reinvite(tenant_id, ll_email)
                                 st.success(tr("Request sent again."))
