@@ -5050,7 +5050,7 @@ def landlord_dashboard():
     # Prospective tenants (landlord view)
     # =============================================================================
     def my_tenants():
-        st.subheader(tr("Prospective tenants"))
+        # st.subheader(tr("Prospective tenants"))
 
         # ---- minimal CSS for Prospective Tenants cards ----
         def _ensure_pt_css():
