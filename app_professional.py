@@ -225,6 +225,7 @@ TRANSLATIONS_EL = {
     "Refresh": "Ανανέωση",
     "Region": "Περιφέρεια",
     "Registered:": "Εγγράφηκε:",
+    "Profile":"Προφίλ",
     "Reject": "Απόρριψη",
     "Rejected": "Απορρίφθηκε",
     "Rejected.": "Απορρίφθηκε.",
@@ -259,6 +260,7 @@ TRANSLATIONS_EL = {
     "Show": "Εμφάνιση",
     "Sign In": "Σύνδεση",
     "Sign Out": "Αποσύνδεση",
+    "No contacts yet": "Δεν έχετε επαφές",
     "Size": "Μέγεθος",
     "Size (m²)": "Μέγεθος (τ.μ.)",
     "SMTP test email body": "Αν λάβατε αυτό το email, η ρύθμιση SMTP λειτουργεί. ✅",
@@ -292,6 +294,7 @@ TRANSLATIONS_EL = {
     "Visible properties": "Ορατά ακίνητα",
     "Visible to tenants": "Ορατό στους ενοικιαστές",
     "Welcome": "Καλώς ορίσατε, ",
+    "Can’t find the landlord? Send a request by email.": "Δεν βρίσκεις τον ιδιοκτήτη; Στείλε αίτημα μέσω email.",
     "Yes": "Ναι",
     "🏠 RentRight — Landlord Reference Portal": "🏠 RentRight — Συστατικές επιστολές Ιδιοκτήτη",
     "✅ Verify Contract": "✅ Επικύρωση Συμβολαίου",
@@ -4057,7 +4060,7 @@ def tenant_dashboard():
 
         rows = list_future_landlord_contacts(tenant_id) or []
         if not rows:
-            st.caption(tr("No future landlord contacts yet."))
+            st.caption(tr("No contacts yet"))
             return
 
         for (cid, fl_email, created_at, invited, invited_at, inbound_request, inbound_requested_at) in rows:
