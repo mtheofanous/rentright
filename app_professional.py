@@ -3721,7 +3721,7 @@ def tenant_dashboard():
             with c2:
                 help_icon(tr("Filter landlords by visible property listings."), key="help_search_property")
 
-            with st.expander(tr("Property filters"), True):
+            with st.expander(tr("Property filters"), False):
                 # Location pickers
                 lc1, lc2, lc3 = st.columns(3)
                 with lc1:
