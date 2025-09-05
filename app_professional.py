@@ -3963,7 +3963,7 @@ def tenant_dashboard():
                 st.session_state["loc_city"] = ANY
 
             # Active / Inactive toggle with a small help icon (important UX)
-            cb1, cb2 = st.columns([1, 0.08])
+            cb1, cb2 = st.columns([1, 0.3])
             with cb1:
                 open_flag = st.checkbox(
                     tr("I’m looking for a place"),
@@ -3974,7 +3974,7 @@ def tenant_dashboard():
 
             with st.expander(tr("Property characteristics"), expanded=False):
                 # One well-placed help icon for the whole filter logic (important UX)
-                hx1, hx2 = st.columns([1, 0.08])
+                hx1, hx2 = st.columns([1, 0.3])
                 with hx1:
                     st.empty()
                 with hx2:
@@ -4222,7 +4222,7 @@ def tenant_dashboard():
                             # No requests OR latest was cancelled → show Start/Delete
                             st.caption(tr("No active reference request."))
                             # Start (with a concise help icon – important UX)
-                            cs, ch, cd = st.columns([1, 3, 1])
+                            cs, ch, cd = st.columns([2, 3, 3])
                             with cs:
                                 if st.button(tr("New reference request"), key=f"start_{pid}"):
                                     rec = create_reference_request(st.session_state.user["id"], pid, email)
