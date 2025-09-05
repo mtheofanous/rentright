@@ -4228,7 +4228,8 @@ def tenant_dashboard():
                     if a1.button(tr("Message"), key=k(cid, "chat_open")):
                         st.session_state["chat_with_landlord_id"] = landlord_id
                         st.session_state["chat_role"] = "tenant"
-                        st.session_state["chat_open"] = True
+                        # st.session_state["chat_open"] = True
+                        st.session_state.chat_open = not st.session_state.get("chat_open", False)
                         st.rerun()
     
                     if a2.button(tr("Disconnect"), key=k(cid, "disconnect_connected")):
