@@ -3483,7 +3483,7 @@ def tenant_dashboard():
                             try:
                                 flc_reinvite(tenant_id, ll_email)
                                 st.success(tr("Request sent again."))
-                                st.rerun()
+                                # st.rerun()
                             except Exception as e:
                                 st.error(f"{tr('Could not resend')}: {e}")
 
