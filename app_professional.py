@@ -3299,11 +3299,11 @@ def tenant_dashboard():
                                         st.error(f"{tr('Can’t add contact')}: {e}")
                 
         with st.container(border=True):
-            c1, c2 = st.columns([6, 0.1])
-            with c1:
-                st.markdown(f"**{tr('Search landlords by property')}**")
-            with c2:
-                help_icon("Filter landlords by visible property listings.", key="help_search_property")
+            st.markdown(
+                f"**{tr('Search landlords by property')}** "
+                f"{help_icon('Filter landlords by visible property listings.', key='help_search_property')}",
+                unsafe_allow_html=True
+            )
 
             with st.expander(tr("Property filters"), True):
                 # Location pickers
