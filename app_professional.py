@@ -1980,38 +1980,44 @@ def save_open_to_rent_prefs(
     
 def load_profile_details(tenant_id: int) -> dict:
     c = get_conn()
-    row = c.execute("""
-        SELECT age, job, annual_salary, marital_status, job_position,
-               contract_type, pets, num_tenants, about
-        FROM tenant_profiles WHERE tenant_id=?
-    """, (tenant_id,)).fetchone()
-    if not row:
-        return {}
-    return dict(row)
-
-def save_profile_details(tenant_id: int, **data):
-    c = get_conn()
-    # Ensure a profile row exists
+    # ensure a row exists so SELECT never fails
     c.execute("""
         INSERT INTO tenant_profiles (tenant_id, updated_at)
         VALUES (?, datetime('now'))
         ON CONFLICT(tenant_id) DO NOTHING
     """, (tenant_id,))
-    # Update provided keys only
-    fields = []
-    params = []
-    for k in ("age","job","annual_salary","marital_status","job_position",
+    row = c.execute("""
+        SELECT age, annual_salary, marital_status, job_position,
+               contract_type, pets, num_tenants, about
+        FROM tenant_profiles WHERE tenant_id=?
+    """, (tenant_id,)).fetchone()
+    return dict(row) if row else {}
+
+
+def save_profile_details(tenant_id: int, **data):
+    c = get_conn()
+    c.execute("""
+        INSERT INTO tenant_profiles (tenant_id, updated_at)
+        VALUES (?, datetime('now'))
+        ON CONFLICT(tenant_id) DO NOTHING
+    """, (tenant_id,))
+
+    fields, params = [], []
+    for k in ("age","annual_salary","marital_status","job_position",
               "contract_type","pets","num_tenants","about"):
         if k in data:
             fields.append(f"{k}=?")
             params.append(data[k])
+
     if fields:
-        params.extend([tenant_id])
+        params.append(tenant_id)
         c.execute(f"""
-            UPDATE tenant_profiles SET {", ".join(fields)}, updated_at=datetime('now')
-            WHERE tenant_id=?
+            UPDATE tenant_profiles
+               SET {", ".join(fields)}, updated_at=datetime('now')
+             WHERE tenant_id=?
         """, params)
     c.commit()
+
 
 
 # properties helpers
@@ -4398,129 +4404,65 @@ def tenant_dashboard():
 
             
             _ensure_pt_css()
-            
+         
             with st.expander(tr("Profile details"), expanded=False):
-                # Header row with Edit / Save / Cancel
                 b1, b2, b3 = st.columns([1, 1, 6])
-                # if not st.session_state["profile_editing"]:
-                if not st.session_state["profile_editing"]:
-                    # Build chips from saved profile (fallbacks to “—” where empty)
-                    p = _prof or {}
-                    def _val(x, dash="—"): return (str(x).strip() if (x not in (None, "", 0)) else dash)
 
-                    _pets = tr("Yes") if p.get("pets") in (1, True) else tr("No") if p.get("pets") in (0, False) else "—"
-
-                    chips = []
-                    if p.get("age"):              chips.append(f'<span class="pill">{tr("Age")}: {int(p["age"])}</span>')
-                    if p.get("marital_status"):   chips.append(f'<span class="pill">{tr("Marital status")}: {p["marital_status"]}</span>')
-                    if p.get("contract_type"):    chips.append(f'<span class="pill">{tr("Contract type")}: {p["contract_type"]}</span>')
-                    if p.get("annual_salary") is not None:
-                        chips.append(f'<span class="pill">{tr("Annual salary (€)")}: {int(p["annual_salary"]):,}</span>')
-                    chips.append(f'<span class="pill">{tr("Pets")}: {_pets}</span>')
-                    if p.get("num_tenants"):      chips.append(f'<span class="pill">{tr("Number of tenants")}: {int(p["num_tenants"])}</span>')
-
-                    about_html = ""
-                    if _val(p.get("about"), None):
-                        about_html = f"<div class='ref-comments'>{escape(p.get('about'))}</div>"
-
-                    st.markdown(
-                        f"""
-                        <div class="ref-card">
-                        <div class="ref-header">
-                            <div class="ref-title">{tr("Profile details")}</div>
-                        </div>
-                        <div class="ref-row">{' '.join(chips) or '—'}</div>
-                        {about_html}
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-
-                    if b1.button(tr("Edit profile details"), key="btn_profile_edit"):
+                if not st.session_state.get("profile_editing", False):
+                    # ... your chips summary rendering stays the same ...
+                    if b1.button(tr("Edit"), key="profile_edit_btn"):
                         st.session_state["profile_editing"] = True
                         st.rerun()
+                    # (optional) a disabled Save here is fine, actual save happens in the form mode
                 else:
-                    # Save lives inside the form below; provide a Cancel here
-                    if b2.button(tr("Cancel"), key="btn_profile_cancel"):
+                    if b2.button(tr("Cancel"), key="profile_cancel_btn"):
                         st.session_state["profile_editing"] = False
                         st.rerun()
 
-                # # Use a form so Save only runs when explicitly pressed here
-                # with st.form("profile_details_form", clear_on_submit=False):
-                #     disabled = not st.session_state["profile_editing"]
+                    with st.form("profile_form", clear_on_submit=False):
+                        disabled = False
+                        c1, c2 = st.columns(2)
 
-                #     c1, c2 = st.columns(2)
-                #     with c1:
-                #         age = st.number_input(
-                #             tr("Age"), min_value=18, max_value=100, step=1,
-                #             value=int((_prof or {}).get("age") or 18),
-                #             key="profile_age", disabled=disabled
-                #         )
-                #         annual_salary = st.number_input(
-                #             tr("Annual salary (€)"), min_value=0, max_value=1_000_000, step=1000,
-                #             value=int((_prof or {}).get("annual_salary") or 0),
-                #             key="profile_salary", disabled=disabled
-                #         )
-                #         marital_status_opts = ["Single","Married","Divorced","Widowed"]
-                #         marital_status_idx = (
-                #             marital_status_opts.index(((_prof or {}).get("marital_status") or "Single"))
-                #             if ((_prof or {}).get("marital_status") in marital_status_opts) else 0
-                #         )
-                #         marital_status = st.selectbox(
-                #             tr("Marital status"),
-                #             [tr(x) for x in marital_status_opts],
-                #             index=marital_status_idx,
-                #             key="profile_marital", disabled=disabled
-                #         )
-                #         pets = st.radio(
-                #             tr("Pets"), [tr("Yes"), tr("No")], horizontal=True,
-                #             index=(0 if ((_prof or {}).get("pets") in (1, True)) else 1),
-                #             key="profile_pets", disabled=disabled
-                #         )
-                #         num_tenants = st.number_input(
-                #             tr("Number of tenants"), min_value=1, max_value=10, step=1,
-                #             value=int((_prof or {}).get("num_tenants") or 1),
-                #             key="profile_num_tenants", disabled=disabled
-                #         )
-                #     with c2:
-                #         job_position = st.text_input(
-                #             tr("Job position"), value=(_prof or {}).get("job_position") or "",
-                #             key="profile_job_position", disabled=disabled
-                #         )
-                #         contract_type_opts = ["Permanent","Temporary","Freelancer","Other"]
-                #         contract_type_idx = (
-                #             contract_type_opts.index(((_prof or {}).get("contract_type") or "Permanent"))
-                #             if ((_prof or {}).get("contract_type") in contract_type_opts) else 0
-                #         )
-                #         contract_type = st.selectbox(
-                #             tr("Contract type"),
-                #             [tr(x) for x in contract_type_opts],
-                #             index=contract_type_idx,
-                #             key="profile_contract", disabled=disabled
-                #         )
-                #     about = st.text_area(
-                #         tr("A few words about yourself"),
-                #         value=(_prof or {}).get("about") or "",
-                #         key="profile_about", disabled=disabled
-                #     )
+                        with c1:
+                            age = st.number_input(tr("Age"), min_value=0, max_value=120, step=1,
+                                                value=int((_prof or {}).get("age") or 0),
+                                                key="profile_age", disabled=disabled)
+                            salary = st.number_input(tr("Annual salary (€)"), min_value=0, step=1000,
+                                                    value=int((_prof or {}).get("annual_salary") or 0),
+                                                    key="profile_salary", disabled=disabled)
+                            marital_opts = ["Single","Married","Divorced","Widowed"]
+                            marital_idx = marital_opts.index(((_prof or {}).get("marital_status") or "Single")) \
+                                        if ((_prof or {}).get("marital_status") in marital_opts) else 0
+                            marital = st.selectbox(tr("Marital status"),
+                                                [tr(x) for x in marital_opts],
+                                                index=marital_idx, key="profile_marital", disabled=disabled)
+                            pets = st.radio(tr("Pets"), [tr("Yes"), tr("No")], horizontal=True,
+                                            index=(0 if ((_prof or {}).get("pets") in (1, True)) else 1),
+                                            key="profile_pets", disabled=disabled)
+                            num_tenants = st.number_input(tr("Number of tenants"), min_value=1, max_value=10, step=1,
+                                                        value=int((_prof or {}).get("num_tenants") or 1),
+                                                        key="profile_num_tenants", disabled=disabled)
+                        with c2:
+                            job_position = st.text_input(tr("Job position"),
+                                                        value=(_prof or {}).get("job_position") or "",
+                                                        key="profile_job_position", disabled=disabled)
+                            contract_opts = ["Permanent","Temporary","Freelancer","Other"]
+                            contract_idx = contract_opts.index(((_prof or {}).get("contract_type") or "Permanent")) \
+                                        if ((_prof or {}).get("contract_type") in contract_opts) else 0
+                            contract_type = st.selectbox(tr("Contract type"),
+                                                        [tr(x) for x in contract_opts],
+                                                        index=contract_idx, key="profile_contract", disabled=disabled)
+                        about = st.text_area(tr("A few words about yourself"),
+                                            value=(_prof or {}).get("about") or "",
+                                            key="profile_about", disabled=disabled)
 
-                    # Dedicated Save button for this expander
-                    save_clicked = st.form_submit_button(tr("Save profile details"))
+                        save_clicked = st.form_submit_button(tr("Save profile details"))
 
-                    if save_clicked and st.session_state["profile_editing"]:
-                        # Map translated choices back to canonical values
-                        marital_map = {
-                            tr("Single"): "Single",
-                            tr("Married"): "Married",
-                            tr("Divorced"): "Divorced",
-                            tr("Widowed"): "Widowed",
-                        }
-                        contract_map = {
-                            tr("Permanent"): "Permanent",
-                            tr("Temporary"): "Temporary",
-                            tr("Freelancer"): "Freelancer",
-                            tr("Other"): "Other",
-                        }
+                    if save_clicked:
+                        marital_map = {tr("Single"):"Single", tr("Married"):"Married",
+                                    tr("Divorced"):"Divorced", tr("Widowed"):"Widowed"}
+                        contract_map = {tr("Permanent"):"Permanent", tr("Temporary"):"Temporary",
+                                        tr("Freelancer"):"Freelancer", tr("Other"):"Other"}
 
                         save_profile_details(
                             tid,
@@ -4539,6 +4481,8 @@ def tenant_dashboard():
                         st.session_state["profile_editing"] = False
                         st.rerun()
 
+            
+            
 
 
         # --- Compact summary (uses current widget values) ---------------------------
@@ -5181,7 +5125,7 @@ def landlord_dashboard():
                     colM.markdown(f'<span class="pt-badge pt-badge--info">{tr("Pending")}</span>', unsafe_allow_html=True)
 
                 # Right: actions (now includes Message when connected)
-                # Right: actions (now includes Message when connected)
+         
                 if status == "connected":
                     a1, a2 = colR.columns(2)
                     pair_key = f"{landlord_id}-{tid}"
@@ -5271,6 +5215,7 @@ def landlord_dashboard():
                         unsafe_allow_html=True
                     )
 
+                # # ---- References summary ----
                 # ---- References summary ----
                 refs = list_latest_references_for_tenant_dict(tid) or []
                 refs = [r for r in refs if (r.get("status") or "").lower() != "cancelled"]
@@ -5293,8 +5238,10 @@ def landlord_dashboard():
                     lab = display_status_label(s) if s else "—"
                     s_l = (s or "").lower()
                     cls = "pt-badge pt-badge--info"
-                    if s_l == "completed": cls = "pt-badge pt-badge--ok"
-                    elif s_l in {"rejected","declined"}: cls = "pt-badge pt-badge--err"
+                    if s_l == "completed":
+                        cls = "pt-badge pt-badge--ok"
+                    elif s_l in {"rejected", "declined"}:
+                        cls = "pt-badge pt-badge--err"
                     return f'<span class="{cls}">{lab}</span>'
 
                 if status == "connected":
@@ -5351,25 +5298,32 @@ def landlord_dashboard():
                                 if comments:
                                     st.markdown(f"**{tr('Comments')}**")
                                     st.markdown(f"<div class='ref-comments'>{comments}</div>", unsafe_allow_html=True)
-                        # personal details -------------------------------------------------
-                        
-                        with st.expander(tr("Profile details"), expanded=False):
-                            
-                            left, right = st.columns(2)
-                            with left:
-                                st.caption(f"**{tr('Age')}**: {details.get('age') or '—'}")
-                                st.caption(f"**{tr('Annual salary (€)')}**: {int(details.get('annual_salary') or 0):,}" if details.get('annual_salary') is not None else f"**{tr('Annual salary (€)')}**: —")
-                                st.caption(f"**{tr('Marital status')}**: {details.get('marital_status') or '—'}")
-                                st.caption(f"**{tr('Pets')}**: {_pets_txt}")
-                                st.caption(f"**{tr('Number of tenants')}**: {details.get('num_tenants') or '—'}")
-                            with right:
-                                st.caption(f"**{tr('Job position')}**: {details.get('job_position') or '—'}")
-                                st.caption(f"**{tr('Contract type')}**: {details.get('contract_type') or '—'}")
-                            if details.get("about"):
-                                st.markdown(f"**{tr('A few words about yourself')}**")
-                                st.write(details.get("about"))
 
-                        
+                    # ---- Profile details (connected only) ---------------------------------------
+                    details = load_profile_details(tid) or {}
+                    _pets_txt = (
+                        tr("Yes") if (details.get("pets") in (1, True))
+                        else tr("No") if (details.get("pets") in (0, False))
+                        else "—"
+                    )
+                    with st.expander(tr("Profile details"), expanded=False):
+                        left, right = st.columns(2)
+                        with left:
+                            st.caption(f"**{tr('Age')}**: {details.get('age') if details.get('age') is not None else '—'}")
+                            if details.get('annual_salary') is not None:
+                                st.caption(f"**{tr('Annual salary (€)')}**: {int(details.get('annual_salary')):,}")
+                            else:
+                                st.caption(f"**{tr('Annual salary (€)')}**: —")
+                            st.caption(f"**{tr('Marital status')}**: {details.get('marital_status') or '—'}")
+                            st.caption(f"**{tr('Pets')}**: {_pets_txt}")
+                            st.caption(f"**{tr('Number of tenants')}**: {details.get('num_tenants') if details.get('num_tenants') is not None else '—'}")
+                        with right:
+                            st.caption(f"**{tr('Job position')}**: {details.get('job_position') or '—'}")
+                            st.caption(f"**{tr('Contract type')}**: {details.get('contract_type') or '—'}")
+                        if details.get("about"):
+                            st.markdown(f"**{tr('A few words about yourself')}**")
+                            st.write(details.get("about"))
+
                 else:
                     # Optional: show lock note ONLY if there are refs at all
                     try:
@@ -5377,6 +5331,112 @@ def landlord_dashboard():
                             st.caption("🔒 " + tr("Reference details are visible after you connect."))
                     except Exception:
                         pass
+
+                # refs = list_latest_references_for_tenant_dict(tid) or []
+                # refs = [r for r in refs if (r.get("status") or "").lower() != "cancelled"]
+
+                # total_refs = len(refs)
+                # latest_status = (refs[0].get("status") if refs else None) or None
+                # completed = [r for r in refs if (r.get("status") or "").lower() == "completed"]
+                # scores = [r.get("score") for r in completed if r.get("score") is not None]
+                # avg_score = round(sum(scores) / len(scores), 1) if scores else None
+
+                # st.caption(f"{tr('References')}: {len(refs)}")
+
+                # try:
+                #     latest_status_label = display_status_label(latest_status)
+                # except Exception:
+                #     latest_status_label = (latest_status or "—").title()
+
+                # # ---- Reference details (only when connected) ----
+                # def _status_badge_html(s):
+                #     lab = display_status_label(s) if s else "—"
+                #     s_l = (s or "").lower()
+                #     cls = "pt-badge pt-badge--info"
+                #     if s_l == "completed": cls = "pt-badge pt-badge--ok"
+                #     elif s_l in {"rejected","declined"}: cls = "pt-badge pt-badge--err"
+                #     return f'<span class="{cls}">{lab}</span>'
+
+                # if status == "connected":
+                #     # Load only when connected
+                #     refs = list_latest_references_for_tenant_dict(tid) or []
+                #     refs = [r for r in refs if (r.get("status") or "").lower() != "cancelled"]
+
+                #     if refs:
+                #         completed_scores = [
+                #             r.get("score") for r in refs
+                #             if (r.get("status") or "").lower() == "completed" and r.get("score") is not None
+                #         ]
+                #         avg_score = round(sum(completed_scores) / len(completed_scores), 1) if completed_scores else None
+
+                #         st.markdown(f"{tr('Avg score')}: {f'{avg_score}/10' if avg_score is not None else '—'}")
+
+                #         with st.expander(tr("Reference details"), expanded=False):
+                #             for r in refs:
+                #                 prev_email = (r.get("prev_email") or "—").strip()
+                #                 status_lr  = r.get("status") or ""
+                #                 score_lr   = r.get("score")
+                #                 paid_on    = _to_bool(r.get("paid_on_time"))
+                #                 util_unp   = _to_bool(r.get("utilities_unpaid"))
+                #                 good_cond  = _to_bool(r.get("good_condition"))
+                #                 comments   = r.get("comments")
+
+                #                 # Chip classes
+                #                 score_chip = ""
+                #                 if (status_lr or "").lower() == "completed" and score_lr is not None:
+                #                     score_chip = f'<span class="pill pill-score">{tr("Score")}: {int(score_lr)}/10</span>'
+                #                 paid_cls = "pill-ok" if paid_on is True else "pill-no" if paid_on is False else "pill-na"
+                #                 util_cls = "pill-no" if util_unp is True else "pill-ok" if util_unp is False else "pill-na"
+                #                 cond_cls = "pill-ok" if good_cond is True else "pill-no" if good_cond is False else "pill-na"
+
+                #                 chips_html = " ".join(filter(None, [
+                #                     score_chip,
+                #                     f'<span class="pill {paid_cls}">{tr("Paid on time")}: {_yn(paid_on)}</span>',
+                #                     f'<span class="pill {util_cls}">{tr("Unpaid utilities")}: {_yn(util_unp)}</span>',
+                #                     f'<span class="pill {cond_cls}">{tr("Good condition")}: {_yn(good_cond)}</span>',
+                #                 ]))
+
+                #                 st.markdown(
+                #                     f"""
+                #                     <div class="ref-card">
+                #                     <div class="ref-header">
+                #                         <div class="ref-title">{tr('Previous landlord')}: <a href="mailto:{prev_email}">{prev_email}</a></div>
+                #                         <div>{_status_badge_html(status_lr)}</div>
+                #                     </div>
+                #                     <div class="ref-row">{chips_html}</div>
+                #                     </div>
+                #                     """,
+                #                     unsafe_allow_html=True
+                #                 )
+                #                 if comments:
+                #                     st.markdown(f"**{tr('Comments')}**")
+                #                     st.markdown(f"<div class='ref-comments'>{comments}</div>", unsafe_allow_html=True)
+                #         # personal details -------------------------------------------------
+                        
+                #         with st.expander(tr("Profile details"), expanded=False):
+                            
+                #             left, right = st.columns(2)
+                #             with left:
+                #                 st.caption(f"**{tr('Age')}**: {details.get('age') or '—'}")
+                #                 st.caption(f"**{tr('Annual salary (€)')}**: {int(details.get('annual_salary') or 0):,}" if details.get('annual_salary') is not None else f"**{tr('Annual salary (€)')}**: —")
+                #                 st.caption(f"**{tr('Marital status')}**: {details.get('marital_status') or '—'}")
+                #                 st.caption(f"**{tr('Pets')}**: {_pets_txt}")
+                #                 st.caption(f"**{tr('Number of tenants')}**: {details.get('num_tenants') or '—'}")
+                #             with right:
+                #                 st.caption(f"**{tr('Job position')}**: {details.get('job_position') or '—'}")
+                #                 st.caption(f"**{tr('Contract type')}**: {details.get('contract_type') or '—'}")
+                #             if details.get("about"):
+                #                 st.markdown(f"**{tr('A few words about yourself')}**")
+                #                 st.write(details.get("about"))
+
+                        
+                # else:
+                #     # Optional: show lock note ONLY if there are refs at all
+                #     try:
+                #         if list_latest_references_for_tenant(tid):
+                #             st.caption("🔒 " + tr("Reference details are visible after you connect."))
+                #     except Exception:
+                #         pass
 
    
     # =============================================================================
