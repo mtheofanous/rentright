@@ -487,10 +487,6 @@ TRANSLATIONS_EL = {
         "Looking in": "Αναζήτηση σε",
         "Active": "Ενεργό",
         "Inactive": "Ανενεργό",
-        "Connected": "Connected",
-        "Not invited yet": "Not invited yet",
-        "Disconnect": "Disconnect",
-        "Contact added, but the email could not be sent:": "Contact added, but the email could not be sent:",
 
     }
 
