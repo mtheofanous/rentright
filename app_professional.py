@@ -426,7 +426,7 @@ TRANSLATIONS_EL = {
         "Previous landlord:": "Προηγούμενος ιδιοκτήτης",
         "Consent": "Συγκατάθεση",
         # Open to Rent
-        "Open to Rent": "Διαθέσιμος/η για ενοικίαση",
+        "Open to Rent": "Ενοικίαση",
         "I'm currently looking for a place": "Αναζητώ αυτήν την περίοδο σπίτι",
         "City": "Πόλη",
         "District": "Περιοχή",
