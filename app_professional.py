@@ -5977,21 +5977,37 @@ def landlord_dashboard():
         with tab_cancelled:
             render_requests(cancelled_reqs, "cancelled")
             
+    # página actual (asumo que la guardas así al navegar)
+    current_page = st.session_state.get("page", "")
+
     with nav1:
-        if st.button(tr("My Contacts"), key="lnd_my_contacts", use_container_width=True):
+        is_active = current_page == "my_contacts"
+        if st.button(tr("My Contacts"), key="lnd_my_contacts",
+                    use_container_width=True,
+                    type="primary" if is_active else "secondary"):
             _go("my_contacts")
 
     with nav2:
-        if st.button(tr("My Properties"), key="lnd_my_properties", use_container_width=True):
+        is_active = current_page == "my_properties"
+        if st.button(tr("My Properties"), key="lnd_my_properties",
+                    use_container_width=True,
+                    type="primary" if is_active else "secondary"):
             _go("my_properties")
 
     with nav3:
-        if st.button(tr("Find Tenants"), key="lnd_find_tenants", use_container_width=True):
+        is_active = current_page == "find_tenants"
+        if st.button(tr("Find Tenants"), key="lnd_find_tenants",
+                    use_container_width=True,
+                    type="primary" if is_active else "secondary"):
             _go("find_tenants")
 
     with nav4:
-        if st.button(tr("My References"), key="lnd_my_refs", use_container_width=True):
+        is_active = current_page == "my_refs"
+        if st.button(tr("My References"), key="lnd_my_refs",
+                    use_container_width=True,
+                    type="primary" if is_active else "secondary"):
             _go("my_refs")
+
 
     # st.divider()
 
