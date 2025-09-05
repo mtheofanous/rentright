@@ -113,7 +113,7 @@ TRANSLATIONS_EL = {
         "Find landlords already in the system by name or email.": "Βρείτε ιδιοκτήτες που υπάρχουν ήδη στην πλατφόρμα με όνομα ή email.",
         "Filter landlords by visible property listings.": "Φιλτράρετε ιδιοκτήτες μέσω των αγγελιών τους.",
          # Header + empty state
-        "Future landlords": "Μελλοντικοί ιδιοκτήτες",
+        "Future landlords": "Επαφές",
         "No future landlord contacts yet.": "Δεν υπάρχουν ακόμη επαφές μελλοντικών ιδιοκτητών.",
 
         # Status badges (reuse from earlier for consistency)
