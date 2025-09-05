@@ -3575,6 +3575,9 @@ def tenant_dashboard():
     # default page
     if "tenant_page" not in st.session_state:
         st.session_state.tenant_page = "find_landlords"
+        
+    if "page" not in st.session_state:
+        st.session_state["page"] = "my_contacts"  # default landing page
 
     def _go(page_key: str):
         # optional: clear any per-page transient UI flags when switching
@@ -5026,6 +5029,9 @@ def landlord_dashboard():
     # default page
     if "landlord_page" not in st.session_state:
         st.session_state.landlord_page= "my_contacts"
+        
+    if "page" not in st.session_state:
+        st.session_state["page"] = "my_contacts"
 
     def _go(page_key: str):
         # optional: clear any per-page transient UI flags when switching
@@ -5985,28 +5991,33 @@ def landlord_dashboard():
         if st.button(tr("My Contacts"), key="lnd_my_contacts",
                     use_container_width=True,
                     type="primary" if is_active else "secondary"):
-            _go("my_contacts")
+            if not is_active:
+                _go("my_contacts")
 
     with nav2:
         is_active = current_page == "my_properties"
         if st.button(tr("My Properties"), key="lnd_my_properties",
                     use_container_width=True,
                     type="primary" if is_active else "secondary"):
-            _go("my_properties")
+            if not is_active:
+                _go("my_properties")
 
     with nav3:
         is_active = current_page == "find_tenants"
         if st.button(tr("Find Tenants"), key="lnd_find_tenants",
                     use_container_width=True,
                     type="primary" if is_active else "secondary"):
-            _go("find_tenants")
+            if not is_active:
+                _go("find_tenants")
 
     with nav4:
         is_active = current_page == "my_refs"
         if st.button(tr("My References"), key="lnd_my_refs",
                     use_container_width=True,
                     type="primary" if is_active else "secondary"):
-            _go("my_refs")
+            if not is_active:
+                _go("my_refs")
+
 
 
     # st.divider()
