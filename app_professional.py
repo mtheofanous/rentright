@@ -294,58 +294,6 @@ def _yn(v):
     return tr("Yes") if b else tr("No")
 
 
-def quick_reference_summary(tenant_id: int):
-    """
-    Returns compact info for search cards + normalized answers for latest completed ref.
-    """
-    try:
-        refs = list_latest_references_for_tenant_dict(tenant_id) or []
-    except Exception:
-        refs = []
-
-    # Ignore cancelled refs
-    refs = [r for r in refs if (r.get("status") or "").lower() != "cancelled"]
-
-    if not refs:
-        return {
-            "have": False, "total": 0, "latest_status": None,
-            "latest_score": None, "avg_score": None, "completed_count": 0,
-            "latest_answers": None,
-        }
-
-    total = len(refs)
-    latest = refs[0]  # expected latest-first
-    latest_status = (latest.get("status") or "").strip()
-    latest_is_completed = (latest_status or "").lower() == "completed"
-    latest_score = latest.get("score") if latest_is_completed else None
-
-    completed = [r for r in refs if (r.get("status") or "").lower() == "completed"]
-    scores = [r.get("score") for r in completed if r.get("score") is not None]
-    avg_score = round(sum(scores) / len(scores), 1) if scores else None
-
-    latest_answers = None
-    if latest_is_completed:
-        latest_answers = {
-            "paid_on_time":     _to_bool(latest.get("paid_on_time")),
-            "utilities_unpaid": _to_bool(latest.get("utilities_unpaid")),
-            "good_condition":   _to_bool(latest.get("good_condition")),
-            "comments":         latest.get("comments"),
-            "prev_email":       latest.get("prev_email"),
-        }
-
-    return {
-        "have": True,
-        "total": total,
-        "latest_status": latest_status,
-        "latest_score": latest_score,
-        "avg_score": avg_score,
-        "completed_count": len(completed),
-        "latest_answers": latest_answers,
-    }
-
-
-
-
 def _yn(val):
     if val is True:  return tr("Yes")
     if val is False: return tr("No")
@@ -453,9 +401,6 @@ def md_label(key_with_colon: str) -> str:
     # e.g., md_label('Status:') -> "**Κατάσταση:**" (when lang is Greek)
     return f"**{tr(key_with_colon)}**"
 
-# === End language utilities ===
-
-
 # === Top-right language switcher (flags only) ===
 def render_topbar_language():
     c1, c2 = st.columns([8, 2])
@@ -471,10 +416,10 @@ def render_topbar_language():
 
             
 render_topbar_language()
-# === End top-right language switcher (flags only) ===
 
 
-# --- SMTP helpers integrados con st.secrets y session_state ---
+# --- SMTP HELPERS integrados con st.secrets y session_state ------------------------------------------------
+#-STARTS HERE------------------------------------------------------------------------------------------------
 def load_smtp_defaults():
     """Prefill desde st.secrets a session_state (una sola vez por sesión)."""
     ss = st.session_state
@@ -525,6 +470,9 @@ def send_email_smtp(to_email: str, subject: str, body: str):
         return True, "sent"
     except Exception as e:
         return False, f"{type(e).__name__}: {e}"
+    
+#-FINISH HERE------------------------------------------------------------------------------------------------
+
     
 def get_latest_reference_for_pair(tenant_id: int, prev_landlord_id: int):
     cur = get_conn().cursor()
@@ -1252,66 +1200,7 @@ def _table_has_column(conn_or_none, table: str, column: str) -> bool:
 
 
 
-#---------TENANT DASHBOARD HELPERS---------------------------------------------------
-#-STARTS HERE-----------------------------------------------------------------------
 
-        
-def delete_previous_landlord_completely(tenant_id: int, prev_landlord_id: int):
-    """
-    Fully remove a previous landlord and ALL related data for this tenant.
-    """
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT token FROM reference_requests WHERE tenant_id=? AND prev_landlord_id=?",
-        (tenant_id, prev_landlord_id),
-    )
-    tokens = [r[0] for r in cur.fetchall()]
-
-    for tok in tokens:
-        try: delete_landlord_responses(tok)
-        except Exception: pass
-        try: delete_contract_hard(tok)
-        except Exception: pass
-        cur.execute("DELETE FROM reference_requests WHERE token=?", (tok,))
-
-    delete_previous_landlord(prev_landlord_id, tenant_id)
-    conn.commit()
-
-
-def list_future_landlord_contacts(tenant_id: int):
-    """
-    Always returns 7 columns:
-    (id, email, created_at, invited, invited_at, inbound_request, inbound_requested_at)
-    """
-    c = get_conn()
-    cur = c.cursor()
-    has_inbound = _table_has_column(c, "future_landlord_contacts", "inbound_request")
-
-    if has_inbound:
-        cur.execute(
-            """
-            SELECT id, email, created_at, invited, invited_at, inbound_request, inbound_requested_at
-            FROM future_landlord_contacts
-            WHERE tenant_id = ?
-            ORDER BY id DESC
-            """,
-            (tenant_id,),
-        )
-        return cur.fetchall()
-    else:
-        cur.execute(
-            """
-            SELECT id, email, created_at, invited, invited_at
-            FROM future_landlord_contacts
-            WHERE tenant_id = ?
-            ORDER BY id DESC
-            """,
-            (tenant_id,),
-        )
-        base = cur.fetchall()
-        return [(id_, em, cr, inv, inv_at, 0, None) for (id_, em, cr, inv, inv_at) in base]
-    
-#-FINISH HERE-----------------------------------------------------------------------
 
 def has_inbound_request(tenant_id: int, landlord_email: str) -> bool:
     c = get_conn()
@@ -1504,22 +1393,6 @@ def flc_relation_status(landlord_id: int, tenant_id: int, landlord_email: str):
 
     return None, None
 
-#---------------------TENANT DASHBOARD HELPER---------------------------------------------------------------------------------
-#-STARTS HERE---------------------------------------------------------------------------------------------------------------------
-
-def remove_future_landlord_contact(contact_id: int, tenant_id: int):
-    cur = get_conn().cursor()
-    cur.execute(
-        "DELETE FROM future_landlord_contacts WHERE id = ? AND tenant_id = ?",
-        (contact_id, tenant_id),
-    )
-    get_conn().commit()
-
-
-
-
-#-FINISH HERE---------------------------------------------------------------------------------------------------------------------
-
 
 
 # ---------- Auth helpers ----------------------------------------------------------------------------------------------------------
@@ -1552,47 +1425,6 @@ def _table_has_column(table: str, col: str) -> bool:
         return col in cols
     except Exception:
         return False
-
-# def clear_tenant_future_landlord(tenant_id: int, landlord_email: str | None = None):
-#     """
-#     Clears the 'future landlord' reference from the tenant's profile so:
-#       - they no longer appear under Prospective Tenants
-#       - their own dashboard no longer shows the future landlord
-#     Works defensively: updates only the columns that exist.
-#     If landlord_email is provided and a matching email column exists, we match on it.
-#     """
-#     if not _table_has_column("tenant_profiles", "tenant_id"):
-#         return  # nothing to do
-
-#     # Candidate columns that might be present in your schema
-#     email_cols = ["future_landlord_email", "future_landlord"]      # pick whichever exists
-#     extra_cols = ["future_landlord_name", "future_landlord_phone",
-#                   "future_landlord_note", "future_landlord_status",
-#                   "future_landlord_updated_at"]
-
-#     # Build SET clause only for columns that exist
-#     set_bits = []
-#     for c in email_cols + extra_cols:
-#         if _table_has_column("tenant_profiles", c):
-#             set_bits.append(f"{c}=NULL")
-
-#     if not set_bits:
-#         return  # no known columns to clear
-
-#     # WHERE clause: by tenant_id; optionally match email if both landlord_email and email column exist
-#     where = "tenant_id=?"
-#     params = [tenant_id]
-
-#     match_col = next((c for c in email_cols if _table_has_column("tenant_profiles", c)), None)
-#     if landlord_email and match_col:
-#         # only clear if the stored email equals this landlord (protects against accidental clearing)
-#         where += f" AND ({match_col} IS NULL OR {match_col} = ?)"
-#         params.append(landlord_email)
-
-#     sql = f"UPDATE tenant_profiles SET {', '.join(set_bits)} WHERE {where}"
-#     conn.execute(sql, tuple(params))
-#     conn.commit()
-
 
 def ensure_tenant_profile_row(tenant_id: int):
     """Make sure tenant_profiles has a row for this tenant."""
@@ -1894,217 +1726,7 @@ def search_landlords_by_property_location(
     ]
     return c.execute(sql, params).fetchall() or []
 
-
-# def tenant_open_to_rent_section():
-#     st.subheader(tr("Open to Rent"))
-
-#     tid = st.session_state.user["id"]
-#     prefs = load_open_to_rent_prefs(tid)
-
-#     # If reset asked, we force defaults (zeros/False) instead of loading prefs.
-#     force_defaults = st.session_state.pop("otr_force_defaults", False)
-
-#     if ("otr_keys_inited" not in st.session_state) or force_defaults:
-#         if force_defaults:
-#             # Defaults
-#             st.session_state["otr_open_flag"]  = False
-#             st.session_state["otr_size_min"]   = 0
-#             st.session_state["otr_size_max"]   = 0
-#             st.session_state["otr_rooms_min"]  = 0
-#             st.session_state["otr_rooms_max"]  = 0
-#             st.session_state["otr_floor_min"]  = 0
-#             st.session_state["otr_floor_max"]  = 0
-#             st.session_state["otr_price_min"]  = 0
-#             st.session_state["otr_price_max"]  = 0
-#         else:
-#             # From saved prefs
-#             st.session_state["otr_open_flag"]  = bool(prefs.get("open_to_rent"))
-#             st.session_state["otr_size_min"]   = int(prefs.get("size_min")  or 0)
-#             st.session_state["otr_size_max"]   = int(prefs.get("size_max")  or 0)
-#             st.session_state["otr_rooms_min"]  = int(prefs.get("rooms_min") or 0)
-#             st.session_state["otr_rooms_max"]  = int(prefs.get("rooms_max") or 0)
-#             st.session_state["otr_floor_min"]  = int(prefs.get("floor_min") or 0)
-#             st.session_state["otr_floor_max"]  = int(prefs.get("floor_max") or 0)
-#             st.session_state["otr_price_min"]  = int(prefs.get("price_min") or 0)
-#             st.session_state["otr_price_max"]  = int(prefs.get("price_max") or 0)
-
-#         st.session_state["otr_keys_inited"] = True
-
-#     # Defaults
-#     # Defaults for summary
-#     region = district = city = ""
-
-#     with st.container(border=True):
-#         data, regions, muni_idx = load_ellada_index("ellada.json")
-
-#         # If we just pressed Reset, skip preselect from saved prefs this run
-#         reset_preselect = st.session_state.pop("otr_reset_preselect", False)
-
-#         saved_city = "" if reset_preselect else (prefs.get("search_city") or "").strip()
-#         saved_dist = "" if reset_preselect else (prefs.get("search_district") or "").strip()
-        
-
-#         # Try to infer Region/Unit from saved values
-#         pre_region, pre_unit = (None, None)
-#         if saved_city and saved_city in muni_idx:
-#             pre_region, pre_unit = muni_idx[saved_city]
-#         elif saved_dist:
-#             for reg in data.get("Περιφέρειες", []):
-#                 units = (reg.get("Περιφερειακές Ενότητες") or {})
-#                 if saved_dist in units:
-#                     pre_region = reg.get("όνομα")
-#                     pre_unit = saved_dist
-#                     break
-
-#         ANY = tr("Any")
-
-#         # If we just pressed Reset, or on first run (no key yet), seed pickers to Any
-#         if reset_preselect or ("loc_region" not in st.session_state):
-#             st.session_state["loc_region"] = ANY
-#         if reset_preselect or ("loc_unit" not in st.session_state):
-#             st.session_state["loc_unit"] = ANY
-#         if reset_preselect or ("loc_city" not in st.session_state):
-#             st.session_state["loc_city"] = ANY
-
-        
-#                 # Active / Inactive
-#         open_flag = st.checkbox(
-#             tr("I'm currently looking for a place"),
-#             key="otr_open_flag",
-#         )
-        
-#         with st.expander(tr("Property Charecteristics"), expanded=False):
-
-#             # REGION
-#             region_options = [ANY] + (regions or [])
-#             region_index = (region_options.index(pre_region) if (pre_region in region_options and not reset_preselect) else 0)
-#             region_sel = st.selectbox("Περιφέρεια", options=region_options, index=region_index, key="loc_region")
-
-#             # REGIONAL UNIT (depends on Region)
-#             units = list_units(data, region_sel) if (region_sel and region_sel != ANY) else []
-#             unit_options = [ANY] + (units or [])
-#             unit_index = (unit_options.index(pre_unit) if (pre_unit in unit_options and not reset_preselect) else 0)
-#             unit_sel = st.selectbox("Περιφερειακή Ενότητα", options=unit_options, index=unit_index, key="loc_unit")
-
-#             # MUNICIPALITY (depends on Unit)
-#             municipalities = list_municipalities(data, region_sel, unit_sel) if (region_sel and region_sel != ANY and unit_sel and unit_sel != ANY) else []
-#             city_options = [ANY] + (municipalities or [])
-#             city_index = (city_options.index(saved_city) if (saved_city in city_options and not reset_preselect) else 0)
-#             city_sel = st.selectbox("Δήμος (Πόλη)", options=city_options, index=city_index, key="loc_city")
-    
-
-#             # Map to your schema (don’t save “Any” — treat as empty)
-#             region   = "" if region_sel == ANY else region_sel
-#             district = "" if unit_sel   == ANY else unit_sel
-#             city     = "" if city_sel   == ANY else city_sel
-
-#             c1, c2 = st.columns(2)
-#             size_min = c1.number_input(tr("Min size (m²)"), 0, 10000, key="otr_size_min")
-#             size_max = c2.number_input(tr("Max size (m²)"), 0, 10000, key="otr_size_max")
-
-#             r1, r2 = st.columns(2)
-#             rooms_min = r1.number_input(tr("Min rooms"), 0, 50, key="otr_rooms_min")
-#             rooms_max = r2.number_input(tr("Max rooms"), 0, 50, key="otr_rooms_max")
-
-#             f1, f2 = st.columns(2)
-#             floor_min = f1.number_input(tr("Min floor"), -5, 100, key="otr_floor_min")
-#             floor_max = f2.number_input(tr("Max floor"), -5, 100, key="otr_floor_max")
-
-#             p1, p2 = st.columns(2)
-#             price_min = p1.number_input(tr("Min price (€)"), 0, 1_000_000, key="otr_price_min")
-#             price_max = p2.number_input(tr("Max price (€)"), 0, 1_000_000, key="otr_price_max")
-            
-
-
-#             # ---- Save / Reset -------------------------------------------------------
-#             col_save, col_reset = st.columns([1, 1])
-
-#             if col_save.button(tr("Save")):
-#                 city_clean = "" if (city == "—") else (city or "")
-#                 district_clean = "" if (district == "—") else (district or "")
-#                 if not city_clean and not district_clean:
-#                     st.warning(tr("Please enter at least a city or a district."))
-#                 else:
-#                     try:
-#                         save_open_to_rent_prefs(
-#                             tid, bool(st.session_state["otr_open_flag"]),
-#                             city_clean, district_clean,
-#                             int(st.session_state["otr_size_min"]), int(st.session_state["otr_size_max"]),
-#                             int(st.session_state["otr_rooms_min"]), int(st.session_state["otr_rooms_max"]),
-#                             int(st.session_state["otr_floor_min"]), int(st.session_state["otr_floor_max"]),
-#                             int(st.session_state["otr_price_min"]), int(st.session_state["otr_price_max"]),
-#                             city_osm_id=None, city_osm_type=None,
-#                             district_osm_id=None, district_osm_type=None,
-#                         )
-#                     except TypeError:
-#                         save_open_to_rent_prefs(
-#                             tid, bool(st.session_state["otr_open_flag"]),
-#                             city_clean, district_clean,
-#                             int(st.session_state["otr_size_min"]), int(st.session_state["otr_size_max"]),
-#                             int(st.session_state["otr_rooms_min"]), int(st.session_state["otr_rooms_max"]),
-#                             int(st.session_state["otr_floor_min"]), int(st.session_state["otr_floor_max"]),
-#                             int(st.session_state["otr_price_min"]), int(st.session_state["otr_price_max"]),
-#                         )
-#                     try:
-#                         st.cache_data.clear()
-#                     except Exception:
-#                         pass
-#                     st.success(tr("Preferences saved!"))
-
-#             if col_reset.button(tr("Reset")):
-#                 for k in ("loc_region","loc_unit","loc_city",
-#                         "otr_open_flag",
-#                         "otr_size_min","otr_size_max",
-#                         "otr_rooms_min","otr_rooms_max",
-#                         "otr_floor_min","otr_floor_max",
-#                         "otr_price_min","otr_price_max",
-#                         "otr_keys_inited"):
-#                     st.session_state.pop(k, None)
-
-#                 st.session_state["otr_force_defaults"]  = True
-#                 st.session_state["otr_reset_preselect"] = True
-#                 st.rerun()
-
-
-#     # --- Compact summary (uses current widget values) ---------------------------
-#     def _fmt_range(lo, hi, suffix=""):
-#         has_lo = lo not in (None, 0, "0", "")
-#         has_hi = hi not in (None, 0, "0", "")
-#         if not has_lo and not has_hi:
-#             return None
-#         lo_txt = f"{int(lo):,}" if has_lo else "—"
-#         hi_txt = f"{int(hi):,}" if has_hi else "—"
-#         return f"{lo_txt}–{hi_txt}{suffix}"
-
-#     latest_region = region if (region and region != "—") else ""
-#     latest_district = district if (district and district != "—") else ""
-#     latest_city = city if (city and city != "—") else ""
-#     loc_txt = " — ".join([x.strip() for x in [latest_region, latest_district, latest_city] if x])
-
-#     size_txt  = _fmt_range(st.session_state["otr_size_min"],  st.session_state["otr_size_max"],  " m²")
-#     rooms_txt = _fmt_range(st.session_state["otr_rooms_min"], st.session_state["otr_rooms_max"], f" {tr('rooms')}")
-#     floor_txt = _fmt_range(st.session_state["otr_floor_min"], st.session_state["otr_floor_max"])
-#     price_txt = _fmt_range(st.session_state["otr_price_min"], st.session_state["otr_price_max"])
-
-#     bits = []
-#     if size_txt:  bits.append(size_txt)
-#     if rooms_txt: bits.append(rooms_txt)
-#     if floor_txt: bits.append(tr("Floor") + " " + floor_txt)
-#     if price_txt: bits.append("€" + price_txt.replace("–", "–€"))
-
-#     details_txt = " · ".join(bits)
-#     state_label = tr("Active") if st.session_state["otr_open_flag"] else tr("Inactive")
-
-#     if loc_txt and details_txt:
-#         st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {loc_txt} · {details_txt}")
-#     elif loc_txt:
-#         st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {loc_txt}")
-#     elif details_txt:
-#         st.caption(f"{tr('Status:')} {state_label} · {details_txt}")
-#     else:
-#         st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {tr('Anywhere')}")
  
-
 def storage_delete(storage_key: str):
     # Replace with S3/GCS delete if you use cloud storage
     if storage_key and os.path.isfile(storage_key):
@@ -2495,7 +2117,7 @@ def delete_previous_landlord(entry_id: int, tenant_id: int):
     cur.execute("DELETE FROM previous_landlords WHERE id = ? AND tenant_id = ?", (entry_id, tenant_id))
     conn.commit()
 
-# ---------- References helpers ----------
+# ---------- References helpers ------------------------------------------
 def load_contract_plaintext(token: str) -> bytes | None:
     """Return decrypted contract bytes if consented; else None."""
     contract = get_reference_request_by_token(token) and get_contract_by_token(token)
@@ -2705,80 +2327,6 @@ def _table_has_column(conn, table: str, column: str) -> bool:
     cur = conn.execute(f"PRAGMA table_info({table})")
     return any(row[1].lower() == column.lower() for row in cur.fetchall())
 
-#-----------HELPER FOR LANDLOARD DASHBOARD -----------------------------------------------------------
-# STARTS HERE -------------------------------------------------------------------------------------------------
-
-def list_latest_references_for_tenant(tenant_id: int):
-    """Return each previous landlord with the latest (most recent) reference request, if any, and its answers."""
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT pl.id AS prev_id,
-               pl.name AS prev_name,
-               pl.email AS prev_email,
-               pl.address AS prev_address,
-               rr.token,
-               rr.status,
-               rr.score,
-               rr.paid_on_time,
-               rr.utilities_unpaid,
-               rr.good_condition,
-               rr.comments,
-               rr.created_at,
-               rr.filled_at
-        FROM previous_landlords pl
-        LEFT JOIN reference_requests rr
-          ON rr.prev_landlord_id = pl.id
-         AND rr.tenant_id = pl.tenant_id
-         AND rr.id = (
-              SELECT MAX(id) FROM reference_requests
-               WHERE prev_landlord_id = pl.id AND tenant_id = pl.tenant_id
-           )
-        WHERE pl.tenant_id = ?
-        ORDER BY pl.id DESC
-        """,
-        (tenant_id,),
-    )
-    return cur.fetchall()
-
-
-def list_latest_references_for_tenant_dict(tenant_id: int) -> list[dict]:
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT
-            pl.id            AS prev_id,
-            pl.name          AS prev_name,
-            pl.email         AS prev_email,
-            pl.afm           AS prev_afm,
-            pl.address       AS prev_addr,
-            rr.token         AS token,
-            rr.status        AS status,
-            rr.score         AS score,
-            rr.paid_on_time  AS paid_on_time,
-            rr.utilities_unpaid AS utilities_unpaid,
-            rr.good_condition   AS good_condition,
-            rr.comments      AS comments,
-            rr.created_at    AS created_at,
-            rr.filled_at     AS filled_at
-        FROM previous_landlords pl
-        LEFT JOIN reference_requests rr
-          ON rr.prev_landlord_id = pl.id
-         AND rr.tenant_id       = pl.tenant_id
-         AND rr.id = (
-              SELECT MAX(id)
-              FROM reference_requests
-              WHERE prev_landlord_id = pl.id AND tenant_id = pl.tenant_id
-          )
-        WHERE pl.tenant_id = ?
-        ORDER BY pl.id DESC
-        """,
-        (tenant_id,),
-    )
-    rows = cur.fetchall()  # sqlite3.Row objects
-    return [dict(r) for r in rows]
-
-# FINISH HERE -------------------------------------------------------------------------------------------------
 
 
 #-----------HELPER FOR ADMIN AND TENANT DASHBOARD (BUILD REFERENCE LINK)------------------------------------------------
@@ -2891,10 +2439,334 @@ def email_reference_cancellation_smtp(
 
 
 
+
+
+#------------------------------------------------------------------------------------------------------------------------------------    
+#---------HELPER OF ADMIN DASHBOARD (SEARCH TENANTS)------------------------------------------------------------------------------- 
+# STARTS HERE------------------------------------------------------------------------------------------------------------------------------------     
+
+def cleanup_old_contracts(days_locked: int = 30, days_rejected: int = 30):
+    """Delete encrypted blobs for expired locked/rejected contracts and mark as DELETED in place (path left dangling)."""
+    import os
+    from datetime import datetime, timedelta
+    cur = conn.cursor()
+    cutoff_locked   = (datetime.utcnow() - timedelta(days=days_locked)).isoformat()
+    cutoff_rejected = (datetime.utcnow() - timedelta(days=days_rejected)).isoformat()
+
+    # Locked & old
+    rows = cur.execute("""
+        SELECT token, path, uploaded_at FROM reference_contracts
+        WHERE consent_status='locked' AND uploaded_at < ?
+    """, (cutoff_locked,)).fetchall()
+    for token, path, up_at in rows:
+        try:
+            if path and os.path.exists(path):
+                os.remove(path)
+        except Exception:
+            pass
+        # Mark as deleted by clearing path
+        cur.execute("UPDATE reference_contracts SET path='', status='rejected' WHERE token=?", (token,))
+
+    # Rejected & old
+    rows = cur.execute("""
+        SELECT token, path, uploaded_at FROM reference_contracts
+        WHERE status='rejected' AND uploaded_at < ?
+    """, (cutoff_rejected,)).fetchall()
+    for token, path, up_at in rows:
+        try:
+            if path and os.path.exists(path):
+                os.remove(path)
+        except Exception:
+            pass
+        cur.execute("UPDATE reference_contracts SET path='' WHERE token=?", (token,))
+
+    conn.commit()
+    
+# FINISH HERE------------------------------------------------------------------------------------------------------------------------------------     
+    
+    
+    
+#---------TENANT DASHBOARD HELPERS---------------------------------------------------
+#-STARTS HERE-----------------------------------------------------------------------
+
+        
+def delete_previous_landlord_completely(tenant_id: int, prev_landlord_id: int):
+    """
+    Fully remove a previous landlord and ALL related data for this tenant.
+    """
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT token FROM reference_requests WHERE tenant_id=? AND prev_landlord_id=?",
+        (tenant_id, prev_landlord_id),
+    )
+    tokens = [r[0] for r in cur.fetchall()]
+
+    for tok in tokens:
+        try: delete_landlord_responses(tok)
+        except Exception: pass
+        try: delete_contract_hard(tok)
+        except Exception: pass
+        cur.execute("DELETE FROM reference_requests WHERE token=?", (tok,))
+
+    delete_previous_landlord(prev_landlord_id, tenant_id)
+    conn.commit()
+
+
+def list_future_landlord_contacts(tenant_id: int):
+    """
+    Always returns 7 columns:
+    (id, email, created_at, invited, invited_at, inbound_request, inbound_requested_at)
+    """
+    c = get_conn()
+    cur = c.cursor()
+    has_inbound = _table_has_column(c, "future_landlord_contacts", "inbound_request")
+
+    if has_inbound:
+        cur.execute(
+            """
+            SELECT id, email, created_at, invited, invited_at, inbound_request, inbound_requested_at
+            FROM future_landlord_contacts
+            WHERE tenant_id = ?
+            ORDER BY id DESC
+            """,
+            (tenant_id,),
+        )
+        return cur.fetchall()
+    else:
+        cur.execute(
+            """
+            SELECT id, email, created_at, invited, invited_at
+            FROM future_landlord_contacts
+            WHERE tenant_id = ?
+            ORDER BY id DESC
+            """,
+            (tenant_id,),
+        )
+        base = cur.fetchall()
+        return [(id_, em, cr, inv, inv_at, 0, None) for (id_, em, cr, inv, inv_at) in base]
+    
+def remove_future_landlord_contact(contact_id: int, tenant_id: int):
+    cur = get_conn().cursor()
+    cur.execute(
+        "DELETE FROM future_landlord_contacts WHERE id = ? AND tenant_id = ?",
+        (contact_id, tenant_id),
+    )
+    get_conn().commit()
+
+    
+#-FINISH HERE-----------------------------------------------------------------------
+
+    
+
+# ===============================================================================================================================    
+# ========== LANDLOARD DASHBOARD HELPERS =======================================================================================
+# STARTS HERE ==================================================================================================================
+
+def list_latest_references_for_tenant(tenant_id: int):
+    """Return each previous landlord with the latest (most recent) reference request, if any, and its answers."""
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT pl.id AS prev_id,
+               pl.name AS prev_name,
+               pl.email AS prev_email,
+               pl.address AS prev_address,
+               rr.token,
+               rr.status,
+               rr.score,
+               rr.paid_on_time,
+               rr.utilities_unpaid,
+               rr.good_condition,
+               rr.comments,
+               rr.created_at,
+               rr.filled_at
+        FROM previous_landlords pl
+        LEFT JOIN reference_requests rr
+          ON rr.prev_landlord_id = pl.id
+         AND rr.tenant_id = pl.tenant_id
+         AND rr.id = (
+              SELECT MAX(id) FROM reference_requests
+               WHERE prev_landlord_id = pl.id AND tenant_id = pl.tenant_id
+           )
+        WHERE pl.tenant_id = ?
+        ORDER BY pl.id DESC
+        """,
+        (tenant_id,),
+    )
+    return cur.fetchall()
+
+
+def list_latest_references_for_tenant_dict(tenant_id: int) -> list[dict]:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT
+            pl.id            AS prev_id,
+            pl.name          AS prev_name,
+            pl.email         AS prev_email,
+            pl.afm           AS prev_afm,
+            pl.address       AS prev_addr,
+            rr.token         AS token,
+            rr.status        AS status,
+            rr.score         AS score,
+            rr.paid_on_time  AS paid_on_time,
+            rr.utilities_unpaid AS utilities_unpaid,
+            rr.good_condition   AS good_condition,
+            rr.comments      AS comments,
+            rr.created_at    AS created_at,
+            rr.filled_at     AS filled_at
+        FROM previous_landlords pl
+        LEFT JOIN reference_requests rr
+          ON rr.prev_landlord_id = pl.id
+         AND rr.tenant_id       = pl.tenant_id
+         AND rr.id = (
+              SELECT MAX(id)
+              FROM reference_requests
+              WHERE prev_landlord_id = pl.id AND tenant_id = pl.tenant_id
+          )
+        WHERE pl.tenant_id = ?
+        ORDER BY pl.id DESC
+        """,
+        (tenant_id,),
+    )
+    rows = cur.fetchall()  # sqlite3.Row objects
+    return [dict(r) for r in rows]
+
+
+def search_open_to_rent_tenants(
+    q: str | None = None,
+    city: str | None = None,
+    district: str | None = None,
+    size_min: int | None = None, size_max: int | None = None,
+    rooms_min: int | None = None, rooms_max: int | None = None,
+    floor_min: int | None = None, floor_max: int | None = None,
+    price_min: int | None = None, price_max: int | None = None,
+    limit: int = 100
+):
+    """
+    Return tenants with open_to_rent=1 matching free-text (name/email)
+    and optional filters (city/district + range overlaps for size/rooms/floor/price).
+    """
+    cur = conn.cursor()
+
+    clauses = ["tp.open_to_rent = 1"]
+    params = {}
+
+    # Free-text on users.name / users.email
+    if q:
+        clauses.append("(LOWER(u.name) LIKE LOWER(:q) OR LOWER(u.email) LIKE LOWER(:q))")
+        params["q"] = f"%{q.strip()}%"
+
+    # Exact matches on location preferences (stored strings)
+    if city:
+        clauses.append("LOWER(tp.search_city) = LOWER(:city)")
+        params["city"] = city.strip()
+    if district:
+        clauses.append("LOWER(tp.search_district) = LOWER(:district)")
+        params["district"] = district.strip()
+
+    # Range-overlap logic:
+    # For each dimension, show a tenant if their preferred range overlaps the landlord's filter range.
+    def add_range_overlap(field_min: str, field_max: str, f_min_val, f_max_val):
+        # Only add a WHERE if at least one bound provided
+        if f_min_val is None and f_max_val is None:
+            return
+        # NULLs in tenant prefs mean "no bound" → use huge defaults via COALESCE
+        # Overlap condition: (tenant_max >= filter_min) AND (tenant_min <= filter_max)
+        cmin = f"COALESCE(tp.{field_min}, -9999999)"
+        cmax = f"COALESCE(tp.{field_max},  9999999)"
+
+        if f_min_val is not None:
+            clauses.append(f"{cmax} >= :{field_min}_needs_at_least")
+            params[f"{field_min}_needs_at_least"] = int(f_min_val)
+        if f_max_val is not None:
+            clauses.append(f"{cmin} <= :{field_max}_needs_at_most")
+            params[f"{field_max}_needs_at_most"] = int(f_max_val)
+
+    add_range_overlap("size_min",  "size_max",  size_min,  size_max)
+    add_range_overlap("rooms_min", "rooms_max", rooms_min, rooms_max)
+    add_range_overlap("floor_min", "floor_max", floor_min, floor_max)
+    add_range_overlap("price_min", "price_max", price_min, price_max)
+
+    where_sql = " AND ".join(clauses) if clauses else "1=1"
+
+    sql = f"""
+        SELECT
+            u.id            AS tenant_id,
+            u.name          AS tenant_name,
+            u.email         AS tenant_email,
+            tp.updated_at   AS prefs_updated_at,
+
+            tp.search_city, tp.search_district,
+            tp.size_min, tp.size_max,
+            tp.rooms_min, tp.rooms_max,
+            tp.floor_min, tp.floor_max,
+            tp.price_min, tp.price_max
+        FROM tenant_profiles tp
+        JOIN users u ON u.id = tp.tenant_id
+        WHERE {where_sql}
+        ORDER BY tp.updated_at DESC
+        LIMIT :limit
+    """
+    params["limit"] = int(limit)
+    cur.execute(sql, params)
+    return cur.fetchall()
+
+def quick_reference_summary(tenant_id: int):
+    """
+    Returns compact info for search cards + normalized answers for latest completed ref.
+    """
+    try:
+        refs = list_latest_references_for_tenant_dict(tenant_id) or []
+    except Exception:
+        refs = []
+
+    # Ignore cancelled refs
+    refs = [r for r in refs if (r.get("status") or "").lower() != "cancelled"]
+
+    if not refs:
+        return {
+            "have": False, "total": 0, "latest_status": None,
+            "latest_score": None, "avg_score": None, "completed_count": 0,
+            "latest_answers": None,
+        }
+
+    total = len(refs)
+    latest = refs[0]  # expected latest-first
+    latest_status = (latest.get("status") or "").strip()
+    latest_is_completed = (latest_status or "").lower() == "completed"
+    latest_score = latest.get("score") if latest_is_completed else None
+
+    completed = [r for r in refs if (r.get("status") or "").lower() == "completed"]
+    scores = [r.get("score") for r in completed if r.get("score") is not None]
+    avg_score = round(sum(scores) / len(scores), 1) if scores else None
+
+    latest_answers = None
+    if latest_is_completed:
+        latest_answers = {
+            "paid_on_time":     _to_bool(latest.get("paid_on_time")),
+            "utilities_unpaid": _to_bool(latest.get("utilities_unpaid")),
+            "good_condition":   _to_bool(latest.get("good_condition")),
+            "comments":         latest.get("comments"),
+            "prev_email":       latest.get("prev_email"),
+        }
+
+    return {
+        "have": True,
+        "total": total,
+        "latest_status": latest_status,
+        "latest_score": latest_score,
+        "avg_score": avg_score,
+        "completed_count": len(completed),
+        "latest_answers": latest_answers,
+    }
+
+
+# FINISH HERE ==================================================================================================================
+
 #--------------------------------------------------------------------------------------------------------------------------------
 # ---------- Landlord Reference Portal (public) ---------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------------------------------------------------------
-
 
 def reference_portal(token: str):
     # ✅ If redirected after submit, show ONLY the success message and stop
@@ -2995,135 +2867,6 @@ def reference_portal(token: str):
         except Exception:
             st.experimental_set_query_params(page="cancelled")
         st.rerun()
-
-#------------------------------------------------------------------------------------------------------------------------------------    
-#---------HELPER OF ADMIN DASHBOARD (SEARCH TENANTS)------------------------------------------------------------------------------- 
-# STARTS HERE------------------------------------------------------------------------------------------------------------------------------------     
-
-
-def cleanup_old_contracts(days_locked: int = 30, days_rejected: int = 30):
-    """Delete encrypted blobs for expired locked/rejected contracts and mark as DELETED in place (path left dangling)."""
-    import os
-    from datetime import datetime, timedelta
-    cur = conn.cursor()
-    cutoff_locked   = (datetime.utcnow() - timedelta(days=days_locked)).isoformat()
-    cutoff_rejected = (datetime.utcnow() - timedelta(days=days_rejected)).isoformat()
-
-    # Locked & old
-    rows = cur.execute("""
-        SELECT token, path, uploaded_at FROM reference_contracts
-        WHERE consent_status='locked' AND uploaded_at < ?
-    """, (cutoff_locked,)).fetchall()
-    for token, path, up_at in rows:
-        try:
-            if path and os.path.exists(path):
-                os.remove(path)
-        except Exception:
-            pass
-        # Mark as deleted by clearing path
-        cur.execute("UPDATE reference_contracts SET path='', status='rejected' WHERE token=?", (token,))
-
-    # Rejected & old
-    rows = cur.execute("""
-        SELECT token, path, uploaded_at FROM reference_contracts
-        WHERE status='rejected' AND uploaded_at < ?
-    """, (cutoff_rejected,)).fetchall()
-    for token, path, up_at in rows:
-        try:
-            if path and os.path.exists(path):
-                os.remove(path)
-        except Exception:
-            pass
-        cur.execute("UPDATE reference_contracts SET path='' WHERE token=?", (token,))
-
-    conn.commit()
-    
-# FINISH HERE------------------------------------------------------------------------------------------------------------------------------------     
-    
-#------------------------------------------------------------------------------------------------------------------------------------    
-#---------HELPER OF LANDLORD DASHBOARD (SEARCH TENANTS)------------------------------------------------------------------------------- 
-# STARTS HERE------------------------------------------------------------------------------------------------------------------------------------     
-def search_open_to_rent_tenants(
-    q: str | None = None,
-    city: str | None = None,
-    district: str | None = None,
-    size_min: int | None = None, size_max: int | None = None,
-    rooms_min: int | None = None, rooms_max: int | None = None,
-    floor_min: int | None = None, floor_max: int | None = None,
-    price_min: int | None = None, price_max: int | None = None,
-    limit: int = 100
-):
-    """
-    Return tenants with open_to_rent=1 matching free-text (name/email)
-    and optional filters (city/district + range overlaps for size/rooms/floor/price).
-    """
-    cur = conn.cursor()
-
-    clauses = ["tp.open_to_rent = 1"]
-    params = {}
-
-    # Free-text on users.name / users.email
-    if q:
-        clauses.append("(LOWER(u.name) LIKE LOWER(:q) OR LOWER(u.email) LIKE LOWER(:q))")
-        params["q"] = f"%{q.strip()}%"
-
-    # Exact matches on location preferences (stored strings)
-    if city:
-        clauses.append("LOWER(tp.search_city) = LOWER(:city)")
-        params["city"] = city.strip()
-    if district:
-        clauses.append("LOWER(tp.search_district) = LOWER(:district)")
-        params["district"] = district.strip()
-
-    # Range-overlap logic:
-    # For each dimension, show a tenant if their preferred range overlaps the landlord's filter range.
-    def add_range_overlap(field_min: str, field_max: str, f_min_val, f_max_val):
-        # Only add a WHERE if at least one bound provided
-        if f_min_val is None and f_max_val is None:
-            return
-        # NULLs in tenant prefs mean "no bound" → use huge defaults via COALESCE
-        # Overlap condition: (tenant_max >= filter_min) AND (tenant_min <= filter_max)
-        cmin = f"COALESCE(tp.{field_min}, -9999999)"
-        cmax = f"COALESCE(tp.{field_max},  9999999)"
-
-        if f_min_val is not None:
-            clauses.append(f"{cmax} >= :{field_min}_needs_at_least")
-            params[f"{field_min}_needs_at_least"] = int(f_min_val)
-        if f_max_val is not None:
-            clauses.append(f"{cmin} <= :{field_max}_needs_at_most")
-            params[f"{field_max}_needs_at_most"] = int(f_max_val)
-
-    add_range_overlap("size_min",  "size_max",  size_min,  size_max)
-    add_range_overlap("rooms_min", "rooms_max", rooms_min, rooms_max)
-    add_range_overlap("floor_min", "floor_max", floor_min, floor_max)
-    add_range_overlap("price_min", "price_max", price_min, price_max)
-
-    where_sql = " AND ".join(clauses) if clauses else "1=1"
-
-    sql = f"""
-        SELECT
-            u.id            AS tenant_id,
-            u.name          AS tenant_name,
-            u.email         AS tenant_email,
-            tp.updated_at   AS prefs_updated_at,
-
-            tp.search_city, tp.search_district,
-            tp.size_min, tp.size_max,
-            tp.rooms_min, tp.rooms_max,
-            tp.floor_min, tp.floor_max,
-            tp.price_min, tp.price_max
-        FROM tenant_profiles tp
-        JOIN users u ON u.id = tp.tenant_id
-        WHERE {where_sql}
-        ORDER BY tp.updated_at DESC
-        LIMIT :limit
-    """
-    params["limit"] = int(limit)
-    cur.execute(sql, params)
-    return cur.fetchall()
-
-# FINISH HERE------------------------------------------------------------------------------------------------------------------------------------     
-
 
 #------------------------------------------------------------------------------------------------------------------------------
 #-----------ADMIN DASHBOARD----------------------------------------------------------------------------------------------------
@@ -4415,6 +4158,9 @@ def tenant_dashboard():
     else:
         # fallback (shouldn't happen)
         tenant_contancts()
+        
+        
+
 
 # -----------------------------------------------------------------------------------------------------------------------
 # ---------- Landlord Dashboard (enhanced) -------------------------------------------------------------------------------
