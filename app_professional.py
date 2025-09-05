@@ -4395,6 +4395,7 @@ def tenant_dashboard():
                     st.rerun()
                     
             # --- Profile details (own Edit/Save flow) -------------------------------------
+            # --- Profile details (own Edit/Save flow) -------------------------------------
             tid = st.session_state.user["id"]
             _prof = load_profile_details(tid)
 
@@ -4402,67 +4403,123 @@ def tenant_dashboard():
             if "profile_editing" not in st.session_state:
                 st.session_state["profile_editing"] = False
 
-            
             _ensure_pt_css()
-         
-            with st.expander(tr("Profile details"), expanded=False):
-                b1, b2, b3 = st.columns([1, 1, 6])
 
-                if not st.session_state.get("profile_editing", False):
-                    # ... your chips summary rendering stays the same ...
-                    if b1.button(tr("Edit"), key="profile_edit_btn"):
+            with st.expander(tr("Profile details"), expanded=False):
+                # Header row with Edit / Save / Cancel
+                b1, b2, _ = st.columns([1, 1, 6])
+
+                if not st.session_state["profile_editing"]:
+                    # Read-only summary chips
+                    p = _prof or {}
+                    def _val(x, dash="—"): return (str(x).strip() if (x not in (None, "", 0)) else dash)
+                    _pets = tr("Yes") if p.get("pets") in (1, True) else tr("No") if p.get("pets") in (0, False) else "—"
+                    chips = []
+                    if p.get("age"):              chips.append(f'<span class="pill">{tr("Age")}: {int(p["age"])}</span>')
+                    if p.get("marital_status"):   chips.append(f'<span class="pill">{tr("Marital status")}: {p["marital_status"]}</span>')
+                    if p.get("contract_type"):    chips.append(f'<span class="pill">{tr("Contract type")}: {p["contract_type"]}</span>')
+                    if p.get("monthly_salary") is not None:
+                        chips.append(f'<span class="pill">{tr("Annual salary (€)")}: {int(p["monthly_salary"]):,}</span>')
+                    chips.append(f'<span class="pill">{tr("Pets")}: {_pets}</span>')
+                    if p.get("num_tenants"):      chips.append(f'<span class="pill">{tr("Number of tenants")}: {int(p["num_tenants"])}</span>')
+
+                    about_html = ""
+                    if _val(p.get("about"), None):
+                        from html import escape
+                        about_html = f"<div class='ref-comments'>{escape(p.get('about'))}</div>"
+
+                    st.markdown(
+                        f"""
+                        <div class="ref-card">
+                        <div class="ref-header">
+                            <div class="ref-title">{tr("Profile details")}</div>
+                        </div>
+                        <div class="ref-row">{' '.join(chips) or '—'}</div>
+                        {about_html}
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+                    if b1.button(tr("Edit profile details"), key="btn_profile_edit"):
                         st.session_state["profile_editing"] = True
                         st.rerun()
-                    # (optional) a disabled Save here is fine, actual save happens in the form mode
+
                 else:
-                    if b2.button(tr("Cancel"), key="profile_cancel_btn"):
+                    # Cancel button in edit mode
+                    if b2.button(tr("Cancel"), key="btn_profile_cancel"):
                         st.session_state["profile_editing"] = False
                         st.rerun()
 
-                    with st.form("profile_form", clear_on_submit=False):
-                        disabled = False
+                    # ✅ Actual form (submit button MUST be inside this context)
+                    with st.form("profile_details_form", clear_on_submit=False):
                         c1, c2 = st.columns(2)
-
                         with c1:
-                            age = st.number_input(tr("Age"), min_value=18, max_value=120, step=1,
-                                                value=int((_prof or {}).get("age") or 0),
-                                                key="profile_age", disabled=disabled)
-                            salary = st.number_input(tr("Monthly salary (€)"), min_value=0, step=100,
-                                                    value=int((_prof or {}).get("monthly_salary") or 0),
-                                                    key="profile_salary", disabled=disabled)
-                            marital_opts = ["Single","Married","Divorced","Widowed"]
-                            marital_idx = marital_opts.index(((_prof or {}).get("marital_status") or "Single")) \
-                                        if ((_prof or {}).get("marital_status") in marital_opts) else 0
-                            marital = st.selectbox(tr("Marital status"),
-                                                [tr(x) for x in marital_opts],
-                                                index=marital_idx, key="profile_marital", disabled=disabled)
-                            pets = st.radio(tr("Pets"), [tr("Yes"), tr("No")], horizontal=True,
-                                            index=(0 if ((_prof or {}).get("pets") in (1, True)) else 1),
-                                            key="profile_pets", disabled=disabled)
-                            num_tenants = st.number_input(tr("Number of tenants"), min_value=1, max_value=10, step=1,
-                                                        value=int((_prof or {}).get("num_tenants") or 1),
-                                                        key="profile_num_tenants", disabled=disabled)
+                            age = st.number_input(
+                                tr("Age"), min_value=18, max_value=100, step=1,
+                                value=int((_prof or {}).get("age") or 18),
+                                key="profile_age"
+                            )
+                            monthly_salary = st.number_input(
+                                tr("Monthly salary (€)"), min_value=0, max_value=1_000_000, step=1000,
+                                value=int((_prof or {}).get("monthly_salary") or 0),
+                                key="profile_salary"
+                            )
+                            marital_status_opts = ["Single","Married","Divorced","Widowed"]
+                            marital_status_idx = (
+                                marital_status_opts.index(((_prof or {}).get("marital_status") or "Single"))
+                                if ((_prof or {}).get("marital_status") in marital_status_opts) else 0
+                            )
+                            marital_status = st.selectbox(
+                                tr("Marital status"),
+                                [tr(x) for x in marital_status_opts],
+                                index=marital_status_idx,
+                                key="profile_marital"
+                            )
+                            pets = st.radio(
+                                tr("Pets"), [tr("Yes"), tr("No")], horizontal=True,
+                                index=(0 if ((_prof or {}).get("pets") in (1, True)) else 1),
+                                key="profile_pets"
+                            )
+                            num_tenants = st.number_input(
+                                tr("Number of tenants"), min_value=1, max_value=10, step=1,
+                                value=int((_prof or {}).get("num_tenants") or 1),
+                                key="profile_num_tenants"
+                            )
                         with c2:
-                            job_position = st.text_input(tr("Job position"),
-                                                        value=(_prof or {}).get("job_position") or "",
-                                                        key="profile_job_position", disabled=disabled)
-                            contract_opts = ["Permanent","Temporary","Freelancer","Other"]
-                            contract_idx = contract_opts.index(((_prof or {}).get("contract_type") or "Permanent")) \
-                                        if ((_prof or {}).get("contract_type") in contract_opts) else 0
-                            contract_type = st.selectbox(tr("Contract type"),
-                                                        [tr(x) for x in contract_opts],
-                                                        index=contract_idx, key="profile_contract", disabled=disabled)
-                        about = st.text_area(tr("A few words about yourself"),
-                                            value=(_prof or {}).get("about") or "",
-                                            key="profile_about", disabled=disabled)
+                            job_position = st.text_input(
+                                tr("Job position"), value=(_prof or {}).get("job_position") or "",
+                                key="profile_job_position"
+                            )
+                            contract_type_opts = ["Permanent","Temporary","Freelancer","Other"]
+                            contract_type_idx = (
+                                contract_type_opts.index(((_prof or {}).get("contract_type") or "Permanent"))
+                                if ((_prof or {}).get("contract_type") in contract_type_opts) else 0
+                            )
+                            contract_type = st.selectbox(
+                                tr("Contract type"),
+                                [tr(x) for x in contract_type_opts],
+                                index=contract_type_idx,
+                                key="profile_contract"
+                            )
+                        about = st.text_area(
+                            tr("A few words about yourself"),
+                            value=(_prof or {}).get("about") or "",
+                            key="profile_about"
+                        )
 
+                        # 🔘 This is the button Streamlit needs INSIDE the form
                         save_clicked = st.form_submit_button(tr("Save profile details"))
 
                     if save_clicked:
-                        marital_map = {tr("Single"):"Single", tr("Married"):"Married",
-                                    tr("Divorced"):"Divorced", tr("Widowed"):"Widowed"}
-                        contract_map = {tr("Permanent"):"Permanent", tr("Temporary"):"Temporary",
-                                        tr("Freelancer"):"Freelancer", tr("Other"):"Other"}
+                        marital_map = {
+                            tr("Single"): "Single", tr("Married"): "Married",
+                            tr("Divorced"): "Divorced", tr("Widowed"): "Widowed",
+                        }
+                        contract_map = {
+                            tr("Permanent"): "Permanent", tr("Temporary"): "Temporary",
+                            tr("Freelancer"): "Freelancer", tr("Other"): "Other",
+                        }
 
                         save_profile_details(
                             tid,
@@ -4480,9 +4537,6 @@ def tenant_dashboard():
                         st.success(tr("Changes saved."))
                         st.session_state["profile_editing"] = False
                         st.rerun()
-
-            
-            
 
 
         # --- Compact summary (uses current widget values) ---------------------------
