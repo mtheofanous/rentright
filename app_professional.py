@@ -4225,38 +4225,44 @@ def tenant_dashboard():
                 # actions
                 if status == "connected":
                     a1, a2 = colR.columns(2)
-                    
-                    chat_is_open = st.session_state.get("chat_open", False)
 
-                    # Dynamic label
+                    # unique id for THIS landlord↔tenant pair
+                    pair_key = f"{landlord_id}-{tenant_id}"
+
+                    # Is THIS card's chat open?
+                    chat_is_open = (
+                        st.session_state.get("chat_open", False)
+                        and st.session_state.get("selected_thread") == pair_key
+                    )
+
                     btn_label = tr("Close Chat") if chat_is_open else tr("Message")
+                    btn_type  = "primary" if chat_is_open else "secondary"
 
-                    # Inject CSS to make this button blue if open
-                    btn_css = """
-                    <style>
-                    div[data-testid="stButton"] button.chat-btn {
-                        background-color: #2563eb;  /* blue */
-                        color: white;
-                    }
-                    </style>
-                    """
-                    if chat_is_open:
-                        st.markdown(btn_css, unsafe_allow_html=True)
-                    
-                    
-                    if a1.button(btn_label, key=k(cid, "chat_open"), type="primary" if chat_is_open else "secondary"):
-                        st.session_state["chat_with_landlord_id"] = landlord_id
-                        st.session_state["chat_role"] = "tenant"
-                        st.session_state.chat_open = not chat_is_open
+                    if a1.button(btn_label, key=k(cid, "chat_toggle"), type=btn_type):
+                        if chat_is_open:
+                            # close just this chat
+                            st.session_state.chat_open = False
+                            st.session_state.selected_thread = None
+                        else:
+                            # open this chat (and close any other)
+                            st.session_state["chat_role"] = "tenant"
+                            st.session_state["chat_with_landlord_id"] = landlord_id
+                            st.session_state["chat_with_tenant_id"] = tenant_id
+                            st.session_state.selected_thread = pair_key
+                            st.session_state.chat_open = True
                         st.rerun()
-    
+
                     if a2.button(tr("Disconnect"), key=k(cid, "disconnect_connected")):
-                        if landlord_id: flc_disconnect(landlord_id, tenant_id)
-                        try: st.cache_data.clear()
-                        except Exception: pass
+                        if landlord_id:
+                            flc_disconnect(landlord_id, tenant_id)
+                        try:
+                            st.cache_data.clear()
+                        except Exception:
+                            pass
                         st.warning(tr("Disconnected."))
                         _clear_transient_search_flags()
                         st.rerun()
+
 
                 elif inbound_request:
                     # Connect / Disconnect + help
@@ -5188,44 +5194,45 @@ def landlord_dashboard():
                     colM.markdown(f'<span class="pt-badge pt-badge--info">{tr("Pending")}</span>', unsafe_allow_html=True)
 
                 # Right: actions (now includes Message when connected)
+                # Right: actions (now includes Message when connected)
                 if status == "connected":
                     a1, a2 = colR.columns(2)
-                    
-                    chat_is_open = st.session_state.get("chat_open", False)
 
-                    # Dynamic label
+                    # unique id for THIS landlord↔tenant pair
+                    pair_key = f"{landlord_id}-{tid}"
+
+                    # Is THIS card's chat open?
+                    chat_is_open = (
+                        st.session_state.get("chat_open", False)
+                        and st.session_state.get("selected_thread") == pair_key
+                    )
+
                     btn_label = tr("Close Chat") if chat_is_open else tr("Message")
+                    btn_type  = "primary" if chat_is_open else "secondary"
 
-                    # Inject CSS to make this button blue if open
-                    btn_css = """
-                    <style>
-                    div[data-testid="stButton"] button.chat-btn {
-                        background-color: #2563eb;  /* blue */
-                        color: white;
-                    }
-                    </style>
-                    """
-                    if chat_is_open:
-                        st.markdown(btn_css, unsafe_allow_html=True)
-                        
-                    if a1.button(btn_label, key=pk(tid, "chat_open"), type="primary" if chat_is_open else "secondary"):
-                        st.session_state["chat_with_tenant_id"] = tid
-                        st.session_state["chat_role"] = "landlord"
-                        st.session_state.chat_open = not chat_is_open
+                    if a1.button(btn_label, key=pk(tid, "chat_toggle"), type=btn_type):
+                        if chat_is_open:
+                            # close just this chat
+                            st.session_state.chat_open = False
+                            st.session_state.selected_thread = None
+                        else:
+                            # open this chat (and close any other)
+                            st.session_state["chat_role"] = "landlord"
+                            st.session_state["chat_with_tenant_id"] = tid
+                            st.session_state["chat_with_landlord_id"] = landlord_id
+                            st.session_state.selected_thread = pair_key
+                            st.session_state.chat_open = True
                         st.rerun()
-                                        
-                    # if a1.button(tr("Message"), key=pk(tid, "chat_open")):
-                    #     st.session_state["chat_with_tenant_id"] = tid
-                    #     st.session_state["chat_role"] = "landlord"
-                    #     st.session_state["chat_open"] = True
-                    #     st.rerun()
 
                     if a2.button(tr("Disconnect"), key=pk(tid, "disconnect")):
                         flc_disconnect(landlord_id, tid)
-                        try: st.cache_data.clear()
-                        except Exception: pass
+                        try:
+                            st.cache_data.clear()
+                        except Exception:
+                            pass
                         st.warning(tr("Disconnected."))
                         st.rerun()
+
 
                 elif status == "rejected":
                     colR.caption(tr("No actions"))
