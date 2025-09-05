@@ -4225,11 +4225,29 @@ def tenant_dashboard():
                 # actions
                 if status == "connected":
                     a1, a2 = colR.columns(2)
-                    if a1.button(tr("Message"), key=k(cid, "chat_open")):
+                    
+                    chat_is_open = st.session_state.get("chat_open", False)
+
+                    # Dynamic label
+                    btn_label = tr("Close Chat") if chat_is_open else tr("Message")
+
+                    # Inject CSS to make this button blue if open
+                    btn_css = """
+                    <style>
+                    div[data-testid="stButton"] button.chat-btn {
+                        background-color: #2563eb;  /* blue */
+                        color: white;
+                    }
+                    </style>
+                    """
+                    if chat_is_open:
+                        st.markdown(btn_css, unsafe_allow_html=True)
+                    
+                    
+                    if a1.button(btn_label, key=k(cid, "chat_open"), type="primary" if chat_is_open else "secondary"):
                         st.session_state["chat_with_landlord_id"] = landlord_id
                         st.session_state["chat_role"] = "tenant"
-                        # st.session_state["chat_open"] = True
-                        st.session_state.chat_open = not st.session_state.get("chat_open", False)
+                        st.session_state.chat_open = not chat_is_open
                         st.rerun()
     
                     if a2.button(tr("Disconnect"), key=k(cid, "disconnect_connected")):
