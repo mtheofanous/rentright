@@ -5292,9 +5292,9 @@ def landlord_dashboard():
                             r.get("score") for r in refs
                             if (r.get("status") or "").lower() == "completed" and r.get("score") is not None
                         ]
-                        avg_score = round(sum(completed_scores) / len(completed_scores), 1) if completed_scores else None
+                        avg_score = round(sum(completed_scores) / len(completed_scores)) if completed_scores else None
 
-                        st.markdown(f"{tr('Avg score')}: {f'{avg_score}/10' if avg_score is not None else '—'}")
+                        st.markdown(f"{tr('Score')}: {avg_score if avg_score is not None else '—'}")
 
                         with st.expander(tr("Reference details"), expanded=False):
                             for r in refs:
