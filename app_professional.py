@@ -172,6 +172,7 @@ TRANSLATIONS_EL = {
     "Min floor": "Ελάχιστος όροφος",
     "Min price (€)": "Ελάχιστη τιμή (€)",
     "Min rooms": "Ελάχιστα δωμάτια",
+    "Previous landlords & references": "Προηγούμενοι ιδιοκτήτες & συστάσεις",
     "Min size (m²)": "Ελάχιστο μέγεθος (τ.μ.)",
     "Missing SMTP details: host, port, username, password, sender, or recipient.": "Λείπουν στοιχεία SMTP: host, port, όνομα χρήστη, κωδικός, αποστολέας ή παραλήπτης.",
     "Municipality": "Δήμος",
