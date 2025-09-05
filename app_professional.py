@@ -171,7 +171,7 @@ TRANSLATIONS_EL = {
     "None": "Καμία",
     "Not My Tenant / Cancel": "Δεν είναι ο ενοικιαστής μου / Ακύρωση",
     "Open listing": "Προβολή αγγελίας",
-    "Open to Rent": "Ανοιχτός για ενοικίαση",
+    "Open to Rent": "Ενοικίαση",
     "Open to rent": "Ανοιχτός για ενοικίαση",
     "Paid on time": "Πλήρωνε στην ώρα του",
     "Paid on time?": "Πλήρωνε στην ώρα του;",
@@ -4268,7 +4268,7 @@ def tenant_dashboard():
 
 
     with nav2:
-        if st.button(tr("Find Landlords"), key="btn_find_landlords", use_container_width=True):
+        if st.button(tr("Search"), key="btn_find_landlords", use_container_width=True):
             _go("find_landlords")
 
     with nav1:
