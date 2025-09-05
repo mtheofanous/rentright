@@ -5267,6 +5267,15 @@ def landlord_dashboard():
                             tid_real = get_or_create_thread(landlord_id, tid)
                             mark_thread_read(tid_real, me_id)
                         st.rerun()
+                        
+                    if a2.button(tr("Disconnect"), key=pk(tid, "disconnect")):
+                        flc_disconnect(landlord_id, tid)
+                        try:
+                            st.cache_data.clear()
+                        except Exception:
+                            pass
+                        st.warning(tr("Disconnected."))
+                        st.rerun()
 
 
                 elif status == "rejected":
