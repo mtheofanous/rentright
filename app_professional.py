@@ -5026,19 +5026,21 @@ def landlord_dashboard():
     # ---------- NAV BUTTONS (set active page only) ----------
     nav1, nav2, nav3, nav4 = st.columns(4)
 
-    # default page
+    # ---------- NAV STATE ----------
     if "landlord_page" not in st.session_state:
-        st.session_state.landlord_page= "my_contacts"
-        
-    if "page" not in st.session_state:
-        st.session_state["page"] = "my_contacts"
+        st.session_state["landlord_page"] = "my_contacts"  # default
 
     def _go(page_key: str):
-        # optional: clear any per-page transient UI flags when switching
+        # optional: clear per-page transient flags
         for k in list(st.session_state.keys()):
             if k.startswith(("tfl:", "tfl_", "tfl_contacts:", "ld_otr_", "otr_", "prospects")):
                 st.session_state.pop(k, None)
-        st.session_state.landlord_page = page_key
+                
+        # single source of truth
+        st.session_state["landlord_page"] = page_key
+        # keep legacy key in sync if used elsewhere
+        st.session_state["page"] = page_key
+        st.rerun()
 
 
     # =============================================================================
@@ -5984,57 +5986,52 @@ def landlord_dashboard():
             render_requests(cancelled_reqs, "cancelled")
             
     # página actual (asumo que la guardas así al navegar)
-    current_page = st.session_state.get("page", "")
+    current_page = st.session_state.get("landlord_page", "my_contacts")
 
     with nav1:
         is_active = current_page == "my_contacts"
         if st.button(tr("My Contacts"), key="lnd_my_contacts",
                     use_container_width=True,
-                    type="primary" if is_active else "secondary"):
-            if not is_active:
-                _go("my_contacts")
+                    type=("primary" if is_active else "secondary")):
+            _go("my_contacts")
 
     with nav2:
         is_active = current_page == "my_properties"
         if st.button(tr("My Properties"), key="lnd_my_properties",
                     use_container_width=True,
-                    type="primary" if is_active else "secondary"):
-            if not is_active:
-                _go("my_properties")
+                    type=("primary" if is_active else "secondary")):
+            _go("my_properties")
 
     with nav3:
         is_active = current_page == "find_tenants"
         if st.button(tr("Find Tenants"), key="lnd_find_tenants",
                     use_container_width=True,
-                    type="primary" if is_active else "secondary"):
-            if not is_active:
-                _go("find_tenants")
+                    type=("primary" if is_active else "secondary")):
+            _go("find_tenants")
 
     with nav4:
         is_active = current_page == "my_refs"
         if st.button(tr("My References"), key="lnd_my_refs",
                     use_container_width=True,
-                    type="primary" if is_active else "secondary"):
-            if not is_active:
-                _go("my_refs")
+                    type=("primary" if is_active else "secondary")):
+            _go("my_refs")
+
 
 
 
     # st.divider()
 
     # ---------- FULL-WIDTH PAGE RENDER ----------
-    page = st.session_state.landlord_page
+    page = st.session_state["landlord_page"]
     if page == "my_contacts":
-        my_tenants()
+        my_tenants()        
     elif page == "my_properties":
         my_properties()
     elif page == "find_tenants":
         find_tenants()
     elif page == "my_refs":
         my_references()
-    else:
-        my_tenants()
-        
+    
     chat_panel()
         
 def reference_submitted_page():
