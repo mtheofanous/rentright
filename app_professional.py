@@ -204,7 +204,7 @@ TRANSLATIONS_EL = {
     "Paid on time": "Πλήρωνε στην ώρα του",
     "Paid on time?": "Πλήρωνε στην ώρα του;",
     "Password": "Κωδικός",
-    "Pending": "Εκκρεμή",
+    "Pending": "Εκκρεμεί",
     "Pending References (All Tenants)": "Εκκρεμείς Συστάσεις (Όλοι οι Ενοικιαστές)",
     "Please check your ranges: maximums must be greater than or equal to minimums.": "Ελέγξτε τα εύρη: τα μέγιστα πρέπει να είναι μεγαλύτερα ή ίσα από τα ελάχιστα.",
     "Please enter a valid email address.": "Παρακαλώ εισαγάγετε έγκυρη διεύθυνση email.",
