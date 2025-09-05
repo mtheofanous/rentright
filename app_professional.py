@@ -3300,8 +3300,7 @@ def tenant_dashboard():
                 
         with st.container(border=True):
             st.markdown(
-                f"**{tr('Search landlords by property')}** "
-                f"{help_icon('Filter landlords by visible property listings.', key='help_search_property')}",
+                f"**{tr('Search landlords by property')}** " f"{help_icon('Filter landlords by visible property listings.', key='help_search_property')}",
                 unsafe_allow_html=True
             )
 
