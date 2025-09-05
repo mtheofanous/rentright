@@ -360,8 +360,8 @@ st.markdown("""
 
 st.markdown("""
 <style>
-/* Thread rows (toggle) — default look */
-div[data-testid="stSwitch"].thread-row{
+/* Style EVERY Streamlit toggle container so it looks like a row */
+div[data-testid="stSwitch"]{
   border:1px solid rgba(37,99,235,.25);
   border-radius:10px;
   padding:10px 12px;
@@ -369,24 +369,18 @@ div[data-testid="stSwitch"].thread-row{
   display:flex; align-items:center; gap:.6rem;
 }
 
-/* Avatar circle next to the label */
-.thread-avatar{
-  width:28px; height:28px; border-radius:999px;
-  background:#EEF2FF; color:#1F2937; font-weight:700; font-size:12px;
-  display:inline-flex; align-items:center; justify-content:center;
-}
-
-/* Blue highlight when the row is ON (clicked/open) */
-div[data-testid="stSwitch"].thread-row:has(input:checked){
+/* Blue highlight when the toggle is ON */
+div[data-testid="stSwitch"]:has(input:checked){
   background:#2563eb; color:white; border-color:#2563eb;
 }
 
 /* Make the label stretch so the whole row is clickable */
-div[data-testid="stSwitch"].thread-row label{
+div[data-testid="stSwitch"] label{
   flex:1; cursor:pointer;
 }
 </style>
 """, unsafe_allow_html=True)
+
 
 
 
@@ -1606,13 +1600,10 @@ def render_message_threads_for_me():
             # Little avatar + name in one label
             label_html = f"<span class='thread-avatar'>{initials}</span> {partner}"
             # Render as toggle; we wrap it in a styled div via markdown so it picks up our CSS
-            st.markdown("<div class='thread-row'>", unsafe_allow_html=True)
             toggled = st.toggle(label=partner, key=f"thread_on_{tid}", value=is_on, help="open/close")
-            st.markdown("</div>", unsafe_allow_html=True)
-
-            # Click handling (toggle state just changed)
             if toggled != is_on:
                 _open_thread(tid, t["landlord_id"], t["tenant_id"])
+
 
         # If this row is ON, show the chat right under it
         if st.session_state.selected_thread == tid and st.session_state.chat_open:
