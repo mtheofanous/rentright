@@ -5819,9 +5819,6 @@ def tenant_dashboard():
                     type=("primary" if is_active else "secondary")):
             _go("prev_refs")
 
-
-    # st.divider()
-
     page = st.session_state.tenant_page
     if page == "my_contacts":
         tenant_contacts()
@@ -5831,10 +5828,7 @@ def tenant_dashboard():
         tenant_open_to_rent_section()
     elif page == "prev_refs":
         previous_landlords_references()
-
-    # chat_panel()
         
-
 
 # -----------------------------------------------------------------------------------------------------------------------
 # ---------- Landlord Dashboard -------------------------------------------------------------------------------
@@ -5958,6 +5952,7 @@ def landlord_dashboard():
         for (tid, invited, invited_at, inbound_request, inbound_requested_at) in rows:
             with st.container(border=True):
                 tenant_profile(tid, landlord_id, inbound_request)
+        chat_panel()
    
     # =============================================================================
     # My Properties
@@ -6444,7 +6439,7 @@ def landlord_dashboard():
     elif page == "my_refs":
         my_references()
     
-    chat_panel()
+    
         
 def reference_submitted_page():
     # Show ONLY the success text and stop
