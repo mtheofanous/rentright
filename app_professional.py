@@ -2127,57 +2127,53 @@ def load_open_to_rent_prefs(tenant_id: int) -> dict:
     ]
     return dict(zip(keys, row)) if row else {}
 
-def save_open_to_rent_prefs(conn, tenant_id, **prefs):
-    """
-    Saves 'open to rent' preferences for a tenant.
-    Only updates columns that actually exist in tenant_profiles.
-    """
-
+def save_open_to_rent_prefs(
+    tenant_id: int,
+    open_to_rent: bool,
+    city: str | None,
+    district: str | None,
+    size_min: int | None, size_max: int | None,
+    rooms_min: int | None, rooms_max: int | None,
+    floor_min: int | None, floor_max: int | None,
+    price_min: int | None, price_max: int | None,
+    # OSM metadata
+    city_osm_id: int | None = None,
+    city_osm_type: str | None = None,
+    district_osm_id: int | None = None,
+    district_osm_type: str | None = None,
+    # NEW:
+    region: str | None = None,
+):
+    ensure_tenant_profile_row(tenant_id)
+    now = datetime.utcnow().isoformat()
     cur = conn.cursor()
-    cur.execute("PRAGMA table_info(tenant_profiles)")
-    existing_cols = {row[1] for row in cur.fetchall()}
-
-    # Mapping of pref keys to DB columns
-    column_map = {
-        "open_to_rent": "open_to_rent",
-        "search_region": "search_region",
-        "search_city": "search_city",
-        "search_city_osm_id": "search_city_osm_id",
-        "search_city_osm_type": "search_city_osm_type",
-        "search_district": "search_district",
-        "search_district_osm_id": "search_district_osm_id",
-        "search_district_osm_type": "search_district_osm_type",
-        "size_min": "size_min",
-        "size_max": "size_max",
-        "rooms_min": "rooms_min",
-        "rooms_max": "rooms_max",
-        "floor_min": "floor_min",
-        "floor_max": "floor_max",
-        "price_min": "price_min",
-        "price_max": "price_max",
-    }
-
-    # Keep only prefs that map to existing columns
-    valid_items = {
-        db_col: prefs[key]
-        for key, db_col in column_map.items()
-        if key in prefs and db_col in existing_cols
-    }
-
-    if not valid_items:
-        return  # nothing to update
-
-    # Add updated_at timestamp
-    valid_items["updated_at"] = datetime.utcnow().isoformat()
-
-    # Build dynamic SQL
-    set_clause = ", ".join(f"{col}=?" for col in valid_items.keys())
-    values = list(valid_items.values()) + [tenant_id]
-
-    sql = f"UPDATE tenant_profiles SET {set_clause} WHERE tenant_id=?"
-    cur.execute(sql, values)
+    cur.execute(
+        """
+        UPDATE tenant_profiles
+           SET open_to_rent=?,
+               search_region=?,
+               search_city=?, search_city_osm_id=?, search_city_osm_type=?,
+               search_district=?, search_district_osm_id=?, search_district_osm_type=?,
+               size_min=?, size_max=?,
+               rooms_min=?, rooms_max=?,
+               floor_min=?, floor_max=?,
+               price_min=?, price_max=?,
+               updated_at=?
+         WHERE tenant_id=?
+        """,
+        (
+            1 if open_to_rent else 0,
+            (region or "").strip() or None,
+            (city or "").strip() or None, city_osm_id, (city_osm_type or None),
+            (district or "").strip() or None, district_osm_id, (district_osm_type or None),
+            size_min, size_max,
+            rooms_min, rooms_max,
+            floor_min, floor_max,
+            price_min, price_max,
+            now, tenant_id
+        ),
+    )
     conn.commit()
-
 
     
 def load_profile_details(tenant_id: int) -> dict:
