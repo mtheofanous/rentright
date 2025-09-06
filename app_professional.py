@@ -235,6 +235,7 @@ TRANSLATIONS_EL = {
     "Reference submitted successfully.": "Η σύσταση υποβλήθηκε με επιτυχία.",
     "Refresh": "Ανανέωση",
     "Region": "Περιφέρεια",
+    "Regional unit":"Περιφερειακές Ενότητες",
     "Registered:": "Εγγράφηκε:",
     "Profile":"Προφίλ",
     "Reject": "Απόρριψη",
