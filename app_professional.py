@@ -795,6 +795,33 @@ def td_list_pending():
     """)
     return [dict(zip([c[0] for c in cur.description], r)) for r in cur.fetchall()]
 
+def td_list_by_status(status: str | None):
+    """
+    Admin view: return docs filtered by status.
+    status in {'pending','verified','rejected'} or None for all.
+    """
+    c = get_conn()
+    if status in ("pending", "verified", "rejected"):
+        sql = """
+        SELECT td.id, td.tenant_id, u.name, u.email, td.doc_type, td.filename,
+               td.status, td.uploaded_at, td.status_updated_at
+        FROM tenant_documents td
+        JOIN users u ON u.id=td.tenant_id
+        WHERE td.status = ?
+        ORDER BY td.uploaded_at DESC
+        """
+        return c.execute(sql, (status,)).fetchall()
+    else:
+        sql = """
+        SELECT td.id, td.tenant_id, u.name, u.email, td.doc_type, td.filename,
+               td.status, td.uploaded_at, td.status_updated_at
+        FROM tenant_documents td
+        JOIN users u ON u.id=td.tenant_id
+        ORDER BY td.uploaded_at DESC
+        """
+        return c.execute(sql).fetchall()
+
+
 def td_set_status(doc_id: int, status: str, admin_id: int):
     assert status in ("pending","verified","rejected")
     now = datetime.utcnow().isoformat(timespec="seconds")
@@ -3653,6 +3680,105 @@ def render_admin_verifications_ui(current_user):
                     st.info("Απορρίφθηκε.")
                     st.rerun()
 
+def render_admin_documents_tabs(current_user):
+    st.subheader(tr("Tenant Documents Review"))
+
+    # Map “Completed/Cancelled” wording to our doc statuses
+    tabs = st.tabs([tr("Pending"), tr("Completed"), tr("Cancelled")])
+
+    # Pending = pending
+    with tabs[0]:
+        rows = td_list_by_status("pending")
+        if not rows:
+            st.info(tr("No actions"))
+        for r in rows:
+            title = f"{DOC_TYPES.get(r['doc_type'], r['doc_type'])} • {r['filename']} — {r['name']} <{r['email']}> • {format_dt(r['uploaded_at'])}"
+            with st.expander(title, expanded=False):
+                # Preview/Download
+                if st.button(tr("Preview"), key=f"prev_p_{r['id']}"):
+                    data = td_read_bytes(r["id"])
+                    if data:
+                        if str(r["filename"]).lower().endswith((".png",".jpg",".jpeg",".webp")):
+                            st.image(data)
+                        else:
+                            st.download_button(tr("Download"), data=data, file_name=r["filename"])
+                    else:
+                        st.warning(tr("Can’t read the saved file"))
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("✅ " + tr("Verify"), key=f"ok_p_{r['id']}"):
+                        td_set_status(r["id"], "verified", current_user["id"])
+                        st.success(tr("Verified"))
+                        st.rerun()
+                with c2:
+                    if st.button("❌ " + tr("Reject"), key=f"rej_p_{r['id']}"):
+                        td_set_status(r["id"], "rejected", current_user["id"])
+                        st.info(tr("Rejected."))
+                        st.rerun()
+
+    # Completed = verified
+    with tabs[1]:
+        rows = td_list_by_status("verified")
+        if not rows:
+            st.info(tr("No actions"))
+        for r in rows:
+            subtitle = f"{DOC_TYPES.get(r['doc_type'], r['doc_type'])} • {r['filename']} — {r['name']} <{r['email']}>"
+            meta = f"{tr('Created')}: {format_dt(r['uploaded_at'])} · {tr('Updated')}: {format_dt(r['status_updated_at'])}"
+            with st.expander(subtitle + " • " + meta, expanded=False):
+                # Always allow seeing the file again
+                if st.button(tr("Preview"), key=f"prev_v_{r['id']}"):
+                    data = td_read_bytes(r["id"])
+                    if data:
+                        if str(r["filename"]).lower().endswith((".png",".jpg",".jpeg",".webp")):
+                            st.image(data)
+                        else:
+                            st.download_button(tr("Download"), data=data, file_name=r["filename"])
+                    else:
+                        st.warning(tr("Can’t read the saved file"))
+                # Optional: manage status
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("⏳ " + tr("Pending"), key=f"pend_v_{r['id']}"):
+                        td_set_status(r["id"], "pending", current_user["id"])
+                        st.info(tr("Pending"))
+                        st.rerun()
+                with c2:
+                    if st.button("❌ " + tr("Reject"), key=f"rej_v_{r['id']}"):
+                        td_set_status(r["id"], "rejected", current_user["id"])
+                        st.info(tr("Rejected."))
+                        st.rerun()
+
+    # Cancelled = rejected
+    with tabs[2]:
+        rows = td_list_by_status("rejected")
+        if not rows:
+            st.info(tr("No actions"))
+        for r in rows:
+            subtitle = f"{DOC_TYPES.get(r['doc_type'], r['doc_type'])} • {r['filename']} — {r['name']} <{r['email']}>"
+            meta = f"{tr('Created')}: {format_dt(r['uploaded_at'])} · {tr('Updated')}: {format_dt(r['status_updated_at'])}"
+            with st.expander(subtitle + " • " + meta, expanded=False):
+                # Always allow seeing the file again
+                if st.button(tr("Preview"), key=f"prev_r_{r['id']}"):
+                    data = td_read_bytes(r["id"])
+                    if data:
+                        if str(r["filename"]).lower().endswith((".png",".jpg",".jpeg",".webp")):
+                            st.image(data)
+                        else:
+                            st.download_button(tr("Download"), data=data, file_name=r["filename"])
+                    else:
+                        st.warning(tr("Can’t read the saved file"))
+                # Optional: manage status
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("⏳ " + tr("Pending"), key=f"pend_r_{r['id']}"):
+                        td_set_status(r["id"], "pending", current_user["id"])
+                        st.info(tr("Pending"))
+                        st.rerun()
+                with c2:
+                    if st.button("✅ " + tr("Verify"), key=f"ok_r_{r['id']}"):
+                        td_set_status(r["id"], "verified", current_user["id"])
+                        st.success(tr("Verified"))
+                        st.rerun()
 
 def admin_dashboard():
     # periodic cleanup on admin view
@@ -3671,7 +3797,7 @@ def admin_dashboard():
     st.caption(f"{tr('Logged in as')} {st.session_state.user['email']}")
 
     st.divider()
-    render_admin_verifications_ui(st.session_state.user)
+    render_admin_documents_tabs(st.session_state.user)
     st.divider()
 
     # ---------------- Settings moved from sidebar ----------------
