@@ -60,6 +60,7 @@ TRANSLATIONS_EL = {
     "Address is required.": "Απαιτείται διεύθυνση.",
     "Add": "Προσθήκη",
     "Add Contact": "Προσθήκη Επαφής",
+    "Add contact": "Προσθήκη Επαφής",
     "Add Previous Landlord": "Προσθήκη Προηγούμενου Ιδιοκτήτη",
     "Add previous landlord": "Προσθήκη προηγούμενου ιδιοκτήτη",
     "Add property": "Προσθήκη ακινήτου",
