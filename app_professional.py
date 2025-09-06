@@ -5854,7 +5854,7 @@ def landlord_dashboard():
 
         for (tid, invited, invited_at, inbound_request, inbound_requested_at) in rows:
             with st.container(border=True):
-                tenant_profile(tid, inbound_request)
+                tenant_profile(tid, landlord_id, inbound_request)
    
     # =============================================================================
     # My Properties
