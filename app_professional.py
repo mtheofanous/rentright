@@ -5121,6 +5121,7 @@ def tenant_dashboard():
                                     """,
                                     unsafe_allow_html=True
                                 )
+        chat_panel()
 
 
     def tenant_open_to_rent_section():
@@ -5831,7 +5832,7 @@ def tenant_dashboard():
     elif page == "prev_refs":
         previous_landlords_references()
 
-    chat_panel()
+    # chat_panel()
         
 
 
