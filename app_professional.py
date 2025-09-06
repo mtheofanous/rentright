@@ -3205,8 +3205,6 @@ def cleanup_old_contracts(days_locked: int = 30, days_rejected: int = 30):
     
 # FINISH HERE------------------------------------------------------------------------------------------------------------------------------------     
     
-    
-    
 
 def render_tenant_documents_ui(current_user):
     st.subheader("Έγγραφα Επαλήθευσης")
@@ -5160,6 +5158,11 @@ def tenant_dashboard():
         else:
             st.info(tr("No previous landlords yet."))
         st.divider()
+        
+        with st.container(border=True):
+            render_tenant_documents_ui(st.session_state.user)
+        st.divider()
+            
 
 
     current_page = st.session_state.get("tenant_page", "my_contacts")
