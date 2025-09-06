@@ -2640,6 +2640,13 @@ def logout_button():
 
 def tenant_profile(tid, landlord_id, inbound_request):
     
+    _ensure_pt_css()
+
+    # ── Widget key namespace ───────────────────────────────────────────────────────
+    NSP = "prospects"
+    def pk(tid: int, name: str) -> str:
+        return f"{NSP}:{name}:{tid}"
+    
     def _pt_initials(name, email):
         base = (name or "").strip() or (email or "").split("@")[0]
         parts = [p for p in base.replace(".", " ").split() if p]
@@ -2684,6 +2691,76 @@ def tenant_profile(tid, landlord_id, inbound_request):
         """,
         unsafe_allow_html=True
     )
+    
+    
+    def open_to_rent_tokens(tenant_id: int):
+        """
+        Returns None if not Active.
+        Else returns dict with pretty strings for chips:
+        {"where", "size", "rooms", "floor", "price"}
+        """
+        c = get_conn()
+        try:
+            cols = {r[1] for r in c.execute("PRAGMA table_info(tenant_profiles)").fetchall()}
+        except Exception:
+            return None
+        if "open_to_rent" not in cols:
+            return None
+
+        id_col = "tenant_id" if "tenant_id" in cols else ("user_id" if "user_id" in cols else None)
+        if not id_col:
+            return None
+
+        wanted = [
+            "open_to_rent","search_region","search_district","search_city",
+            "size_min","size_max","rooms_min","rooms_max",
+            "floor_min","floor_max","price_min","price_max",
+        ]
+        select_cols = [cname for cname in wanted if cname in cols]
+        sql_cols = ", ".join([f'"{cname}"' for cname in select_cols])
+
+        row = c.execute(f'SELECT {sql_cols} FROM tenant_profiles WHERE "{id_col}"=?', (tenant_id,)).fetchone()
+        if not row:
+            return None
+        data = dict(zip(select_cols, row))
+
+        # Active?
+        o2r = data.get("open_to_rent")
+        try:
+            active = int(o2r) == 1
+        except Exception:
+            active = str(o2r).strip() == "1"
+        if not active:
+            return None
+
+        # Build pretty parts
+        def fmt_num(v):
+            if v is None or v == "" or (isinstance(v, (int, float)) and v == 0):
+                return None
+            try:
+                return f"{int(v):,}"
+            except Exception:
+                return str(v)
+
+        def rng(lo, hi):
+            lo_f, hi_f = fmt_num(lo), fmt_num(hi)
+            if not lo_f and not hi_f:
+                return None
+            return f"{lo_f or '—'}–{hi_f or '—'}"
+
+        where = " — ".join([x for x in [data.get("search_region"), data.get("search_district"), data.get("search_city")] if x]) or None
+        size  = rng(data.get("size_min"),  data.get("size_max"))
+        rooms = rng(data.get("rooms_min"), data.get("rooms_max"))
+        floor = rng(data.get("floor_min"), data.get("floor_max"))
+        price = rng(data.get("price_min"), data.get("price_max"))
+
+        return {
+            "where": where,
+            "size":  f"{size} m²" if size else None,
+            "rooms": f"{rooms} {tr('rooms')}" if rooms else None,
+            "floor": f"{tr('Floor')} {floor}" if floor else None,
+            "price": f"€{price}" if price else None,
+        }
 
     # Middle: status badge
     if status == "connected":
@@ -5775,74 +5852,7 @@ def landlord_dashboard():
 
 
 
-        def open_to_rent_tokens(tenant_id: int):
-            """
-            Returns None if not Active.
-            Else returns dict with pretty strings for chips:
-            {"where", "size", "rooms", "floor", "price"}
-            """
-            c = get_conn()
-            try:
-                cols = {r[1] for r in c.execute("PRAGMA table_info(tenant_profiles)").fetchall()}
-            except Exception:
-                return None
-            if "open_to_rent" not in cols:
-                return None
-
-            id_col = "tenant_id" if "tenant_id" in cols else ("user_id" if "user_id" in cols else None)
-            if not id_col:
-                return None
-
-            wanted = [
-                "open_to_rent","search_region","search_district","search_city",
-                "size_min","size_max","rooms_min","rooms_max",
-                "floor_min","floor_max","price_min","price_max",
-            ]
-            select_cols = [cname for cname in wanted if cname in cols]
-            sql_cols = ", ".join([f'"{cname}"' for cname in select_cols])
-
-            row = c.execute(f'SELECT {sql_cols} FROM tenant_profiles WHERE "{id_col}"=?', (tenant_id,)).fetchone()
-            if not row:
-                return None
-            data = dict(zip(select_cols, row))
-
-            # Active?
-            o2r = data.get("open_to_rent")
-            try:
-                active = int(o2r) == 1
-            except Exception:
-                active = str(o2r).strip() == "1"
-            if not active:
-                return None
-
-            # Build pretty parts
-            def fmt_num(v):
-                if v is None or v == "" or (isinstance(v, (int, float)) and v == 0):
-                    return None
-                try:
-                    return f"{int(v):,}"
-                except Exception:
-                    return str(v)
-
-            def rng(lo, hi):
-                lo_f, hi_f = fmt_num(lo), fmt_num(hi)
-                if not lo_f and not hi_f:
-                    return None
-                return f"{lo_f or '—'}–{hi_f or '—'}"
-
-            where = " — ".join([x for x in [data.get("search_region"), data.get("search_district"), data.get("search_city")] if x]) or None
-            size  = rng(data.get("size_min"),  data.get("size_max"))
-            rooms = rng(data.get("rooms_min"), data.get("rooms_max"))
-            floor = rng(data.get("floor_min"), data.get("floor_max"))
-            price = rng(data.get("price_min"), data.get("price_max"))
-
-            return {
-                "where": where,
-                "size":  f"{size} m²" if size else None,
-                "rooms": f"{rooms} {tr('rooms')}" if rooms else None,
-                "floor": f"{tr('Floor')} {floor}" if floor else None,
-                "price": f"€{price}" if price else None,
-            }
+        
 
         # ── Data ───────────────────────────────────────────────────────────────────────-
         rows = flc_list_prospective_for_landlord(landlord_id)  # invited=1 OR inbound_request=1 OR connected
