@@ -3335,8 +3335,75 @@ def remove_future_landlord_contact(contact_id: int, tenant_id: int):
     
 
 # ===============================================================================================================================    
-# ========== LANDLOARD DASHBOARD HELPERS =======================================================================================
+# ========== LANDLORD DASHBOARD HELPERS =======================================================================================
 # STARTS HERE ==================================================================================================================
+# ------------ Tenant Document Badges (Landlord view) ------------------------------
+def _has_tenant_docs_table() -> bool:
+    try:
+        c = get_conn()
+        cols = {r[1] for r in c.execute("PRAGMA table_info(tenant_documents)").fetchall()}
+        return bool(cols)
+    except Exception:
+        return False
+
+def _td_doc_statuses_for_tenant(tenant_id: int):
+    """
+    Returns a dict {doc_type: 'verified'|'pending'|'rejected'} consolidated per type.
+    Priority: verified > pending > rejected.
+    Returns {} if no rows. Returns None if table doesn't exist.
+    """
+    if not _has_tenant_docs_table():
+        return None
+    c = get_conn()
+    rows = c.execute("SELECT doc_type, status FROM tenant_documents WHERE tenant_id=?", (tenant_id,)).fetchall()
+    if not rows:
+        return {}
+    prio = {"verified": 3, "pending": 2, "rejected": 1}
+    agg = {}
+    for doc_type, status in rows:
+        s = (status or "").lower()
+        if s not in prio:
+            continue
+        if doc_type not in agg or prio[s] > prio.get(agg[doc_type], 0):
+            agg[doc_type] = s
+    return agg
+
+_DOC_LABELS_EL = {
+    "payslip": "Μισθοδοσίες",
+    "tax_return": "Εκκαθαριστικό",
+    "employment_contract": "Σύμβαση Εργασίας",
+}
+
+def render_tenant_doc_badges_inline(tenant_id: int):
+    """
+    Inline pills with verification status for landlord's contacts card.
+    """
+    statuses = _td_doc_statuses_for_tenant(tenant_id)
+    if statuses is None:
+        # table missing → do nothing
+        return
+    order = ["payslip", "tax_return", "employment_contract"]
+    chips = []
+    for dt in order:
+        s = statuses.get(dt, None)
+        label = _DOC_LABELS_EL.get(dt, dt)
+        if s == "verified":
+            chips.append(f'<span class="pill pill-ok">✅ {label}</span>')
+        elif s == "pending":
+            chips.append(f'<span class="pill">⏳ {label}</span>')
+        elif s == "rejected":
+            chips.append(f'<span class="pill pill-no">❌ {label}</span>')
+        else:
+            # not provided → neutral/NA
+            chips.append(f'<span class="pill pill-na">— {label}</span>')
+    if not chips:
+        return
+    html = (
+        '<div style="display:flex;align-items:center;gap:10px;margin:4px 0 0 0">'
+        f'  <div>{" ".join(chips)}</div>'
+        '</div>'
+    )
+    st.markdown(html, unsafe_allow_html=True)
 
 def list_latest_references_for_tenant(tenant_id: int):
     """Return each previous landlord with the latest (most recent) reference request, if any, and its answers."""
@@ -5330,6 +5397,18 @@ def tenant_dashboard():
 # -----------------------------------------------------------------------------------------------------------------------
 
 def landlord_dashboard():
+    
+    if "doc_pill_css" not in st.session_state:
+        st.session_state["doc_pill_css"] = True
+        st.markdown("""
+        <style>
+        .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #ddd;font-size:12px}
+        .pill-ok{border-color:#2e7d32}
+        .pill-no{border-color:#c62828}
+        .pill-na{opacity:0.6}
+        </style>
+        """, unsafe_allow_html=True)
+
     # --- Header ---
     col_h1, col_h2, col_h3 = st.columns([4, 1, 2])
     with col_h1:
@@ -5643,6 +5722,9 @@ def landlord_dashboard():
                         f'</div>',
                         unsafe_allow_html=True
                     )
+                    
+                if status == "connected":
+                    render_tenant_doc_badges_inline(tid)
 
                 # # ---- References summary ----
                 # ---- References summary ----
