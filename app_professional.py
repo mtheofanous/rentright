@@ -3737,11 +3737,11 @@ def render_admin_documents_tabs(current_user):
                         st.warning(tr("Can’t read the saved file"))
                 # Optional: manage status
                 c1, c2 = st.columns(2)
-                with c1:
-                    if st.button("⏳ " + tr("Pending"), key=f"pend_v_{r['id']}"):
-                        td_set_status(r["id"], "pending", current_user["id"])
-                        st.info(tr("Pending"))
-                        st.rerun()
+                # with c1:
+                #     if st.button("⏳ " + tr("Pending"), key=f"pend_v_{r['id']}"):
+                #         td_set_status(r["id"], "pending", current_user["id"])
+                #         st.info(tr("Pending"))
+                #         st.rerun()
                 with c2:
                     if st.button("❌ " + tr("Reject"), key=f"rej_v_{r['id']}"):
                         td_set_status(r["id"], "rejected", current_user["id"])
@@ -3769,11 +3769,11 @@ def render_admin_documents_tabs(current_user):
                         st.warning(tr("Can’t read the saved file"))
                 # Optional: manage status
                 c1, c2 = st.columns(2)
-                with c1:
-                    if st.button("⏳ " + tr("Pending"), key=f"pend_r_{r['id']}"):
-                        td_set_status(r["id"], "pending", current_user["id"])
-                        st.info(tr("Pending"))
-                        st.rerun()
+                # with c1:
+                #     if st.button("⏳ " + tr("Pending"), key=f"pend_r_{r['id']}"):
+                #         td_set_status(r["id"], "pending", current_user["id"])
+                #         st.info(tr("Pending"))
+                #         st.rerun()
                 with c2:
                     if st.button("✅ " + tr("Verify"), key=f"ok_r_{r['id']}"):
                         td_set_status(r["id"], "verified", current_user["id"])
