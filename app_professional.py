@@ -84,6 +84,7 @@ TRANSLATIONS_EL = {
     "Single": "Ελεύθερος/η",
     "Married": "Παντρεμένος/η",
     "Divorced": "Διαζευγμένος/η",
+    "A few words about yourself": "Πες μας λίγα λόγια για εσένα",
     "Widowed": "Χήρος/α",
     "Permanent": "Μόνιμη",
     "Temporary": "Προσωρινή",
@@ -2954,7 +2955,7 @@ def tenant_profile(tid, landlord_id, inbound_request):
                 st.caption(f"**{tr('Job position')}**: {details.get('job_position') or '—'}")
                 st.caption(f"**{tr('Contract type')}**: {details.get('contract_type') or '—'}")
             if details.get("about"):
-                st.markdown(f"**{tr('A few words about yourself')}**")
+                st.caption(f"**{tr('A few words about yourself')}**")
                 st.write(details.get("about"))
 
     else:
