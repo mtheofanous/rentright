@@ -3921,9 +3921,6 @@ def tenant_dashboard():
         st.subheader(tr("Welcome"))
 
     st.caption(f"{tr('Logged in with email')}: {tenant_email}")
-    with st.container(border=True):
-        render_tenant_documents_ui(st.session_state.user)
-
     
    #
     # ---------- NAV BUTTONS (set active page only) ----------
