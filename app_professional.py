@@ -1356,6 +1356,7 @@ def run_migrations(conn):
         
         # --- Open-to-rent columns on tenant_profiles ---
         add_column_if_missing(conn, "tenant_profiles", "open_to_rent INTEGER NOT NULL DEFAULT 0")
+        add_column_if_missing(conn, "tenant_profiles", "search_region TEXT")
         add_column_if_missing(conn, "tenant_profiles", "search_city TEXT")
         add_column_if_missing(conn, "tenant_profiles", "search_district TEXT")
         add_column_if_missing(conn, "tenant_profiles", "size_min INTEGER")
@@ -1367,7 +1368,6 @@ def run_migrations(conn):
         add_column_if_missing(conn, "tenant_profiles", "price_min INTEGER")
         add_column_if_missing(conn, "tenant_profiles", "price_max INTEGER")
         # NEW: OSM reference columns
-        add_column_if_missing(conn, "tenant_profiles", "search_region TEXT") 
         add_column_if_missing(conn, "tenant_profiles", "search_city_osm_id INTEGER")
         add_column_if_missing(conn, "tenant_profiles", "search_district_osm_id INTEGER")
         add_column_if_missing(conn, "tenant_profiles", "search_city_osm_type TEXT")
