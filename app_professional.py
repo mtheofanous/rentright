@@ -3234,33 +3234,33 @@ def cleanup_old_contracts(days_locked: int = 30, days_rejected: int = 30):
     
 
 def render_tenant_documents_ui(current_user):
-    st.subheader("Έγγραφα Επαλήθευσης")
-    st.caption("Ανεβάστε έγγραφα για έλεγχο από διαχειριστή. Τα έγγραφα είναι ορατά μόνο σε admin.")
+    with st.expander("Έγγραφα", expander= True):
+        st.caption("Ανεβάστε έγγραφα για έλεγχο από διαχειριστή. Τα έγγραφα είναι ορατά μόνο σε admin.")
 
-    cols = st.columns(3)
-    upload_map = [("payslip","Τελευταίες Μισθοδοσίες"),
-                  ("tax_return","Εκκαθαριστικό Εφορίας"),
-                  ("employment_contract","Σύμβαση Εργασίας")]
-    for i, (dtype, label) in enumerate(upload_map):
-        with cols[i]:
-            st.write(f"**{label}**")
-            uf = st.file_uploader(f"Μεταφόρτωση {label}", type=["pdf","png","jpg","jpeg","webp"], key=f"up_{dtype}")
-            if uf is not None and st.button(f"Αποθήκευση {label}", key=f"btn_save_{dtype}"):
-                try:
-                    td_save_upload(current_user["id"], dtype, uf)
-                    st.success("Το αρχείο ανέβηκε. Κατάσταση: Pending.")
-                except Exception as e:
-                    st.error(f"Αποτυχία ανεβάσματος: {e}")
+        cols = st.columns(3)
+        upload_map = [("payslip","Τελευταίες Μισθοδοσίες"),
+                    ("tax_return","Εκκαθαριστικό Εφορίας"),
+                    ("employment_contract","Σύμβαση Εργασίας")]
+        for i, (dtype, label) in enumerate(upload_map):
+            with cols[i]:
+                st.write(f"**{label}**")
+                uf = st.file_uploader(f"Μεταφόρτωση {label}", type=["pdf","png","jpg","jpeg","webp"], key=f"up_{dtype}")
+                if uf is not None and st.button(f"Αποθήκευση {label}", key=f"btn_save_{dtype}"):
+                    try:
+                        td_save_upload(current_user["id"], dtype, uf)
+                        st.success("Το αρχείο ανέβηκε. Κατάσταση: Pending.")
+                    except Exception as e:
+                        st.error(f"Αποτυχία ανεβάσματος: {e}")
 
-    rows = td_list_for_tenant(current_user["id"])
-    if rows:
-        st.write("### Κατάσταση Εγγράφων")
-        for r in rows:
-            status = r["status"]
-            badge = "⏳ Pending" if status=="pending" else ("✅ Verified" if status=="verified" else "❌ Rejected")
-            st.write(f"- **{DOC_TYPES.get(r['doc_type'], r['doc_type'])}** — *{r['filename']}* → {badge} • {format_dt(r['uploaded_at'])}")
-    else:
-        st.info("Δεν έχετε ανεβάσει ακόμη έγγραφα.")
+        rows = td_list_for_tenant(current_user["id"])
+        if rows:
+            st.write("### Κατάσταση Εγγράφων")
+            for r in rows:
+                status = r["status"]
+                badge = "⏳ Pending" if status=="pending" else ("✅ Verified" if status=="verified" else "❌ Rejected")
+                st.write(f"- **{DOC_TYPES.get(r['doc_type'], r['doc_type'])}** — *{r['filename']}* → {badge} • {format_dt(r['uploaded_at'])}")
+        else:
+            st.info("Δεν έχετε ανεβάσει ακόμη έγγραφα.")
 
 
 #---------TENANT DASHBOARD HELPERS---------------------------------------------------
