@@ -3919,6 +3919,7 @@ def list_latest_references_for_tenant_dict(tenant_id: int) -> list[dict]:
 
 def search_open_to_rent_tenants(
     q: str | None = None,
+    region: str | None = None,
     city: str | None = None,
     district: str | None = None,
     size_min: int | None = None, size_max: int | None = None,
@@ -3942,6 +3943,10 @@ def search_open_to_rent_tenants(
         params["q"] = f"%{q.strip()}%"
 
     # Exact matches on location preferences (stored strings)
+    if region:
+        clauses.append("LOWER(tp.search_region) = LOWER(:region)")
+        params["region"] = region.strip()
+
     if city:
         clauses.append("LOWER(tp.search_city) = LOWER(:city)")
         params["city"] = city.strip()
