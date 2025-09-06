@@ -2982,6 +2982,96 @@ def tenant_profile(tid, landlord_id, inbound_request):
             pass
 
 
+#======================================================================================================================================================
+# PROPERTIES FILTERS for properties characteristics and find tenant
+#========================================================================================================================================================
+
+def render_tenant_filters(prefix="otr"):
+    """
+    Renders location + range filters using your existing greece_location_pickers().
+    Returns a dict with normalized values ready for search_open_to_rent_tenants.
+    Call with different prefixes in different sections to avoid key collisions.
+    """
+    # --- LOCATION ---
+    region, regional_unit, municipality = greece_location_pickers(prefix=prefix)
+
+    def _norm_any(v):
+        if v is None:
+            return ""
+        s = str(v).strip().lower()
+        # Treat common "Any" tokens as empty
+        if s in {"", "any", "—", "-", "— any —"}:
+            return ""
+        return str(v)
+
+    region_norm   = _norm_any(region)
+    district_norm = _norm_any(regional_unit)
+    city_norm     = _norm_any(municipality)
+
+    # --- RANGES ---
+    c1, c2 = st.columns(2)
+    size_min_val = c1.number_input(
+        tr("Min size (m²)"), min_value=0, max_value=10000, value=0, step=1,
+        key=f"{prefix}_size_min"
+    )
+    size_max_val = c2.number_input(
+        tr("Max size (m²)"), min_value=0, max_value=10000, value=0, step=1,
+        key=f"{prefix}_size_max"
+    )
+
+    r1, r2 = st.columns(2)
+    rooms_min_val = r1.number_input(
+        tr("Min rooms"), min_value=0, max_value=50, value=0, step=1,
+        key=f"{prefix}_rooms_min"
+    )
+    rooms_max_val = r2.number_input(
+        tr("Max rooms"), min_value=0, max_value=50, value=0, step=1,
+        key=f"{prefix}_rooms_max"
+    )
+
+    f1, f2 = st.columns(2)
+    floor_min_val = f1.number_input(
+        tr("Min floor"), min_value=-5, max_value=100, value=0, step=1,
+        key=f"{prefix}_floor_min"
+    )
+    floor_max_val = f2.number_input(
+        tr("Max floor"), min_value=-5, max_value=100, value=0, step=1,
+        key=f"{prefix}_floor_max"
+    )
+
+    p1, p2 = st.columns(2)
+    price_min_val = p1.number_input(
+        tr("Min price (€)"), min_value=0, max_value=1_000_000, value=0, step=50,
+        key=f"{prefix}_price_min"
+    )
+    price_max_val = p2.number_input(
+        tr("Max price (€)"), min_value=0, max_value=1_000_000, value=0, step=50,
+        key=f"{prefix}_price_max"
+    )
+
+    def _none_if_zero(v):
+        try:
+            return None if int(v) == 0 else int(v)
+        except Exception:
+            return None
+
+    return {
+        # location (region is optional; include if your search uses it)
+        "region":   region_norm,
+        "district": district_norm,
+        "city":     city_norm,
+        # ranges
+        "size_min":  _none_if_zero(size_min_val),
+        "size_max":  _none_if_zero(size_max_val),
+        "rooms_min": _none_if_zero(rooms_min_val),
+        "rooms_max": _none_if_zero(rooms_max_val),
+        "floor_min": (None if floor_min_val == 0 else floor_min_val),
+        "floor_max": (None if floor_max_val == 0 else floor_max_val),
+        "price_min": _none_if_zero(price_min_val),
+        "price_max": _none_if_zero(price_max_val),
+    }
+
+
 # ---------- Tenant data helpers ----------
 
 # UPLOAD_DIR = Path("uploads") / "contracts"
@@ -5090,52 +5180,22 @@ def tenant_dashboard():
                 help_icon(tr("Turn on to appear in landlord searches. You can hide this anytime."), key="help_otr_toggle")
 
             with st.expander(tr("Property characteristics"), expanded=False):
+                
+                prop = render_tenant_filters(prefix="prop")
+                
+                prefix = "otr"
+                filt = render_tenant_filters(prefix=prefix)
    
-                # REGION
-                region_options = [ANY] + (regions or [])
-                region_index = (region_options.index(pre_region) if (pre_region in region_options and not reset_preselect) else 0)
-                region_sel = st.selectbox(tr("Region"), options=region_options, index=region_index, key="loc_region")
-
-                # REGIONAL UNIT (depends on Region)
-                units = list_units(data, region_sel) if (region_sel and region_sel != ANY) else []
-                unit_options = [ANY] + (units or [])
-                unit_index = (unit_options.index(pre_unit) if (pre_unit in unit_options and not reset_preselect) else 0)
-                unit_sel = st.selectbox(tr("Regional unit"), options=unit_options, index=unit_index, key="loc_unit")
-
-                # MUNICIPALITY (depends on Unit)
-                municipalities = list_municipalities(data, region_sel, unit_sel) if (region_sel and region_sel != ANY and unit_sel and unit_sel != ANY) else []
-                city_options = [ANY] + (municipalities or [])
-                city_index = (city_options.index(saved_city) if (saved_city in city_options and not reset_preselect) else 0)
-                city_sel = st.selectbox(tr("Municipality (City)"), options=city_options, index=city_index, key="loc_city")
-
-
-                # Map to your schema (don’t save “Any” — treat as empty)
-                region   = "" if region_sel == ANY else region_sel
-                district = "" if unit_sel   == ANY else unit_sel
-                city     = "" if city_sel   == ANY else city_sel
-
-                c1, c2 = st.columns(2)
-                size_min = c1.number_input(tr("Min size (m²)"), 0, 10000, key="otr_size_min")
-                size_max = c2.number_input(tr("Max size (m²)"), 0, 10000, key="otr_size_max")
-
-                r1, r2 = st.columns(2)
-                rooms_min = r1.number_input(tr("Min rooms"), 0, 50, key="otr_rooms_min")
-                rooms_max = r2.number_input(tr("Max rooms"), 0, 50, key="otr_rooms_max")
-
-                f1, f2 = st.columns(2)
-                floor_min = f1.number_input(tr("Min floor"), -5, 100, key="otr_floor_min")
-                floor_max = f2.number_input(tr("Max floor"), -5, 100, key="otr_floor_max")
-
-                p1, p2 = st.columns(2)
-                price_min = p1.number_input(tr("Min price (€)"), 0, 1_000_000, key="otr_price_min")
-                price_max = p2.number_input(tr("Max price (€)"), 0, 1_000_000, key="otr_price_max")
-
                 # ---- Save / Reset -------------------------------------------------------
                 col_save, col_reset = st.columns([1, 1])
 
+                def _i(x):  # None -> 0, else int
+                    return 0 if x is None else int(x)
+
                 if col_save.button(tr("Save preferences")):
-                    city_clean = "" if (city == "—") else (city or "")
-                    district_clean = "" if (district == "—") else (district or "")
+                    city_clean     = filt["city"] or ""
+                    district_clean = filt["district"] or ""
+
                     if not city_clean and not district_clean:
                         st.warning(tr("Enter at least a city or a district."))
                     else:
@@ -5143,41 +5203,43 @@ def tenant_dashboard():
                             save_open_to_rent_prefs(
                                 tid, bool(st.session_state["otr_open_flag"]),
                                 city_clean, district_clean,
-                                int(st.session_state["otr_size_min"]), int(st.session_state["otr_size_max"]),
-                                int(st.session_state["otr_rooms_min"]), int(st.session_state["otr_rooms_max"]),
-                                int(st.session_state["otr_floor_min"]), int(st.session_state["otr_floor_max"]),
-                                int(st.session_state["otr_price_min"]), int(st.session_state["otr_price_max"]),
+                                _i(filt["size_min"]),  _i(filt["size_max"]),
+                                _i(filt["rooms_min"]), _i(filt["rooms_max"]),
+                                _i(filt["floor_min"]), _i(filt["floor_max"]),
+                                _i(filt["price_min"]), _i(filt["price_max"]),
                                 city_osm_id=None, city_osm_type=None,
                                 district_osm_id=None, district_osm_type=None,
                             )
                         except TypeError:
+                            # older signature fallback
                             save_open_to_rent_prefs(
                                 tid, bool(st.session_state["otr_open_flag"]),
                                 city_clean, district_clean,
-                                int(st.session_state["otr_size_min"]), int(st.session_state["otr_size_max"]),
-                                int(st.session_state["otr_rooms_min"]), int(st.session_state["otr_rooms_max"]),
-                                int(st.session_state["otr_floor_min"]), int(st.session_state["otr_floor_max"]),
-                                int(st.session_state["otr_price_min"]), int(st.session_state["otr_price_max"]),
+                                _i(filt["size_min"]),  _i(filt["size_max"]),
+                                _i(filt["rooms_min"]), _i(filt["rooms_max"]),
+                                _i(filt["floor_min"]), _i(filt["floor_max"]),
+                                _i(filt["price_min"]), _i(filt["price_max"]),
                             )
-                        try:
-                            st.cache_data.clear()
-                        except Exception:
-                            pass
+                        try: st.cache_data.clear()
+                        except Exception: pass
                         st.success(tr("Preferences saved."))
 
+                #-------------------------------------------------
                 if col_reset.button(tr("Reset")):
-                    for k in ("loc_region","loc_unit","loc_city",
-                            "otr_open_flag",
-                            "otr_size_min","otr_size_max",
-                            "otr_rooms_min","otr_rooms_max",
-                            "otr_floor_min","otr_floor_max",
-                            "otr_price_min","otr_price_max",
-                            "otr_keys_inited"):
+                    for k in (
+                        f"{prefix}_loc_region", f"{prefix}_loc_unit", f"{prefix}_loc_city",
+                        f"{prefix}_size_min", f"{prefix}_size_max",
+                        f"{prefix}_rooms_min", f"{prefix}_rooms_max",
+                        f"{prefix}_floor_min", f"{prefix}_floor_max",
+                        f"{prefix}_price_min", f"{prefix}_price_max",
+                        "otr_open_flag", "otr_keys_inited"
+                    ):
                         st.session_state.pop(k, None)
 
                     st.session_state["otr_force_defaults"]  = True
                     st.session_state["otr_reset_preselect"] = True
                     st.rerun()
+
                     
             # --- Profile details (own Edit/Save flow) -------------------------------------
             tid = st.session_state.user["id"]
@@ -6074,31 +6136,9 @@ def landlord_dashboard():
                 limit = st.number_input(tr("Results limit"), 1, 500, 100, key="otr_limit")
 
             with st.expander(tr("Tenant preferences"), True):
-                # Location pickers (Region → Regional Unit → Municipality)
-                lc1, lc2, lc3 = st.columns(3)
-                with lc1:
-                    region, regional_unit, municipality = greece_location_pickers(prefix="otr")
-                city = municipality            # Municipality (Dimos)
-                district = regional_unit       # Regional Unit (Perifereiaki Enotita)
+                filt = render_tenant_filters(prefix="otr")
 
-                # Ranges
-                r1c1, r1c2 = st.columns(2)
-                size_min = r1c1.number_input(tr("Min size (m²)"), min_value=0, max_value=10000, value=0, step=1, key="otr_size_min") or None
-                size_max = r1c2.number_input(tr("Max size (m²)"), min_value=0, max_value=10000, value=0, step=1, key="otr_size_max") or None
-
-                r2c1, r2c2 = st.columns(2)
-                rooms_min = r2c1.number_input(tr("Min rooms"), min_value=0, max_value=50, value=0, step=1, key="otr_rooms_min") or None
-                rooms_max = r2c2.number_input(tr("Max rooms"), min_value=0, max_value=50, value=0, step=1, key="otr_rooms_max") or None
-
-                r3c1, r3c2 = st.columns(2)
-                floor_min_val = r3c1.number_input(tr("Min floor"), min_value=-5, max_value=100, value=0, step=1, key="otr_floor_min")
-                floor_max_val = r3c2.number_input(tr("Max floor"), min_value=-5, max_value=100, value=0, step=1, key="otr_floor_max")
-                floor_min = floor_min_val if floor_min_val != 0 else None
-                floor_max = floor_max_val if floor_max_val != 0 else None
-
-                r4c1, r4c2 = st.columns(2)
-                price_min = r4c1.number_input(tr("Min price (€)"), min_value=0, max_value=1_000_000, value=0, step=50, key="otr_price_min") or None
-                price_max = r4c2.number_input(tr("Max price (€)"), min_value=0, max_value=1_000_000, value=0, step=50, key="otr_price_max") or None
+ 
 
             # Sticky search flag so results persist after button clicks
             if "ld_otr_do_search" not in st.session_state:
@@ -6116,12 +6156,12 @@ def landlord_dashboard():
             if st.session_state["ld_otr_do_search"]:
                 results = search_open_to_rent_tenants(
                     q=q,
-                    city=city,
-                    district=district,
-                    size_min=size_min, size_max=size_max,
-                    rooms_min=rooms_min, rooms_max=rooms_max,
-                    floor_min=floor_min, floor_max=floor_max,
-                    price_min=price_min, price_max=price_max,
+                    city=filt["city"],
+                    district=filt["district"],
+                    size_min=filt["size_min"], size_max=filt["size_max"],
+                    rooms_min=filt["rooms_min"], rooms_max=filt["rooms_max"],
+                    floor_min=filt["floor_min"], floor_max=filt["floor_max"],
+                    price_min=filt["price_min"], price_max=filt["price_max"],
                     limit=limit,
                 )
 
