@@ -6135,7 +6135,7 @@ def landlord_dashboard():
                             t_city, t_district,
                             t_smin, t_smax, t_rmin, t_rmax, t_fmin, t_fmax, t_pmin, t_pmax
                         ) = r
-                        
+                    with st.container(border=True):    
                         tenant_profile(tenant_id, landlord_id, inbound_request=False)
 
 
