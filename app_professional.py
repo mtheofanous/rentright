@@ -6140,7 +6140,7 @@ def landlord_dashboard():
 
  
 
-            # Sticky search flag so results persist after button clicks
+            # sticky flag
             if "ld_otr_do_search" not in st.session_state:
                 st.session_state["ld_otr_do_search"] = False
 
@@ -6153,30 +6153,47 @@ def landlord_dashboard():
                 except Exception: pass
                 st.rerun()
 
-            if st.session_state["ld_otr_do_search"]:
-                results = search_open_to_rent_tenants(
-                    q=q,
-                    city=filt["city"],
-                    district=filt["district"],
-                    size_min=filt["size_min"], size_max=filt["size_max"],
-                    rooms_min=filt["rooms_min"], rooms_max=filt["rooms_max"],
-                    floor_min=filt["floor_min"], floor_max=filt["floor_max"],
-                    price_min=filt["price_min"], price_max=filt["price_max"],
-                    limit=limit,
-                )
+            # IMPORTANT: landlord_id for tenant_profile
+            landlord_id = st.session_state.user["id"]
 
-        if not results:
-            st.info(tr("No matches."))
-        else:
-            st.caption(f"{len(results)} {tr('results')}")
-            for r in results:                  
-                (
-                    tenant_id, tenant_name, tenant_email, updated_at,
-                    t_city, t_district,
-                    t_smin, t_smax, t_rmin, t_rmax, t_fmin, t_fmax, t_pmin, t_pmax
-                ) = r
-                with st.container(border=True):    
-                    tenant_profile(tenant_id, landlord_id, inbound_request=False)
+            # Use your reusable filter UI (prefix keeps keys separate)
+            filt = render_tenant_filters(prefix="otr")
+
+            # default so it's always bound
+            results = []
+
+            if st.session_state["ld_otr_do_search"]:
+                try:
+                    results = search_open_to_rent_tenants(
+                        q=q,
+                        city=filt["city"],
+                        district=filt["district"],
+                        size_min=filt["size_min"], size_max=filt["size_max"],
+                        rooms_min=filt["rooms_min"], rooms_max=filt["rooms_max"],
+                        floor_min=filt["floor_min"], floor_max=filt["floor_max"],
+                        price_min=filt["price_min"], price_max=filt["price_max"],
+                        limit=limit,
+                    )
+                except Exception as e:
+                    # keep the app alive & keep 'results' defined
+                    st.warning(tr("Search failed") + f": {e}")
+                    results = []
+
+                if not results:
+                    st.info(tr("No matches."))
+                else:
+                    st.caption(f"{len(results)} {tr('results')}")
+                    for r in results:
+                        (
+                            tenant_id, tenant_name, tenant_email, updated_at,
+                            t_city, t_district,
+                            t_smin, t_smax, t_rmin, t_rmax, t_fmin, t_fmax, t_pmin, t_pmax
+                        ) = r
+
+                        with st.container(border=True):
+                            # inbound_request=False in search results
+                            tenant_profile(tenant_id, landlord_id, inbound_request=False)
+
 
 
         # === Reference requests that were sent to this landlord ===
