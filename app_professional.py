@@ -6125,18 +6125,18 @@ def landlord_dashboard():
                     limit=limit,
                 )
 
-                if not results:
-                    st.info(tr("No matches."))
-                else:
-                    st.caption(f"{len(results)} {tr('results')}")
-                    for r in results:                  
-                        (
-                            tenant_id, tenant_name, tenant_email, updated_at,
-                            t_city, t_district,
-                            t_smin, t_smax, t_rmin, t_rmax, t_fmin, t_fmax, t_pmin, t_pmax
-                        ) = r
-                        with st.container(border=True):    
-                            tenant_profile(tenant_id, landlord_id, inbound_request=False)
+            if not results:
+                st.info(tr("No matches."))
+            else:
+                st.caption(f"{len(results)} {tr('results')}")
+                for r in results:                  
+                    (
+                        tenant_id, tenant_name, tenant_email, updated_at,
+                        t_city, t_district,
+                        t_smin, t_smax, t_rmin, t_rmax, t_fmin, t_fmax, t_pmin, t_pmax
+                    ) = r
+                    with st.container(border=True):    
+                        tenant_profile(tenant_id, landlord_id, inbound_request=False)
 
 
         # === Reference requests that were sent to this landlord ===
