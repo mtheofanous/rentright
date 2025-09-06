@@ -1385,6 +1385,12 @@ def run_migrations(conn):
 
     # --- 3) Reference request fixes ---
     add_col(conn, "reference_requests", "emailed_at TEXT")
+    
+    # --- Reference revocation columns ---
+    add_col(conn, "reference_requests", "revoked_at TEXT")
+    add_col(conn, "reference_requests", "revoked_by TEXT")
+    add_col(conn, "reference_requests", "revoked_reason TEXT")
+
 
     # --- 4) Tenant profile columns (critical for open-to-rent prefs) ---
     required_cols = [
@@ -3343,18 +3349,13 @@ def get_reference_request_by_token(token: str):
     return dict(zip(keys, row))
 # ---------- Status helpers ----------
 def effective_reference_status(raw_status: str | None, token: str) -> str:
-    """
-    Returns the 'effective' status for showing in UI:
-      - 'cancelled' stays cancelled.
-      - If a contract exists but is not VERIFIED, treat the reference as 'pending'.
-      - Otherwise return the raw status, defaulting to 'pending' when None.
-    """
-    if raw_status == "cancelled":
-        return "cancelled"
+    if raw_status in ("cancelled", "revoked"):
+        return raw_status
     contract = get_contract_by_token(token)
     if contract and contract.get("status") != "verified":
         return "pending"
     return raw_status or "pending"
+
 
 
 def promote_reference_if_ready(token: str) -> bool:
@@ -3473,6 +3474,22 @@ def cancel_reference_request(token: str):
         (datetime.utcnow().isoformat(), token),
     )
     conn.commit()
+    
+def revoke_reference_request(token: str, admin_email: str, reason: str | None = None):
+    """
+    Mark a reference as 'revoked' with audit trail.
+    Default policy: only allow revoking COMPLETED references.
+    Change the WHERE clause to include 'pending' if you also want to allow that.
+    """
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE reference_requests "
+        "SET status='revoked', revoked_at=?, revoked_by=?, revoked_reason=? "
+        "WHERE token=? AND status='completed'",
+        (datetime.utcnow().isoformat(), (admin_email or "").strip(), (reason or "").strip() or None, token),
+    )
+    conn.commit()
+
 
 def list_prospective_tenants(landlord_email: str):
     """Unique tenants who listed this landlord (single field or multi list)."""
@@ -4362,7 +4379,7 @@ def admin_dashboard():
 
     pending_reqs   = [r for r in all_reqs if eff(r) == "pending"]
     completed_reqs = [r for r in all_reqs if eff(r) == "completed"]
-    cancelled_reqs = [r for r in all_reqs if eff(r) == "cancelled"]
+    cancelled_reqs = [r for r in all_reqs if eff(r) in ("cancelled", "revoked")]
 
     c1, c2, c3 = st.columns(3)
     c1.metric(tr("Pending"), len(pending_reqs))
@@ -4414,8 +4431,8 @@ def admin_dashboard():
                 # ⬇️ Previous landlord line (translated)
                 st.caption(f"{tr('Previous landlord:')} **{pl_name}** ({pl_email}) · {tr('Address:')} {pl_addr}")
 
-                link = build_reference_link(token)
-                st.text_input(tr('Reference Link'), value=link, key=f"{prefix}_link_{token}", disabled=True)
+                # link = build_reference_link(token)
+                # st.text_input(tr('Reference Link'), value=link, key=f"{prefix}_link_{token}", disabled=True)
 
                 # --- Contract section ---
                 contract = get_contract_by_token(token)
@@ -4444,33 +4461,52 @@ def admin_dashboard():
                         st.warning(f"Unable to read the saved file: {e}")
                 else:
                     st.caption(tr('No contract uploaded yet.'))
+                    
+                    
+                is_completed = str(final_status).lower() == "completed"
+                is_revoked   = str(final_status).lower() == "revoked"
+                
+                if is_revoked:
+                    st.error(tr("Revoked by admin"))
+                    if details and (details.get("revoked_by") or details.get("revoked_at") or details.get("revoked_reason")):
+                        st.caption(f"{tr('By')}: {details.get('revoked_by','—')} • {format_dt(details.get('revoked_at'))}")
+                        if details.get("revoked_reason"):
+                            st.write(f"**{tr('Reason')}:** {details['revoked_reason']}")
 
-
-                # --- Admin actions (conditional) ---
                 ac1, ac2 = st.columns(2)
 
-                show_verify = (str(final_status).lower() != "completed")
-                show_cancel = (str(final_status).lower() != "cancelled")
-
-                if show_verify:
-                    if ac1.button(tr('✅ Verify Contract'), key=f"{prefix}_verify_{token}"):
-                        ok, msg = set_contract_status(token, "verified", st.session_state.user["email"])
-                        if ok:
-                            promote_reference_if_ready(token)  # keep your existing promotion
-                            st.success(tr('Contract verified successfully.'))
+                if is_completed and not is_revoked:
+                    # Revoke flow
+                    with st.popover(tr("Revoke Reference")):
+                        reason = st.text_area(tr("Reason (shown in audit)"), key=f"{prefix}_rev_reason_{token}")
+                        if st.button(tr("Confirm Revoke"), key=f"{prefix}_rev_confirm_{token}", type="primary"):
+                            revoke_reference_request(token, st.session_state.user.get("email","admin@rentright"), reason)
+                            st.warning(tr("Reference revoked."))
                             st.rerun()
-                        else:
-                            st.error(msg)
                 else:
-                    ac1.caption(tr('Already completed — no verification needed.'))
 
-                if show_cancel:
-                    if ac2.button(tr('Cancel Reference'), key=f"{prefix}_cancel_{token}"):
-                        cancel_reference_request(token)
-                        st.warning(tr('Reference cancelled.'))
-                        st.rerun()
-                else:
-                    ac2.caption(tr('Already cancelled.'))
+                    show_verify = (str(final_status).lower() != "completed")
+                    show_cancel = (str(final_status).lower() != "cancelled")
+
+                    if show_verify:
+                        if ac1.button(tr('✅ Verify Contract'), key=f"{prefix}_verify_{token}"):
+                            ok, msg = set_contract_status(token, "verified", st.session_state.user["email"])
+                            if ok:
+                                promote_reference_if_ready(token)  # keep your existing promotion
+                                st.success(tr('Contract verified successfully.'))
+                                st.rerun()
+                            else:
+                                st.error(msg)
+                    else:
+                        ac1.caption(tr('Already completed — no verification needed.'))
+
+                    if show_cancel:
+                        if ac2.button(tr('Cancel Reference'), key=f"{prefix}_cancel_{token}"):
+                            cancel_reference_request(token)
+                            st.warning(tr('Reference cancelled.'))
+                            st.rerun()
+                    else:
+                        ac2.caption(tr('Already cancelled.'))
 
     with tab_pending:
         render_admin_reqs(pending_reqs, "admin_pending")
