@@ -1367,6 +1367,7 @@ def run_migrations(conn):
         add_column_if_missing(conn, "tenant_profiles", "price_min INTEGER")
         add_column_if_missing(conn, "tenant_profiles", "price_max INTEGER")
         # NEW: OSM reference columns
+        add_column_if_missing(conn, "tenant_profiles", "search_region TEXT") 
         add_column_if_missing(conn, "tenant_profiles", "search_city_osm_id INTEGER")
         add_column_if_missing(conn, "tenant_profiles", "search_district_osm_id INTEGER")
         add_column_if_missing(conn, "tenant_profiles", "search_city_osm_type TEXT")
@@ -2169,11 +2170,13 @@ def save_open_to_rent_prefs(
     rooms_min: int | None, rooms_max: int | None,
     floor_min: int | None, floor_max: int | None,
     price_min: int | None, price_max: int | None,
-    # OSM metadata (now includes types)
+    # OSM metadata
     city_osm_id: int | None = None,
-    city_osm_type: str | None = None,          # "node" | "way" | "relation"
+    city_osm_type: str | None = None,
     district_osm_id: int | None = None,
-    district_osm_type: str | None = None,      # "node" | "way" | "relation"
+    district_osm_type: str | None = None,
+    # NEW:
+    region: str | None = None,
 ):
     ensure_tenant_profile_row(tenant_id)
     now = datetime.utcnow().isoformat()
@@ -2182,6 +2185,7 @@ def save_open_to_rent_prefs(
         """
         UPDATE tenant_profiles
            SET open_to_rent=?,
+               search_region=?,
                search_city=?, search_city_osm_id=?, search_city_osm_type=?,
                search_district=?, search_district_osm_id=?, search_district_osm_type=?,
                size_min=?, size_max=?,
@@ -2193,6 +2197,7 @@ def save_open_to_rent_prefs(
         """,
         (
             1 if open_to_rent else 0,
+            (region or "").strip() or None,
             (city or "").strip() or None, city_osm_id, (city_osm_type or None),
             (district or "").strip() or None, district_osm_id, (district_osm_type or None),
             size_min, size_max,
@@ -2203,6 +2208,7 @@ def save_open_to_rent_prefs(
         ),
     )
     conn.commit()
+
     
 def load_profile_details(tenant_id: int) -> dict:
     c = get_conn()
@@ -3936,14 +3942,14 @@ def search_open_to_rent_tenants(
 
     clauses = ["tp.open_to_rent = 1"]
     params = {}
-
+    
+    cols = {r[1] for r in cur.execute("PRAGMA table_info(tenant_profiles)").fetchall()}
     # Free-text on users.name / users.email
     if q:
         clauses.append("(LOWER(u.name) LIKE LOWER(:q) OR LOWER(u.email) LIKE LOWER(:q))")
         params["q"] = f"%{q.strip()}%"
 
-    # Exact matches on location preferences (stored strings)
-    if region:
+    if "search_region" in cols and region:
         clauses.append("LOWER(tp.search_region) = LOWER(:region)")
         params["region"] = region.strip()
 
@@ -3953,6 +3959,7 @@ def search_open_to_rent_tenants(
     if district:
         clauses.append("LOWER(tp.search_district) = LOWER(:district)")
         params["district"] = district.strip()
+
 
     # Range-overlap logic:
     # For each dimension, show a tenant if their preferred range overlaps the landlord's filter range.
@@ -5198,6 +5205,7 @@ def tenant_dashboard():
                     return 0 if x is None else int(x)
 
                 if col_save.button(tr("Save preferences")):
+                    region_clean   = filt["region"] or ""
                     city_clean     = filt["city"] or ""
                     district_clean = filt["district"] or ""
 
@@ -5214,6 +5222,7 @@ def tenant_dashboard():
                                 _i(filt["price_min"]), _i(filt["price_max"]),
                                 city_osm_id=None, city_osm_type=None,
                                 district_osm_id=None, district_osm_type=None,
+                                region=region_clean, 
                             )
                         except TypeError:
                             # older signature fallback
@@ -6160,8 +6169,6 @@ def landlord_dashboard():
 
             # IMPORTANT: landlord_id for tenant_profile
             landlord_id = st.session_state.user["id"]
-
-
 
             # default so it's always bound
             results = []
