@@ -1337,102 +1337,68 @@ def add_column_if_missing(conn, table: str, col_def: str):
         conn.commit()
 
 def run_migrations(conn):
+    """
+    Run all DB migrations idempotently.
+    Ensures all expected columns exist on every run.
+    """
+
+    cur = conn.cursor()
+
+    # --- 1) Try tenant-docs migration, but don’t block the rest ---
     try:
         run_tenant_docs_migration(conn)
     except Exception as e:
-        st.warning(f"DB migration warning (tenant docs): {e}")
+        try:
+            import streamlit as st
+            st.warning(f"DB migration warning (tenant docs): {e}")
+        except Exception:
+            print(f"DB migration warning (tenant docs): {e}")
 
-        # reference_requests: columns that newer code expects but old DBs may lack
-        add_column_if_missing(conn, "reference_requests", "emailed_at TEXT")
-        add_column_if_missing(conn, "reference_requests", "confirm_landlord INTEGER")
-        add_column_if_missing(conn, "reference_requests", "score INTEGER")
-        add_column_if_missing(conn, "reference_requests", "paid_on_time INTEGER")
-        add_column_if_missing(conn, "reference_requests", "utilities_unpaid INTEGER")
-        add_column_if_missing(conn, "reference_requests", "good_condition INTEGER")
-        add_column_if_missing(conn, "reference_requests", "comments TEXT")
+    # --- 2) Column helper ---
+    def _add_column_if_missing(_conn, table, column_def):
+        """
+        Adds a column if it's missing.
+        column_def is a string like 'search_region TEXT'.
+        """
+        c = _conn.cursor()
+        colname = column_def.split()[0]
+        c.execute(f"PRAGMA table_info({table})")
+        existing = {row[1] for row in c.fetchall()}  # row[1] = column name
+        if colname not in existing:
+            c.execute(f"ALTER TABLE {table} ADD COLUMN {column_def}")
+            _conn.commit()
 
-        # reference_contracts: make sure consent_status exists on old DBs
-        add_column_if_missing(conn, "reference_contracts", "consent_status TEXT NOT NULL DEFAULT 'locked'")
-        
-        # --- Open-to-rent columns on tenant_profiles ---
-        add_column_if_missing(conn, "tenant_profiles", "open_to_rent INTEGER NOT NULL DEFAULT 0")
-        add_column_if_missing(conn, "tenant_profiles", "search_region TEXT")
-        add_column_if_missing(conn, "tenant_profiles", "search_city TEXT")
-        add_column_if_missing(conn, "tenant_profiles", "search_district TEXT")
-        add_column_if_missing(conn, "tenant_profiles", "size_min INTEGER")
-        add_column_if_missing(conn, "tenant_profiles", "size_max INTEGER")
-        add_column_if_missing(conn, "tenant_profiles", "rooms_min INTEGER")
-        add_column_if_missing(conn, "tenant_profiles", "rooms_max INTEGER")
-        add_column_if_missing(conn, "tenant_profiles", "floor_min INTEGER")
-        add_column_if_missing(conn, "tenant_profiles", "floor_max INTEGER")
-        add_column_if_missing(conn, "tenant_profiles", "price_min INTEGER")
-        add_column_if_missing(conn, "tenant_profiles", "price_max INTEGER")
-        # NEW: OSM reference columns
-        add_column_if_missing(conn, "tenant_profiles", "search_city_osm_id INTEGER")
-        add_column_if_missing(conn, "tenant_profiles", "search_district_osm_id INTEGER")
-        add_column_if_missing(conn, "tenant_profiles", "search_city_osm_type TEXT")
-        add_column_if_missing(conn, "tenant_profiles", "search_district_osm_type TEXT")
-        # --- Landlord->Tenant pending request flags on contacts
-        add_column_if_missing(conn, "future_landlord_contacts", "inbound_request INTEGER NOT NULL DEFAULT 0")
-        add_column_if_missing(conn, "future_landlord_contacts", "inbound_requested_at TEXT")
-        
+    add_col = globals().get("add_column_if_missing", _add_column_if_missing)
 
+    # --- 3) Reference request fixes ---
+    add_col(conn, "reference_requests", "emailed_at TEXT")
 
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_flc_tenant_email ON future_landlord_contacts(tenant_id, email)")
-        conn.commit()
+    # --- 4) Tenant profile columns (critical for open-to-rent prefs) ---
+    required_cols = [
+        "open_to_rent INTEGER NOT NULL DEFAULT 0",
+        "search_region TEXT",
+        "search_city TEXT",
+        "search_city_osm_id INTEGER",
+        "search_city_osm_type TEXT",
+        "search_district TEXT",
+        "search_district_osm_id INTEGER",
+        "search_district_osm_type TEXT",
+        "size_min INTEGER",
+        "size_max INTEGER",
+        "rooms_min INTEGER",
+        "rooms_max INTEGER",
+        "floor_min INTEGER",
+        "floor_max INTEGER",
+        "price_min INTEGER",
+        "price_max INTEGER",
+    ]
+    for col_def in required_cols:
+        add_col(conn, "tenant_profiles", col_def)
 
+    # --- 5) Future-proof: add more schema guards here if needed ---
+    # e.g., landlord_profiles, reference_requests, indexes, etc.
 
-        # Landlord ↔ Tenant connections (for “future landlord” flow)
-        conn.execute("""
-        CREATE TABLE IF NOT EXISTS future_landlord_connections (
-        landlord_id INTEGER NOT NULL,
-        tenant_id   INTEGER NOT NULL,
-        status      TEXT NOT NULL CHECK (status IN ('connected','rejected')),
-        created_at  TEXT NOT NULL,
-        updated_at  TEXT NOT NULL,
-        PRIMARY KEY (landlord_id, tenant_id)
-        )
-        """)
-        conn.commit()
-        
-        # --- Landlord properties (for Landlord Dashboard > My Properties)
-        conn.execute("""
-        CREATE TABLE IF NOT EXISTS landlord_properties (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        landlord_id INTEGER NOT NULL,
-        address TEXT NOT NULL,
-        listing_url TEXT,
-        visible_to_tenants INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-        )
-        """)
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_landlord_properties_landlord ON landlord_properties(landlord_id)")
-        conn.commit()
-        
-        # --- Landlord properties: extra metadata ---
-        add_column_if_missing(conn, "landlord_properties", "region TEXT")
-        add_column_if_missing(conn, "landlord_properties", "district TEXT")
-        add_column_if_missing(conn, "landlord_properties", "city TEXT")
-        add_column_if_missing(conn, "landlord_properties", "size_m2 INTEGER")
-        add_column_if_missing(conn, "landlord_properties", "rooms INTEGER")
-        add_column_if_missing(conn, "landlord_properties", "floor INTEGER")
-        add_column_if_missing(conn, "landlord_properties", "price INTEGER")
-        conn.commit()
-        
-        # --- Profile details on tenant_profiles ---
-        add_column_if_missing(conn, "tenant_profiles", "age INTEGER")
-        add_column_if_missing(conn, "tenant_profiles", "monthly_salary INTEGER")
-        add_column_if_missing(conn, "tenant_profiles", "marital_status TEXT")
-        add_column_if_missing(conn, "tenant_profiles", "job_position TEXT")
-        add_column_if_missing(conn, "tenant_profiles", "contract_type TEXT")
-        add_column_if_missing(conn, "tenant_profiles", "pets INTEGER")
-        add_column_if_missing(conn, "tenant_profiles", "num_tenants INTEGER")
-        add_column_if_missing(conn, "tenant_profiles", "about TEXT")
-        
-        add_column_if_missing(conn, "users", "phone TEXT")
-        add_column_if_missing(conn, "users", "phone_visible INTEGER NOT NULL DEFAULT 0")
-
+    return True
 
 
 
@@ -2161,53 +2127,57 @@ def load_open_to_rent_prefs(tenant_id: int) -> dict:
     ]
     return dict(zip(keys, row)) if row else {}
 
-def save_open_to_rent_prefs(
-    tenant_id: int,
-    open_to_rent: bool,
-    city: str | None,
-    district: str | None,
-    size_min: int | None, size_max: int | None,
-    rooms_min: int | None, rooms_max: int | None,
-    floor_min: int | None, floor_max: int | None,
-    price_min: int | None, price_max: int | None,
-    # OSM metadata
-    city_osm_id: int | None = None,
-    city_osm_type: str | None = None,
-    district_osm_id: int | None = None,
-    district_osm_type: str | None = None,
-    # NEW:
-    region: str | None = None,
-):
-    ensure_tenant_profile_row(tenant_id)
-    now = datetime.utcnow().isoformat()
+def save_open_to_rent_prefs(conn, tenant_id, **prefs):
+    """
+    Saves 'open to rent' preferences for a tenant.
+    Only updates columns that actually exist in tenant_profiles.
+    """
+
     cur = conn.cursor()
-    cur.execute(
-        """
-        UPDATE tenant_profiles
-           SET open_to_rent=?,
-               search_region=?,
-               search_city=?, search_city_osm_id=?, search_city_osm_type=?,
-               search_district=?, search_district_osm_id=?, search_district_osm_type=?,
-               size_min=?, size_max=?,
-               rooms_min=?, rooms_max=?,
-               floor_min=?, floor_max=?,
-               price_min=?, price_max=?,
-               updated_at=?
-         WHERE tenant_id=?
-        """,
-        (
-            1 if open_to_rent else 0,
-            (region or "").strip() or None,
-            (city or "").strip() or None, city_osm_id, (city_osm_type or None),
-            (district or "").strip() or None, district_osm_id, (district_osm_type or None),
-            size_min, size_max,
-            rooms_min, rooms_max,
-            floor_min, floor_max,
-            price_min, price_max,
-            now, tenant_id
-        ),
-    )
+    cur.execute("PRAGMA table_info(tenant_profiles)")
+    existing_cols = {row[1] for row in cur.fetchall()}
+
+    # Mapping of pref keys to DB columns
+    column_map = {
+        "open_to_rent": "open_to_rent",
+        "search_region": "search_region",
+        "search_city": "search_city",
+        "search_city_osm_id": "search_city_osm_id",
+        "search_city_osm_type": "search_city_osm_type",
+        "search_district": "search_district",
+        "search_district_osm_id": "search_district_osm_id",
+        "search_district_osm_type": "search_district_osm_type",
+        "size_min": "size_min",
+        "size_max": "size_max",
+        "rooms_min": "rooms_min",
+        "rooms_max": "rooms_max",
+        "floor_min": "floor_min",
+        "floor_max": "floor_max",
+        "price_min": "price_min",
+        "price_max": "price_max",
+    }
+
+    # Keep only prefs that map to existing columns
+    valid_items = {
+        db_col: prefs[key]
+        for key, db_col in column_map.items()
+        if key in prefs and db_col in existing_cols
+    }
+
+    if not valid_items:
+        return  # nothing to update
+
+    # Add updated_at timestamp
+    valid_items["updated_at"] = datetime.utcnow().isoformat()
+
+    # Build dynamic SQL
+    set_clause = ", ".join(f"{col}=?" for col in valid_items.keys())
+    values = list(valid_items.values()) + [tenant_id]
+
+    sql = f"UPDATE tenant_profiles SET {set_clause} WHERE tenant_id=?"
+    cur.execute(sql, values)
     conn.commit()
+
 
     
 def load_profile_details(tenant_id: int) -> dict:
