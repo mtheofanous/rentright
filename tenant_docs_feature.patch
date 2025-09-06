@@ -1,0 +1,242 @@
+--- app_professional.py
++++ app_professional.py
+@@ -741,6 +741,97 @@
+ UPLOAD_DIR = WRITABLE_BASE / "uploads"
+ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+ 
++# ---------- Tenant Documents (upload/verify) ----------
++DOC_TYPES = {
++    "payslip": "Τελευταίες Μισθοδοσίες",
++    "tax_return": "Εκκαθαριστικό Εφορίας",
++    "employment_contract": "Σύμβαση Εργασίας",
++}
++
++DOC_UPLOAD_SUBDIR = UPLOAD_DIR / "tenant_docs"
++DOC_UPLOAD_SUBDIR.mkdir(parents=True, exist_ok=True)
++
++def td_save_upload(tenant_id: int, doc_type: str, uploaded_file):
++    assert doc_type in DOC_TYPES, "Invalid document type"
++    allowed = {"pdf", "png", "jpg", "jpeg", "webp"}
++    name = uploaded_file.name or f"{doc_type}.pdf"
++    ext = (name.rsplit(".",1)[-1] if "." in name else "pdf").lower()
++    if ext not in allowed:
++        raise ValueError("Μη υποστηριζόμενη κατάληξη αρχείου (επιτρεπτά: pdf, png, jpg, jpeg, webp).")
++    raw = uploaded_file.read()
++    size = len(raw)
++    sha = sha256_bytes(raw)
++    ciphertext = encrypt_bytes(raw)
++
++    token = uuid4().hex
++    safe_name = f"t{tenant_id}_{doc_type}_{token}.{ext}"
++    fpath = DOC_UPLOAD_SUBDIR / safe_name
++    with open(fpath, "wb") as f:
++        f.write(ciphertext)
++
++    now = datetime.utcnow().isoformat(timespec="seconds")
++    get_conn().execute("""
++        INSERT INTO tenant_documents
++            (tenant_id, doc_type, filename, content_type, path, size_bytes, sha256, status, uploaded_at, status_updated_at)
++        VALUES (?,?,?,?,?,?,?,?,?,?)
++    """, (tenant_id, doc_type, name, uploaded_file.type or f"application/{ext}", str(fpath), size, sha, "pending", now, now))
++    get_conn().commit()
++
++def td_list_for_tenant(tenant_id: int):
++    cur = get_conn().execute("""
++        SELECT id, doc_type, filename, status, uploaded_at, status_updated_at
++        FROM tenant_documents
++        WHERE tenant_id=? ORDER BY uploaded_at DESC
++    """, (tenant_id,))
++    return [dict(zip([c[0] for c in cur.description], r)) for r in cur.fetchall()]
++
++def td_list_pending():
++    cur = get_conn().execute("""
++        SELECT td.id, td.tenant_id, u.name, u.email, td.doc_type, td.filename, td.uploaded_at
++        FROM tenant_documents td
++        JOIN users u ON u.id=td.tenant_id
++        WHERE td.status='pending'
++        ORDER BY td.uploaded_at ASC
++    """)
++    return [dict(zip([c[0] for c in cur.description], r)) for r in cur.fetchall()]
++
++def td_set_status(doc_id: int, status: str, admin_id: int):
++    assert status in ("pending","verified","rejected")
++    now = datetime.utcnow().isoformat(timespec="seconds")
++    get_conn().execute("""
++        UPDATE tenant_documents
++           SET status=?, status_updated_at=?, status_by=?
++         WHERE id=?
++    """, (status, now, admin_id, doc_id))
++    get_conn().commit()
++
++def td_read_bytes(doc_id: int):
++    row = get_conn().execute("SELECT path FROM tenant_documents WHERE id=?", (doc_id,)).fetchone()
++    if not row:
++        return None
++    path = Path(row[0])
++    if not path.exists():
++        return None
++    data = path.read_bytes()
++    try:
++        return decrypt_bytes(data) or data
++    except Exception:
++        return data
++
++def td_verified_map(tenant_id: int):
++    rows = get_conn().execute("""
++        SELECT doc_type, MAX(CASE WHEN status='verified' THEN 1 ELSE 0 END) AS v
++        FROM tenant_documents
++        WHERE tenant_id=?
++        GROUP BY doc_type
++    """, (tenant_id,)).fetchall()
++    out = {k: False for k in DOC_TYPES.keys()}
++    for doc_type, v in rows:
++        out[doc_type] = bool(v)
++    return out
++
++
++
+ # (Optional sanity check)
+ try:
+     (WRITABLE_BASE / ".write_test").write_text("ok", encoding="utf-8")
+@@ -1219,6 +1310,11 @@
+         conn.commit()
+ 
+ def run_migrations(conn):
++try:
++    run_tenant_docs_migration(conn)
++except Exception as e:
++    st.warning(f"DB migration warning (tenant docs): {e}")
++
+     # reference_requests: columns that newer code expects but old DBs may lack
+     add_column_if_missing(conn, "reference_requests", "emailed_at TEXT")
+     add_column_if_missing(conn, "reference_requests", "confirm_landlord INTEGER")
+@@ -1443,6 +1539,31 @@
+     conn.commit()
+     return conn
+ 
++
++# --- Tenant Documents: schema migration -------------------------------------------
++def run_tenant_docs_migration(conn):
++    conn.execute("""
++    CREATE TABLE IF NOT EXISTS tenant_documents (
++        id INTEGER PRIMARY KEY AUTOINCREMENT,
++        tenant_id INTEGER NOT NULL,
++        doc_type TEXT NOT NULL CHECK (doc_type IN ('payslip','tax_return','employment_contract')),
++        filename TEXT NOT NULL,
++        content_type TEXT NOT NULL,
++        path TEXT NOT NULL,
++        size_bytes INTEGER NOT NULL,
++        sha256 TEXT,
++        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','verified','rejected')),
++        status_updated_at TEXT,
++        status_by INTEGER,
++        uploaded_at TEXT NOT NULL,
++        FOREIGN KEY (tenant_id) REFERENCES users(id) ON DELETE CASCADE
++    )
++    """)
++    conn.execute("CREATE INDEX IF NOT EXISTS idx_td_tenant ON tenant_documents(tenant_id)")
++    conn.execute("CREATE INDEX IF NOT EXISTS idx_td_status ON tenant_documents(status)")
++    conn.commit()
++
++
+ conn = init_db()
+ 
+ # Run lightweight migrations so old DBs gain new columns
+@@ -3086,6 +3207,37 @@
+     
+     
+     
++
++def render_tenant_documents_ui(current_user):
++    st.subheader("Έγγραφα Επαλήθευσης")
++    st.caption("Ανεβάστε έγγραφα για έλεγχο από διαχειριστή. Τα έγγραφα είναι ορατά μόνο σε admin.")
++
++    cols = st.columns(3)
++    upload_map = [("payslip","Τελευταίες Μισθοδοσίες"),
++                  ("tax_return","Εκκαθαριστικό Εφορίας"),
++                  ("employment_contract","Σύμβαση Εργασίας")]
++    for i, (dtype, label) in enumerate(upload_map):
++        with cols[i]:
++            st.write(f"**{label}**")
++            uf = st.file_uploader(f"Μεταφόρτωση {label}", type=["pdf","png","jpg","jpeg","webp"], key=f"up_{dtype}")
++            if uf is not None and st.button(f"Αποθήκευση {label}", key=f"btn_save_{dtype}"):
++                try:
++                    td_save_upload(current_user["id"], dtype, uf)
++                    st.success("Το αρχείο ανέβηκε. Κατάσταση: Pending.")
++                except Exception as e:
++                    st.error(f"Αποτυχία ανεβάσματος: {e}")
++
++    rows = td_list_for_tenant(current_user["id"])
++    if rows:
++        st.write("### Κατάσταση Εγγράφων")
++        for r in rows:
++            status = r["status"]
++            badge = "⏳ Pending" if status=="pending" else ("✅ Verified" if status=="verified" else "❌ Rejected")
++            st.write(f"- **{DOC_TYPES.get(r['doc_type'], r['doc_type'])}** — *{r['filename']}* → {badge} • {format_dt(r['uploaded_at'])}")
++    else:
++        st.info("Δεν έχετε ανεβάσει ακόμη έγγραφα.")
++
++
+ #---------TENANT DASHBOARD HELPERS---------------------------------------------------
+ #-STARTS HERE-----------------------------------------------------------------------
+ 
+@@ -3472,6 +3624,38 @@
+ #-----------ADMIN DASHBOARD----------------------------------------------------------------------------------------------------
+ #-------------------------------------------------------------------------------------------------------------------------------
+ 
++
++def render_admin_verifications_ui(current_user):
++    st.header("Έγγραφα προς Επαλήθευση (Tenants)")
++    pending = td_list_pending()
++    if not pending:
++        st.success("Καμία εκκρεμότητα.")
++        return
++    for row in pending:
++        title = f"{DOC_TYPES.get(row['doc_type'], row['doc_type'])} • {row['filename']} — {row['name']} <{row['email']}> • {format_dt(row['uploaded_at'])}"
++        with st.expander(title):
++            if st.button("Προεπισκόπηση", key=f"prev_{row['id']}"):
++                data = td_read_bytes(row["id"])
++                if data:
++                    if str(row["filename"]).lower().endswith((".png",".jpg",".jpeg",".webp")):
++                        st.image(data)
++                    else:
++                        st.download_button("Λήψη αρχείου", data=data, file_name=row["filename"])
++                else:
++                    st.warning("Δεν βρέθηκε αρχείο.")
++            c1, c2 = st.columns(2)
++            with c1:
++                if st.button("✅ Επιβεβαίωση (Verify)", key=f"ok_{row['id']}"):
++                    td_set_status(row["id"], "verified", current_user["id"])
++                    st.success("Επιβεβαιώθηκε.")
++                    st.rerun()
++            with c2:
++                if st.button("❌ Απόρριψη (Reject)", key=f"rej_{row['id']}"):
++                    td_set_status(row["id"], "rejected", current_user["id"])
++                    st.info("Απορρίφθηκε.")
++                    st.rerun()
++
++
+ def admin_dashboard():
+     # periodic cleanup on admin view
+     try:
+@@ -3487,6 +3671,10 @@
+     with col_h3: logout_button()
+     
+     st.caption(f"{tr('Logged in as')} {st.session_state.user['email']}")
++
++    st.divider()
++    render_admin_verifications_ui(st.session_state.user)
++    st.divider()
+ 
+     # ---------------- Settings moved from sidebar ----------------
+     with st.expander(tr('Email & App Settings')):
+@@ -3735,6 +3923,9 @@
+         st.subheader(tr("Welcome"))
+ 
+     st.caption(f"{tr('Logged in with email')}: {tenant_email}")
++    with st.container(border=True):
++        render_tenant_documents_ui(st.session_state.user)
++
+     
+    #
+     # ---------- NAV BUTTONS (set active page only) ----------
