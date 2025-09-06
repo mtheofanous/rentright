@@ -5193,7 +5193,7 @@ def tenant_dashboard():
 
             with st.expander(tr("Property characteristics"), expanded=False):
                 
-                prop = render_tenant_filters(prefix="prop")
+                # prop = render_tenant_filters(prefix="prop")
                 
                 prefix = "otr"
                 filt = render_tenant_filters(prefix=prefix)
