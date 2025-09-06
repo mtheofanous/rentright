@@ -5585,263 +5585,266 @@ def landlord_dashboard():
 
         for (tid, invited, invited_at, inbound_request, inbound_requested_at) in rows:
             with st.container(border=True):
-                # Resolve tenant before rendering identity
-                tenant_user = get_user_by_id(tid) or {}
-                tenant_name  = (tenant_user.get("name")  or "").strip()
-                tenant_email = (tenant_user.get("email") or "").strip()
-                tenant_phone = (tenant_user.get("phone") or "").strip()
-                tenant_phone_visible = int(tenant_user.get("phone_visible") or 0)
-
-                # Canonical connection status
-                try:
-                    status = flc_get_status(landlord_id, tid)  # 'connected' | 'rejected' | None
-                except Exception:
-                    status = None
-
-                # Header row: identity • badge • actions
-                colL, colM, colR = st.columns([6, 3, 6])
-
-                # Left: avatar + name/email
-                display_title = tenant_name or tenant_email or f"Tenant #{tid}"
-                initials = _pt_initials(tenant_name, tenant_email)
                 
-                        # Build phone HTML if visible
-                phone_html = ""
-                if tenant_phone and tenant_phone_visible:
-                    phone_html = f'<div class="pt-phone">📞 {tenant_phone}</div>'
+                def tenant_profile(tid, inbound_request):
+                    # Resolve tenant before rendering identity
+                    tenant_user = get_user_by_id(tid) or {}
+                    tenant_name  = (tenant_user.get("name")  or "").strip()
+                    tenant_email = (tenant_user.get("email") or "").strip()
+                    tenant_phone = (tenant_user.get("phone") or "").strip()
+                    tenant_phone_visible = int(tenant_user.get("phone_visible") or 0)
 
-                colL.markdown(
-                    f"""
-                    <div class="pt-title">
-                    <div class="pt-avatar">{initials}</div>
-                    <div>
-                        <div class="pt-name">{display_title}</div>
-                        <div class="pt-email">{tenant_email}</div>
-                        {phone_html}
-                    </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+                    # Canonical connection status
+                    try:
+                        status = flc_get_status(landlord_id, tid)  # 'connected' | 'rejected' | None
+                    except Exception:
+                        status = None
 
-                # Middle: status badge
-                if status == "connected":
-                    colM.markdown(f'<span class="pt-badge pt-badge--ok">{tr("Connected")}</span>', unsafe_allow_html=True)
-                elif status == "rejected":
-                    colM.markdown(f'<span class="pt-badge pt-badge--err">{tr("Rejected")}</span>', unsafe_allow_html=True)
-                else:
-                    colM.markdown(f'<span class="pt-badge pt-badge--info">{tr("Pending")}</span>', unsafe_allow_html=True)
+                    # Header row: identity • badge • actions
+                    colL, colM, colR = st.columns([6, 3, 6])
 
-                # Right: actions (now includes Message when connected)
-         
-                if status == "connected":
-                    a1, a2 = colR.columns(2)
-                    pair_key = f"{landlord_id}-{tid}"
-                    chat_is_open = (
-                        st.session_state.get("chat_open", False)
-                        and st.session_state.get("selected_thread") == pair_key
-                    )
+                    # Left: avatar + name/email
+                    display_title = tenant_name or tenant_email or f"Tenant #{tid}"
+                    initials = _pt_initials(tenant_name, tenant_email)
+                    
+                            # Build phone HTML if visible
+                    phone_html = ""
+                    if tenant_phone and tenant_phone_visible:
+                        phone_html = f'<div class="pt-phone">📞 {tenant_phone}</div>'
 
-                    me_id = st.session_state.user["id"]
-                    thread_id_existing = get_thread_id_if_exists(landlord_id, tid)
-                    unread = get_unread_count(thread_id_existing, me_id)
-
-                    if chat_is_open:
-                        btn_label = tr("Close Chat")
-                        btn_type  = "primary"
-                    else:
-                        base = tr("Message")
-                        btn_label = f"{base} ({unread})" if unread > 0 else base
-                        btn_type  = "secondary" if unread == 0 else "primary"
-
-                    if a1.button(btn_label, key=pk(tid, "chat_toggle"), type=btn_type):
-                        if chat_is_open:
-                            st.session_state.chat_open = False
-                            st.session_state.selected_thread = None
-                        else:
-                            st.session_state["chat_role"] = "landlord"
-                            st.session_state["chat_with_tenant_id"] = tid
-                            st.session_state["chat_with_landlord_id"] = landlord_id
-                            st.session_state.selected_thread = pair_key
-                            st.session_state.chat_open = True
-                            tid_real = get_or_create_thread(landlord_id, tid)
-                            mark_thread_read(tid_real, me_id)
-                        st.rerun()
-                        
-                    if a2.button(tr("Disconnect"), key=pk(tid, "disconnect")):
-                        flc_disconnect(landlord_id, tid)
-                        try:
-                            st.cache_data.clear()
-                        except Exception:
-                            pass
-                        st.warning(tr("Disconnected."))
-                        st.rerun()
-
-
-                elif status == "rejected":
-                    colR.caption(tr("No actions"))
-
-                else:
-                    if inbound_request:
-                        if colR.button(tr("Cancel request"), key=pk(tid, "cancel_request")):
-                            flc_cancel_request(landlord_id, tid)
-                            try: st.cache_data.clear()
-                            except Exception: pass
-                            st.info(tr("Request cancelled."))
-                            st.rerun()
-                    else:
-                        c1, c2 = colR.columns(2)
-                        if c1.button(tr("Connect"), key=pk(tid, "connect")):
-                            flc_connect(landlord_id, tid)
-                            try: st.cache_data.clear()
-                            except Exception: pass
-                            st.success(tr("Connected."))
-                            st.rerun()
-                        if c2.button(tr("Reject"), key=pk(tid, "reject")):
-                            flc_reject(landlord_id, tid)
-                            try: st.cache_data.clear()
-                            except Exception: pass
-                            st.info(tr("Rejected."))
-                            st.rerun()
-
-                # ---- Open to rent one-liner (Active only) ----
-                o2r = open_to_rent_tokens(tid)
-                if o2r:
-                    chips = []
-                    if o2r["where"]: chips.append(f'<span class="pill">{o2r["where"]}</span>')
-                    if o2r["size"]:  chips.append(f'<span class="pill">{o2r["size"]}</span>')
-                    if o2r["rooms"]: chips.append(f'<span class="pill">{o2r["rooms"]}</span>')
-                    if o2r["floor"]: chips.append(f'<span class="pill">{o2r["floor"]}</span>')
-                    if o2r["price"]: chips.append(f'<span class="pill">{o2r["price"]}</span>')
-                    chips_html = " ".join(chips)
-
-                    st.markdown(
-                        f'<div style="display:flex;align-items:center;gap:10px;margin:6px 0 2px 0">'
-                        f'  <span class="pt-badge pt-badge--ok">{tr("Open to rent")}</span>'
-                        f'  <div>{chips_html}</div>'
-                        f'</div>',
+                    colL.markdown(
+                        f"""
+                        <div class="pt-title">
+                        <div class="pt-avatar">{initials}</div>
+                        <div>
+                            <div class="pt-name">{display_title}</div>
+                            <div class="pt-email">{tenant_email}</div>
+                            {phone_html}
+                        </div>
+                        </div>
+                        """,
                         unsafe_allow_html=True
                     )
-                    
-                if status == "connected":
-                    render_tenant_doc_badges_inline(tid)
 
-                # # ---- References summary ----
-                # ---- References summary ----
-                refs = list_latest_references_for_tenant_dict(tid) or []
-                refs = [r for r in refs if (r.get("status") or "").lower() != "cancelled"]
+                    # Middle: status badge
+                    if status == "connected":
+                        colM.markdown(f'<span class="pt-badge pt-badge--ok">{tr("Connected")}</span>', unsafe_allow_html=True)
+                    elif status == "rejected":
+                        colM.markdown(f'<span class="pt-badge pt-badge--err">{tr("Rejected")}</span>', unsafe_allow_html=True)
+                    else:
+                        colM.markdown(f'<span class="pt-badge pt-badge--info">{tr("Pending")}</span>', unsafe_allow_html=True)
 
-                total_refs = len(refs)
-                latest_status = (refs[0].get("status") if refs else None) or None
-                completed = [r for r in refs if (r.get("status") or "").lower() == "completed"]
-                scores = [r.get("score") for r in completed if r.get("score") is not None]
-                avg_score = round(sum(scores) / len(scores), 1) if scores else None
+                    # Right: actions (now includes Message when connected)
+            
+                    if status == "connected":
+                        a1, a2 = colR.columns(2)
+                        pair_key = f"{landlord_id}-{tid}"
+                        chat_is_open = (
+                            st.session_state.get("chat_open", False)
+                            and st.session_state.get("selected_thread") == pair_key
+                        )
 
-                st.caption(f"{tr('References')}: {len(refs)}")
+                        me_id = st.session_state.user["id"]
+                        thread_id_existing = get_thread_id_if_exists(landlord_id, tid)
+                        unread = get_unread_count(thread_id_existing, me_id)
 
-                try:
-                    latest_status_label = display_status_label(latest_status)
-                except Exception:
-                    latest_status_label = (latest_status or "—").title()
+                        if chat_is_open:
+                            btn_label = tr("Close Chat")
+                            btn_type  = "primary"
+                        else:
+                            base = tr("Message")
+                            btn_label = f"{base} ({unread})" if unread > 0 else base
+                            btn_type  = "secondary" if unread == 0 else "primary"
 
-                # ---- Reference details (only when connected) ----
-                def _status_badge_html(s):
-                    lab = display_status_label(s) if s else "—"
-                    s_l = (s or "").lower()
-                    cls = "pt-badge pt-badge--info"
-                    if s_l == "completed":
-                        cls = "pt-badge pt-badge--ok"
-                    elif s_l in {"rejected", "declined"}:
-                        cls = "pt-badge pt-badge--err"
-                    return f'<span class="{cls}">{lab}</span>'
+                        if a1.button(btn_label, key=pk(tid, "chat_toggle"), type=btn_type):
+                            if chat_is_open:
+                                st.session_state.chat_open = False
+                                st.session_state.selected_thread = None
+                            else:
+                                st.session_state["chat_role"] = "landlord"
+                                st.session_state["chat_with_tenant_id"] = tid
+                                st.session_state["chat_with_landlord_id"] = landlord_id
+                                st.session_state.selected_thread = pair_key
+                                st.session_state.chat_open = True
+                                tid_real = get_or_create_thread(landlord_id, tid)
+                                mark_thread_read(tid_real, me_id)
+                            st.rerun()
+                            
+                        if a2.button(tr("Disconnect"), key=pk(tid, "disconnect")):
+                            flc_disconnect(landlord_id, tid)
+                            try:
+                                st.cache_data.clear()
+                            except Exception:
+                                pass
+                            st.warning(tr("Disconnected."))
+                            st.rerun()
 
-                if status == "connected":
-                    # Load only when connected
+
+                    elif status == "rejected":
+                        colR.caption(tr("No actions"))
+
+                    else:
+                        if inbound_request:
+                            if colR.button(tr("Cancel request"), key=pk(tid, "cancel_request")):
+                                flc_cancel_request(landlord_id, tid)
+                                try: st.cache_data.clear()
+                                except Exception: pass
+                                st.info(tr("Request cancelled."))
+                                st.rerun()
+                        else:
+                            c1, c2 = colR.columns(2)
+                            if c1.button(tr("Connect"), key=pk(tid, "connect")):
+                                flc_connect(landlord_id, tid)
+                                try: st.cache_data.clear()
+                                except Exception: pass
+                                st.success(tr("Connected."))
+                                st.rerun()
+                            if c2.button(tr("Reject"), key=pk(tid, "reject")):
+                                flc_reject(landlord_id, tid)
+                                try: st.cache_data.clear()
+                                except Exception: pass
+                                st.info(tr("Rejected."))
+                                st.rerun()
+
+                    # ---- Open to rent one-liner (Active only) ----
+                    o2r = open_to_rent_tokens(tid)
+                    if o2r:
+                        chips = []
+                        if o2r["where"]: chips.append(f'<span class="pill">{o2r["where"]}</span>')
+                        if o2r["size"]:  chips.append(f'<span class="pill">{o2r["size"]}</span>')
+                        if o2r["rooms"]: chips.append(f'<span class="pill">{o2r["rooms"]}</span>')
+                        if o2r["floor"]: chips.append(f'<span class="pill">{o2r["floor"]}</span>')
+                        if o2r["price"]: chips.append(f'<span class="pill">{o2r["price"]}</span>')
+                        chips_html = " ".join(chips)
+
+                        st.markdown(
+                            f'<div style="display:flex;align-items:center;gap:10px;margin:6px 0 2px 0">'
+                            f'  <span class="pt-badge pt-badge--ok">{tr("Open to rent")}</span>'
+                            f'  <div>{chips_html}</div>'
+                            f'</div>',
+                            unsafe_allow_html=True
+                        )
+                        
+                    if status == "connected":
+                        render_tenant_doc_badges_inline(tid)
+
+                    # # ---- References summary ----
+                    # ---- References summary ----
                     refs = list_latest_references_for_tenant_dict(tid) or []
                     refs = [r for r in refs if (r.get("status") or "").lower() != "cancelled"]
 
-                    if refs:
-                        completed_scores = [
-                            r.get("score") for r in refs
-                            if (r.get("status") or "").lower() == "completed" and r.get("score") is not None
-                        ]
-                        avg_score = round(sum(completed_scores) / len(completed_scores)) if completed_scores else None
+                    total_refs = len(refs)
+                    latest_status = (refs[0].get("status") if refs else None) or None
+                    completed = [r for r in refs if (r.get("status") or "").lower() == "completed"]
+                    scores = [r.get("score") for r in completed if r.get("score") is not None]
+                    avg_score = round(sum(scores) / len(scores), 1) if scores else None
 
-                        st.markdown(f"{tr('Score')}: {avg_score if avg_score is not None else '—'}")
+                    st.caption(f"{tr('References')}: {len(refs)}")
 
-                        with st.expander(tr("Reference details"), expanded=False):
-                            for r in refs:
-                                prev_email = (r.get("prev_email") or "—").strip()
-                                status_lr  = r.get("status") or ""
-                                score_lr   = r.get("score")
-                                paid_on    = _to_bool(r.get("paid_on_time"))
-                                util_unp   = _to_bool(r.get("utilities_unpaid"))
-                                good_cond  = _to_bool(r.get("good_condition"))
-                                comments   = r.get("comments")
-
-                                # Chip classes
-                                score_chip = ""
-                                if (status_lr or "").lower() == "completed" and score_lr is not None:
-                                    score_chip = f'<span class="pill pill-score">{tr("Score")}: {int(score_lr)}/10</span>'
-                                paid_cls = "pill-ok" if paid_on is True else "pill-no" if paid_on is False else "pill-na"
-                                util_cls = "pill-no" if util_unp is True else "pill-ok" if util_unp is False else "pill-na"
-                                cond_cls = "pill-ok" if good_cond is True else "pill-no" if good_cond is False else "pill-na"
-
-                                chips_html = " ".join(filter(None, [
-                                    score_chip,
-                                    f'<span class="pill {paid_cls}">{tr("Paid on time")}: {_yn(paid_on)}</span>',
-                                    f'<span class="pill {util_cls}">{tr("Unpaid utilities")}: {_yn(util_unp)}</span>',
-                                    f'<span class="pill {cond_cls}">{tr("Good condition")}: {_yn(good_cond)}</span>',
-                                ]))
-
-                                st.markdown(
-                                    f"""
-                                    <div class="ref-card">
-                                    <div class="ref-header">
-                                        <div class="ref-title">{tr('Previous landlord')}: <a href="mailto:{prev_email}">{prev_email}</a></div>
-                                        <div>{_status_badge_html(status_lr)}</div>
-                                    </div>
-                                    <div class="ref-row">{chips_html}</div>
-                                    </div>
-                                    """,
-                                    unsafe_allow_html=True
-                                )
-                                if comments:
-                                    st.markdown(f"**{tr('Comments')}**")
-                                    st.markdown(f"<div class='ref-comments'>{comments}</div>", unsafe_allow_html=True)
-
-                    # ---- Profile details (connected only) ---------------------------------------
-                    details = load_profile_details(tid) or {}
-                    _pets_txt = (
-                        tr("Yes") if (details.get("pets") in (1, True))
-                        else tr("No") if (details.get("pets") in (0, False))
-                        else "—"
-                    )
-                    with st.expander(tr("Profile details"), expanded=False):
-                        left, right = st.columns(2)
-                        with left:
-                            st.caption(f"**{tr('Age')}**: {details.get('age') if details.get('age') is not None else '—'}")
-                            if details.get('monthly_salary') is not None:
-                                st.caption(f"**{tr('Monthly salary (€)')}**: {int(details.get('monthly_salary')):,}")
-                            else:
-                                st.caption(f"**{tr('Monthly salary (€)')}**: —")
-                            st.caption(f"**{tr('Marital status')}**: {details.get('marital_status') or '—'}")
-                            st.caption(f"**{tr('Pets')}**: {_pets_txt}")
-                            st.caption(f"**{tr('Number of tenants')}**: {details.get('num_tenants') if details.get('num_tenants') is not None else '—'}")
-                        with right:
-                            st.caption(f"**{tr('Job position')}**: {details.get('job_position') or '—'}")
-                            st.caption(f"**{tr('Contract type')}**: {details.get('contract_type') or '—'}")
-                        if details.get("about"):
-                            st.markdown(f"**{tr('A few words about yourself')}**")
-                            st.write(details.get("about"))
-
-                else:
-                    # Optional: show lock note ONLY if there are refs at all
                     try:
-                        if list_latest_references_for_tenant(tid):
-                            st.caption("🔒 " + tr("Reference details are visible after you connect."))
+                        latest_status_label = display_status_label(latest_status)
                     except Exception:
-                        pass
+                        latest_status_label = (latest_status or "—").title()
+
+                    # ---- Reference details (only when connected) ----
+                    def _status_badge_html(s):
+                        lab = display_status_label(s) if s else "—"
+                        s_l = (s or "").lower()
+                        cls = "pt-badge pt-badge--info"
+                        if s_l == "completed":
+                            cls = "pt-badge pt-badge--ok"
+                        elif s_l in {"rejected", "declined"}:
+                            cls = "pt-badge pt-badge--err"
+                        return f'<span class="{cls}">{lab}</span>'
+
+                    if status == "connected":
+                        # Load only when connected
+                        refs = list_latest_references_for_tenant_dict(tid) or []
+                        refs = [r for r in refs if (r.get("status") or "").lower() != "cancelled"]
+
+                        if refs:
+                            completed_scores = [
+                                r.get("score") for r in refs
+                                if (r.get("status") or "").lower() == "completed" and r.get("score") is not None
+                            ]
+                            avg_score = round(sum(completed_scores) / len(completed_scores)) if completed_scores else None
+
+                            st.markdown(f"{tr('Score')}: {avg_score if avg_score is not None else '—'}")
+
+                            with st.expander(tr("Reference details"), expanded=False):
+                                for r in refs:
+                                    prev_email = (r.get("prev_email") or "—").strip()
+                                    status_lr  = r.get("status") or ""
+                                    score_lr   = r.get("score")
+                                    paid_on    = _to_bool(r.get("paid_on_time"))
+                                    util_unp   = _to_bool(r.get("utilities_unpaid"))
+                                    good_cond  = _to_bool(r.get("good_condition"))
+                                    comments   = r.get("comments")
+
+                                    # Chip classes
+                                    score_chip = ""
+                                    if (status_lr or "").lower() == "completed" and score_lr is not None:
+                                        score_chip = f'<span class="pill pill-score">{tr("Score")}: {int(score_lr)}/10</span>'
+                                    paid_cls = "pill-ok" if paid_on is True else "pill-no" if paid_on is False else "pill-na"
+                                    util_cls = "pill-no" if util_unp is True else "pill-ok" if util_unp is False else "pill-na"
+                                    cond_cls = "pill-ok" if good_cond is True else "pill-no" if good_cond is False else "pill-na"
+
+                                    chips_html = " ".join(filter(None, [
+                                        score_chip,
+                                        f'<span class="pill {paid_cls}">{tr("Paid on time")}: {_yn(paid_on)}</span>',
+                                        f'<span class="pill {util_cls}">{tr("Unpaid utilities")}: {_yn(util_unp)}</span>',
+                                        f'<span class="pill {cond_cls}">{tr("Good condition")}: {_yn(good_cond)}</span>',
+                                    ]))
+
+                                    st.markdown(
+                                        f"""
+                                        <div class="ref-card">
+                                        <div class="ref-header">
+                                            <div class="ref-title">{tr('Previous landlord')}: <a href="mailto:{prev_email}">{prev_email}</a></div>
+                                            <div>{_status_badge_html(status_lr)}</div>
+                                        </div>
+                                        <div class="ref-row">{chips_html}</div>
+                                        </div>
+                                        """,
+                                        unsafe_allow_html=True
+                                    )
+                                    if comments:
+                                        st.markdown(f"**{tr('Comments')}**")
+                                        st.markdown(f"<div class='ref-comments'>{comments}</div>", unsafe_allow_html=True)
+
+                        # ---- Profile details (connected only) ---------------------------------------
+                        details = load_profile_details(tid) or {}
+                        _pets_txt = (
+                            tr("Yes") if (details.get("pets") in (1, True))
+                            else tr("No") if (details.get("pets") in (0, False))
+                            else "—"
+                        )
+                        with st.expander(tr("Profile details"), expanded=False):
+                            left, right = st.columns(2)
+                            with left:
+                                st.caption(f"**{tr('Age')}**: {details.get('age') if details.get('age') is not None else '—'}")
+                                if details.get('monthly_salary') is not None:
+                                    st.caption(f"**{tr('Monthly salary (€)')}**: {int(details.get('monthly_salary')):,}")
+                                else:
+                                    st.caption(f"**{tr('Monthly salary (€)')}**: —")
+                                st.caption(f"**{tr('Marital status')}**: {details.get('marital_status') or '—'}")
+                                st.caption(f"**{tr('Pets')}**: {_pets_txt}")
+                                st.caption(f"**{tr('Number of tenants')}**: {details.get('num_tenants') if details.get('num_tenants') is not None else '—'}")
+                            with right:
+                                st.caption(f"**{tr('Job position')}**: {details.get('job_position') or '—'}")
+                                st.caption(f"**{tr('Contract type')}**: {details.get('contract_type') or '—'}")
+                            if details.get("about"):
+                                st.markdown(f"**{tr('A few words about yourself')}**")
+                                st.write(details.get("about"))
+
+                    else:
+                        # Optional: show lock note ONLY if there are refs at all
+                        try:
+                            if list_latest_references_for_tenant(tid):
+                                st.caption("🔒 " + tr("Reference details are visible after you connect."))
+                        except Exception:
+                            pass
+                tenant_profile(tid, inbound_request)
    
     # =============================================================================
     # My Properties
