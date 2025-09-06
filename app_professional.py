@@ -6190,9 +6190,9 @@ def landlord_dashboard():
                             t_smin, t_smax, t_rmin, t_rmax, t_fmin, t_fmax, t_pmin, t_pmax
                         ) = r
 
-                        with st.container(border=True):
-                            # inbound_request=False in search results
-                            tenant_profile(tenant_id, landlord_id, inbound_request=False)
+        with st.container(border=True):
+            # inbound_request=False in search results
+            tenant_profile(tenant_id, landlord_id, inbound_request=False)
 
 
 
