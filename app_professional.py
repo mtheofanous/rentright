@@ -6156,8 +6156,8 @@ def landlord_dashboard():
             # IMPORTANT: landlord_id for tenant_profile
             landlord_id = st.session_state.user["id"]
 
-            # Use your reusable filter UI (prefix keeps keys separate)
-            filt = render_tenant_filters(prefix="otr")
+            # # Use your reusable filter UI (prefix keeps keys separate)
+            # filt = render_tenant_filters(prefix="otr")
 
             # default so it's always bound
             results = []
