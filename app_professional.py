@@ -5189,7 +5189,7 @@ def landlord_dashboard():
                 "price": f"€{price}" if price else None,
             }
 
-        # ── Data ───────────────────────────────────────────────────────────────────────
+        # ── Data ───────────────────────────────────────────────────────────────────────-
         rows = flc_list_prospective_for_landlord(landlord_id)  # invited=1 OR inbound_request=1 OR connected
         # (You already have this helper in your file; it includes connected via LEFT JOIN.)  # :contentReference[oaicite:2]{index=2}
 
