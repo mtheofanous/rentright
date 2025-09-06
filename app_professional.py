@@ -6170,6 +6170,7 @@ def landlord_dashboard():
                 try:
                     results = search_open_to_rent_tenants(
                         q=q,
+                        region=filt['region'],
                         city=filt["city"],
                         district=filt["district"],
                         size_min=filt["size_min"], size_max=filt["size_max"],
