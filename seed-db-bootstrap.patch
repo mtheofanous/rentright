@@ -1,0 +1,87 @@
+diff --git a/app_professional.py b/app_professional.py
+index 1111111..2222222 100644
+--- a/app_professional.py
++++ b/app_professional.py
+@@
+-from pathlib import Path
++from pathlib import Path
++import shutil
+@@
+-# ---- 1. Define writable base ----
+-WRITABLE_BASE = Path(
+-    os.environ.get("STREAMLIT_DATA_DIR")
+-    or "/mount/data" if Path("/mount/data").exists()
+-    else tempfile.gettempdir()
+-)
+-WRITABLE_BASE.mkdir(parents=True, exist_ok=True)
+-
+-# ---- 2. Define paths for DB + uploads ----
+-DB_PATH = WRITABLE_BASE / "app.db"
+-UPLOAD_DIR = WRITABLE_BASE / "uploads"
++# --- Stable DB paths (Cloud & Local) ---
++HERE = Path(__file__).parent
++WRITABLE_BASE = Path("/mnt/data") if Path("/mnt/data").exists() else HERE
++WRITABLE_BASE.mkdir(parents=True, exist_ok=True)
++
++DB_PATH   = WRITABLE_BASE / "app.db"        # runtime DB
++SEED_PATH = HERE / "seed_app.db"            # αν έχεις άλλο όνομα seed, άλλαξέ το εδώ
++
++# 1η εκκίνηση / cold start: αν λείπει η runtime DB, κάνε copy από το seed
++if not DB_PATH.exists() and SEED_PATH.exists():
++    shutil.copyfile(SEED_PATH, DB_PATH)
++    print("💾 Copied seed_app.db →", DB_PATH)
++
++# (προαιρετικό) τρέξε schema/migrations πάνω στην αντιγραμμένη DB
++try:
++    _conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
++    _conn.row_factory = sqlite3.Row
++    try:
++        init_db()            # αν υπάρχει στο αρχείο σου
++    except Exception:
++        pass
++    try:
++        run_migrations(_conn)  # αν υπάρχει στο αρχείο σου
++    except Exception:
++        pass
++    _conn.commit()
++    _conn.close()
++except Exception as _e:
++    print("Migration bootstrap warning:", _e)
++
++# ---- 2. Define paths for DB + uploads ----
++UPLOAD_DIR = WRITABLE_BASE / "uploads"
+diff --git a/.github/pull_request_template.md b/.github/pull_request_template.md
+new file mode 100644
+index 0000000..3333333
+--- /dev/null
++++ b/.github/pull_request_template.md
+@@
++## Περίληψη
++<!-- Σύντομη περιγραφή του τι αλλάζει και γιατί. -->
++
++## Τι αλλάζει
++- [ ] …
++
++## Γιατί είναι χρήσιμο
++<!-- Πρόβλημα/ανάγκη που λύνει. -->
++
++## Οδηγίες ελέγχου (Test plan)
++1. …
++2. …
++- [ ] Τα builds περνούν
++- [ ] UI / ροές ελέγχθηκαν χειροκίνητα
++
++## Επιπτώσεις / Migration
++- [ ] Καμία
++- [ ] Απαιτεί αλλαγή config
++- [ ] Αλλάζει paths/ονόματα (διευκρίνισε)
++
++## Rollback plan
++<!-- Τι κάνουμε αν κάτι πάει στραβά; -->
++
++## Screenshots/Logs (προαιρετικό)
++<!-- Εικόνες/outputs για γρήγορο review. -->
++
++## Σχετικά issues/PRs
++Closes #…
+

@@ -17,6 +17,7 @@ from functools import lru_cache
 from json import JSONDecodeError
 import json
 import io
+import shutil
 from PIL import Image, ImageDraw, ImageFont
 
 # Safe import: utils_vault may rely on missing secrets (KeyError)
@@ -741,19 +742,23 @@ def get_latest_reference_for_pair(tenant_id: int, prev_landlord_id: int):
         return None
     return {"token": row[0], "status": row[1], "created_at": row[2]}
 
-
-# ---- 1. Define writable base ----
-WRITABLE_BASE = Path(
-    os.environ.get("STREAMLIT_DATA_DIR")
-    or "/mount/data" if Path("/mount/data").exists()
-    else tempfile.gettempdir()
-)
+# --- Stable DB paths (Cloud & Local) ---
+HERE = Path(__file__).parent
+WRITABLE_BASE = Path("/mnt/data") if Path("/mnt/data").exists() else HERE
 WRITABLE_BASE.mkdir(parents=True, exist_ok=True)
 
+DB_PATH   = WRITABLE_BASE / "app.db"        # runtime DB
+SEED_PATH = HERE / "seed_app.db"            # αν το seed έχει άλλο όνομα, άλλαξέ το εδώ
+
+# 1η εκκίνηση / cold start: αν λείπει η runtime DB, κάνε copy από το seed
+if not DB_PATH.exists() and SEED_PATH.exists():
+    shutil.copyfile(SEED_PATH, DB_PATH)
+    print("💾 Copied seed_app.db →", DB_PATH)
+
 # ---- 2. Define paths for DB + uploads ----
-DB_PATH = WRITABLE_BASE / "app.db"
 UPLOAD_DIR = WRITABLE_BASE / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
 
 # ---------- Tenant Documents (upload/verify) ----------
 DOC_TYPES = {
@@ -874,11 +879,22 @@ def td_verified_map(tenant_id: int):
 
 
 # (Optional sanity check)
+# (Optional sanity check)
 try:
-    (WRITABLE_BASE / ".write_test").write_text("ok", encoding="utf-8")
-    (WRITABLE_BASE / ".write_test").unlink(missing_ok=True)
+    for p in (WRITABLE_BASE, UPLOAD_DIR):
+        p.mkdir(parents=True, exist_ok=True)
+        probe = p / ".write_test"
+        probe.write_text("ok", encoding="utf-8")
+        try:
+            # Python 3.8+: missing_ok is fine; otherwise guard with exists()
+            probe.unlink(missing_ok=True)
+        except TypeError:
+            if probe.exists():
+                probe.unlink()
 except Exception as e:
+    # Make sure you have: import streamlit as st
     st.error(f"Base directory not writable: {WRITABLE_BASE}\n{e}")
+
 
 
 # ---------- Utilities ----------
@@ -3074,16 +3090,6 @@ def get_user_id_by_email(email: str) -> int | None:
     row = conn.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()
     return row[0] if row else None
 
-
-# Pick a writable base directory
-if Path("/mount/data").exists():
-    WRITABLE_BASE = Path("/mount/data")
-else:
-    WRITABLE_BASE = Path(tempfile.gettempdir())
-
-# Define uploads/contracts inside that base
-UPLOAD_DIR = WRITABLE_BASE / "uploads" / "contracts"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def safe_filename(name: str) -> str:
