@@ -3694,34 +3694,157 @@ def cleanup_old_contracts(days_locked: int = 30, days_rejected: int = 30):
     
 # FINISH HERE------------------------------------------------------------------------------------------------------------------------------------     
     
+#=============================================================================================
+#DOCUMENTS
 
 def render_tenant_documents_ui(current_user):
-    st.caption("Ανεβάστε έγγραφα για έλεγχο από διαχειριστή. Τα έγγραφα είναι ορατά μόνο σε admin.")
-    
-    cols = st.columns(3)
-    upload_map = [("payslip","Τελευταίες Μισθοδοσίες"),
-                  ("tax_return","Εκκαθαριστικό Εφορίας"),
-                  ("employment_contract","Σύμβαση Εργασίας")]
-    for i, (dtype, label) in enumerate(upload_map):
-        with cols[i]:
-            st.write(f"**{label}**")
-            uf = st.file_uploader(f"Μεταφόρτωση {label}", type=["pdf","png","jpg","jpeg","webp"], key=f"up_{dtype}")
-            if uf is not None and st.button(f"Αποθήκευση {label}", key=f"btn_save_{dtype}"):
-                try:
-                    td_save_upload(current_user["id"], dtype, uf)
-                    st.success("Το αρχείο ανέβηκε. Κατάσταση: Pending.")
-                except Exception as e:
-                    st.error(f"Αποτυχία ανεβάσματος: {e}")
+    # --- Light CSS for cards & badges (idempotent) ---
+    st.markdown("""
+    <style>
+    .doc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+    @media (max-width: 900px){ .doc-grid{grid-template-columns:1fr} }
+    .doc-card{border:1px solid #e5e7eb;border-radius:12px;padding:14px;background:#fff}
+    .doc-h{display:flex;align-items:center;gap:8px;margin:0 0 6px 0;font-weight:700}
+    .doc-sub{color:#64748b;font-size:.9rem;margin-bottom:8px}
+    .pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.85rem;font-weight:600;border:1px solid;white-space:nowrap}
+    .pill--ok{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
+    .pill--info{background:#eff6ff;color:#1e40af;border-color:#bfdbfe}
+    .pill--err{background:#fef2f2;color:#7f1d1d;border-color:#fecaca}
+    .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .muted{color:#94a3b8;font-size:.85rem}
+    .filename{font-weight:600}
+    </style>
+    """, unsafe_allow_html=True)
 
-    rows = td_list_for_tenant(current_user["id"])
-    if rows:
-        st.write("### Κατάσταση Εγγράφων")
+    def _status_badge(status: str) -> str:
+        s = (status or "").lower()
+        if s == "verified":  return f'<span class="pill pill--ok">✅ {tr("Verified")}</span>'
+        if s == "pending":   return f'<span class="pill pill--info">⏳ {tr("Pending")}</span>'
+        return f'<span class="pill pill--err">❌ {tr("Rejected")}</span>'
+
+    st.caption(tr("Upload documents for admin review. Documents are visible only to admins."))
+
+    tab_up, tab_list = st.tabs([f"📤 {tr('Upload')}", f"📁 {tr('My documents')}"])
+
+    # -------------------- TAB: Upload --------------------
+    with tab_up:
+        st.write("")
+        st.info(tr("Supported: PDF/PNG/JPG/WebP · up to 10 MB per file."))
+        upload_specs = [
+            ("payslip", tr("Latest Payslips"), tr("Add your 1–3 most recent ones.")),
+            ("tax_return", tr("Tax Return"), tr("Used only to verify income.")),
+            ("employment_contract", tr("Employment Contract"), tr("Photo or PDF of your contract."))
+        ]
+
+        st.markdown('<div class="doc-grid">', unsafe_allow_html=True)
+        for dtype, title, hint in upload_specs:
+            st.markdown('<div class="doc-card">', unsafe_allow_html=True)
+            st.markdown(f'<p class="doc-h">{title}</p>', unsafe_allow_html=True)
+            st.markdown(f'<div class="doc-sub">{hint}</div>', unsafe_allow_html=True)
+
+            with st.form(key=f"form_{dtype}", clear_on_submit=True):
+                uf = st.file_uploader(
+                    tr("Upload {doc}").format(doc=title),
+                    type=["pdf","png","jpg","jpeg","webp"],
+                    key=f"up_{dtype}",
+                    label_visibility="collapsed"
+                )
+                submitted = st.form_submit_button(tr("Save"))
+                if submitted:
+                    if not uf:
+                        st.warning(tr("Please select a file before saving."))
+                    else:
+                        size_ok = getattr(uf, "size", None)
+                        if size_ok is not None and size_ok > 10 * 1024 * 1024:
+                            st.error(tr("The file exceeds the 10 MB limit."))
+                        else:
+                            try:
+                                td_save_upload(current_user["id"], dtype, uf)
+                                st.success(tr("File uploaded. Status: Pending."))
+                                st.rerun()
+                            except Exception as e:
+                                st.error(tr("Upload failed: {err}").format(err=e))
+            st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # -------------------- TAB: My documents --------------------
+    with tab_list:
+        rows = td_list_for_tenant(current_user["id"])
+        if not rows:
+            st.info(tr("You haven't uploaded any documents yet."))
+            return
+
+        from collections import defaultdict
+        by_type = defaultdict(list)
         for r in rows:
-            status = r["status"]
-            badge = "⏳ Pending" if status=="pending" else ("✅ Verified" if status=="verified" else "❌ Rejected")
-            st.write(f"- **{DOC_TYPES.get(r['doc_type'], r['doc_type'])}** — *{r['filename']}* → {badge} • {format_dt(r['uploaded_at'])}")
-    else:
-        st.info("Δεν έχετε ανεβάσει ακόμη έγγραφα.")
+            by_type[r["doc_type"]].append(r)
+        for k in list(by_type.keys()):
+            by_type[k].sort(key=lambda x: x["uploaded_at"], reverse=True)
+
+        for dtype in ["payslip","tax_return","employment_contract"]:
+            docs = by_type.get(dtype, [])
+            if not docs:
+                continue
+            latest = docs[0]
+            others = docs[1:]
+
+            label = tr(DOC_TYPES.get(dtype, dtype))
+            st.markdown(f"#### {label}")
+
+            left, right = st.columns([4, 1])
+            with left:
+                st.markdown(
+                    f"""
+                    <div class="row">
+                      {_status_badge(latest['status'])}
+                      <span class="filename">{latest['filename']}</span>
+                      <span class="muted">• {tr('Uploaded')}: {format_dt(latest['uploaded_at'])}</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            with right:
+                try:
+                    data = td_read_bytes(latest["id"])
+                except Exception:
+                    data = None
+                if data:
+                    st.download_button(
+                        tr("Download"),
+                        data=data,
+                        file_name=latest["filename"] or f"{dtype}.pdf",
+                        mime="application/octet-stream",
+                        key=f"dl_{latest['id']}"
+                    )
+
+            if others:
+                with st.expander(tr("Previous files for this type")):
+                    for r in others:
+                        st.markdown(
+                            f"""
+                            <div class="row">
+                              {_status_badge(r['status'])}
+                              <span class="filename">{r['filename']}</span>
+                              <span class="muted">• {tr('Uploaded')}: {format_dt(r['uploaded_at'])}</span>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+                        try:
+                            d = td_read_bytes(r["id"])
+                            if d:
+                                st.download_button(
+                                    tr("Download"),
+                                    data=d,
+                                    file_name=r["filename"] or f"{dtype}.pdf",
+                                    mime="application/octet-stream",
+                                    key=f"dl_{r['id']}"
+                                )
+                        except Exception:
+                            pass
+
+            st.divider()
+
 
 
 #---------TENANT DASHBOARD HELPERS---------------------------------------------------
