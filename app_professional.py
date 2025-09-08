@@ -742,20 +742,23 @@ def get_latest_reference_for_pair(tenant_id: int, prev_landlord_id: int):
         return None
     return {"token": row[0], "status": row[1], "created_at": row[2]}
 
-# --- Stable DB paths (Cloud & Local) ---
 HERE = Path(__file__).parent
-WRITABLE_BASE = Path("/mnt/data") if Path("/mnt/data").exists() else HERE
+CLOUD_DIRS = [Path("/mount/data"), Path("/mnt/data")]
+WRITABLE_BASE = next((p for p in CLOUD_DIRS if p.exists()), HERE)
 WRITABLE_BASE.mkdir(parents=True, exist_ok=True)
 
-DB_PATH   = WRITABLE_BASE / "app.db"        # runtime DB
-SEED_PATH = HERE / "seed_app.db"            # αν το seed έχει άλλο όνομα, άλλαξέ το εδώ
+DB_PATH   = WRITABLE_BASE / "app.db"
+SEED_PATH = HERE / "app_seed.db"   # ← your file name
 
-# 1η εκκίνηση / cold start: αν λείπει η runtime DB, κάνε copy από το seed
-if not DB_PATH.exists() and SEED_PATH.exists():
+# Optional: force reseed once by setting FORCE_SEED=1 in env/secrets
+if os.environ.get("FORCE_SEED") == "1" and DB_PATH.exists():
+    DB_PATH.unlink()
+
+# Copy seed on cold start (or if file is 0 bytes)
+if (not DB_PATH.exists() or DB_PATH.stat().st_size == 0) and SEED_PATH.exists():
     shutil.copyfile(SEED_PATH, DB_PATH)
-    print("💾 Copied seed_app.db →", DB_PATH)
+    print(f"💾 Copied {SEED_PATH.name} → {DB_PATH}")
 
-# ---- 2. Define paths for DB + uploads ----
 UPLOAD_DIR = WRITABLE_BASE / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
