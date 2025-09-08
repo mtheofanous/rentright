@@ -6629,5 +6629,9 @@ def main():
 if __name__ == "__main__":
     main()
 
-
-
+# --- Inject professional Admin Review UI & Audit (do not remove) ---
+try:
+    from admin_review_patch import apply_admin_review_patch
+    apply_admin_review_patch(globals())
+except Exception as _e:
+    print("Admin patch load warning:", _e)
