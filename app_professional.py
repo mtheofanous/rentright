@@ -1372,12 +1372,11 @@ def add_column_if_missing(conn, table: str, col_def: str):
 def run_migrations(conn):
     """
     Run all DB migrations idempotently.
-    Ensures all expected columns exist on every run.
+    Ensures all expected columns/tables exist on every run.
     """
-
     cur = conn.cursor()
 
-    # --- 1) Try tenant-docs migration, but don’t block the rest ---
+    # 1) Τρέξε τη migration των εγγράφων ενοικιαστή (δεν μπλοκάρουμε αν αποτύχει)
     try:
         run_tenant_docs_migration(conn)
     except Exception as e:
@@ -1387,33 +1386,26 @@ def run_migrations(conn):
         except Exception:
             print(f"DB migration warning (tenant docs): {e}")
 
-    # --- 2) Column helper ---
+    # 2) Helper για προσθήκη στήλης αν λείπει
     def _add_column_if_missing(_conn, table, column_def):
-        """
-        Adds a column if it's missing.
-        column_def is a string like 'search_region TEXT'.
-        """
         c = _conn.cursor()
         colname = column_def.split()[0]
         c.execute(f"PRAGMA table_info({table})")
-        existing = {row[1] for row in c.fetchall()}  # row[1] = column name
+        existing = {row[1] for row in c.fetchall()}
         if colname not in existing:
             c.execute(f"ALTER TABLE {table} ADD COLUMN {column_def}")
             _conn.commit()
 
     add_col = globals().get("add_column_if_missing", _add_column_if_missing)
 
-    # --- 3) Reference request fixes ---
+    # 3) Reference request fixes
     add_col(conn, "reference_requests", "emailed_at TEXT")
-    
-    # --- Reference revocation columns ---
     add_col(conn, "reference_requests", "revoked_at TEXT")
     add_col(conn, "reference_requests", "revoked_by TEXT")
     add_col(conn, "reference_requests", "revoked_reason TEXT")
 
-
-    # --- 4) Tenant profile columns (critical for open-to-rent prefs) ---
-    required_cols = [
+    # 4) Tenant profile columns (open-to-rent prefs)
+    for col_def in [
         "open_to_rent INTEGER NOT NULL DEFAULT 0",
         "search_region TEXT",
         "search_city TEXT",
@@ -1430,12 +1422,29 @@ def run_migrations(conn):
         "floor_max INTEGER",
         "price_min INTEGER",
         "price_max INTEGER",
-    ]
-    for col_def in required_cols:
+    ]:
         add_col(conn, "tenant_profiles", col_def)
 
-    # --- 5) Future-proof: add more schema guards here if needed ---
-    # e.g., landlord_profiles, reference_requests, indexes, etc.
+    # 5) **ΝΕΟ**: flags για αιτήματα από ιδιοκτήτη (landlord-origin)
+    add_col(conn, "future_landlord_contacts", "inbound_request INTEGER NOT NULL DEFAULT 0")
+    add_col(conn, "future_landlord_contacts", "inbound_requested_at TEXT")
+
+    # 6) **ΝΕΟ**: πίνακας συνδέσεων landlord-tenant (για status & chat)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS future_landlord_connections (
+            landlord_id INTEGER NOT NULL,
+            tenant_id   INTEGER NOT NULL,
+            status      TEXT NOT NULL DEFAULT 'connected' CHECK(status IN ('connected','rejected')),
+            created_at  TEXT NOT NULL,
+            updated_at  TEXT NOT NULL,
+            PRIMARY KEY (landlord_id, tenant_id),
+            FOREIGN KEY (landlord_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (tenant_id)   REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_flc_landlord ON future_landlord_connections(landlord_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_flc_tenant   ON future_landlord_connections(tenant_id)")
+    conn.commit()
 
     return True
 
