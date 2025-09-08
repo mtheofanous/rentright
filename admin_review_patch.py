@@ -217,7 +217,7 @@ def apply_admin_review_patch(env: dict):
             for r in rows:
                 title = f"{DOC_TYPES.get(r['doc_type'], r['doc_type'])} • {r['filename']} — {r['name']} <{r['email']}>"
                 meta  = f"{tr('Uploaded')}: {format_dt(r['uploaded_at'])}"
-                if r.get('status_updated_at'):
+                if r["status_updated_at"]:
                     meta += f" · {tr('Updated')}: {format_dt(r['status_updated_at'])}"
                 with st.expander(title + " • " + meta, expanded=False):
                     colA, colB = st.columns([2, 1])
@@ -279,7 +279,7 @@ def apply_admin_review_patch(env: dict):
             else:
                 for a in rows:
                     ts = a["created_at"]
-                    who = a.get("actor_email") or "-"
+                    who = a["actor_email"] or "-"
                     what = a["action"]
                     tgt = f"{a['entity']}#{a['entity_id']}"
                     st.write(f"- {ts} • {who} → {what} • {tgt}")
