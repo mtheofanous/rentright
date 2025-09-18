@@ -60,6 +60,21 @@ section.main > div {
 </style>
 """, unsafe_allow_html=True)
 
+
+st.markdown("""
+<style>
+.icon-btn > button {
+    width:40px;
+    height:40px;
+    padding:0;
+    font-size:22px;
+    line-height:1;
+    text-align:center;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
 # === Language selector & translation ===
 if "lang" not in st.session_state:
     st.session_state["lang"] = "Ελληνικά" 
@@ -5953,34 +5968,67 @@ def tenant_dashboard():
 
 
     current_page = st.session_state.get("tenant_page", "my_contacts")
-
+    
     with nav1:
         is_active = current_page == "my_contacts"
-        if st.button(tr("My Contacts"), key="btn_my_contacts",
-                    use_container_width=True,
-                    type=("primary" if is_active else "secondary")):
+        if st.button("👥", key="btn_my_contacts",
+                    type=("primary" if is_active else "secondary"),
+                    use_container_width=False, help=tr("My Contacts"),
+                    kwargs={"className": "icon-btn"}):
             _go("my_contacts")
 
     with nav2:
         is_active = current_page == "find_landlords"
-        if st.button(tr("Search"), key="btn_find_landlords",
-                    use_container_width=True,
-                    type=("primary" if is_active else "secondary")):
+        if st.button("🔍", key="btn_find_landlords",
+                    type=("primary" if is_active else "secondary"),
+                    use_container_width=False, help=tr("Search"),
+                    kwargs={"className": "icon-btn"}):
             _go("find_landlords")
 
     with nav3:
         is_active = current_page == "open_to_rent"
-        if st.button(tr("Profile"), key="btn_open_to_rent",
-                    use_container_width=True,
-                    type=("primary" if is_active else "secondary")):
+        if st.button("👤", key="btn_open_to_rent",
+                    type=("primary" if is_active else "secondary"),
+                    use_container_width=False, help=tr("Profile"),
+                    kwargs={"className": "icon-btn"}):
             _go("open_to_rent")
 
     with nav4:
         is_active = current_page == "prev_refs"
-        if st.button(tr("My References"), key="btn_prev_refs",
-                    use_container_width=True,
-                    type=("primary" if is_active else "secondary")):
+        if st.button("📄", key="btn_prev_refs",
+                    type=("primary" if is_active else "secondary"),
+                    use_container_width=False, help=tr("My References"),
+                    kwargs={"className": "icon-btn"}):
             _go("prev_refs")
+
+
+    # with nav1:
+    #     is_active = current_page == "my_contacts"
+    #     if st.button(tr("My Contacts"), key="btn_my_contacts",
+    #                 use_container_width=True,
+    #                 type=("primary" if is_active else "secondary")):
+    #         _go("my_contacts")
+
+    # with nav2:
+    #     is_active = current_page == "find_landlords"
+    #     if st.button(tr("Search"), key="btn_find_landlords",
+    #                 use_container_width=True,
+    #                 type=("primary" if is_active else "secondary")):
+    #         _go("find_landlords")
+
+    # with nav3:
+    #     is_active = current_page == "open_to_rent"
+    #     if st.button(tr("Profile"), key="btn_open_to_rent",
+    #                 use_container_width=True,
+    #                 type=("primary" if is_active else "secondary")):
+    #         _go("open_to_rent")
+
+    # with nav4:
+    #     is_active = current_page == "prev_refs"
+    #     if st.button(tr("My References"), key="btn_prev_refs",
+    #                 use_container_width=True,
+    #                 type=("primary" if is_active else "secondary")):
+    #         _go("prev_refs")
 
     page = st.session_state.tenant_page
     if page == "my_contacts":
