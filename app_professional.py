@@ -74,6 +74,24 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+st.markdown("""
+<style>
+.nav-icons {
+    display: flex;
+    justify-content: space-evenly;
+    gap: 8px;
+    flex-wrap: nowrap;     /* no wrapping to new line */
+}
+.nav-icons button {
+    width:40px;
+    height:40px;
+    font-size:22px;
+    padding:0;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
 
 # === Language selector & translation ===
 if "lang" not in st.session_state:
@@ -5969,37 +5987,26 @@ def tenant_dashboard():
 
     current_page = st.session_state.get("tenant_page", "my_contacts")
     
-    with nav1:
-        is_active = current_page == "my_contacts"
-        if st.button("👥", key="btn_my_contacts",
-                    type=("primary" if is_active else "secondary"),
-                    use_container_width=False, help=tr("My Contacts"),
-                    kwargs={"className": "icon-btn"}):
-            _go("my_contacts")
+    st.markdown('<div class="nav-icons">', unsafe_allow_html=True)
 
-    with nav2:
-        is_active = current_page == "find_landlords"
-        if st.button("🔍", key="btn_find_landlords",
-                    type=("primary" if is_active else "secondary"),
-                    use_container_width=False, help=tr("Search"),
-                    kwargs={"className": "icon-btn"}):
-            _go("find_landlords")
+    if st.button("👥", key="btn_my_contacts", help=tr("My Contacts"),
+                type=("primary" if current_page == "my_contacts" else "secondary")):
+        _go("my_contacts")
 
-    with nav3:
-        is_active = current_page == "open_to_rent"
-        if st.button("👤", key="btn_open_to_rent",
-                    type=("primary" if is_active else "secondary"),
-                    use_container_width=False, help=tr("Profile"),
-                    kwargs={"className": "icon-btn"}):
-            _go("open_to_rent")
+    if st.button("🔍", key="btn_find_landlords", help=tr("Search"),
+                type=("primary" if current_page == "find_landlords" else "secondary")):
+        _go("find_landlords")
 
-    with nav4:
-        is_active = current_page == "prev_refs"
-        if st.button("📄", key="btn_prev_refs",
-                    type=("primary" if is_active else "secondary"),
-                    use_container_width=False, help=tr("My References"),
-                    kwargs={"className": "icon-btn"}):
-            _go("prev_refs")
+    if st.button("👤", key="btn_open_to_rent", help=tr("Profile"),
+                type=("primary" if current_page == "open_to_rent" else "secondary")):
+        _go("open_to_rent")
+
+    if st.button("📄", key="btn_prev_refs", help=tr("My References"),
+                type=("primary" if current_page == "prev_refs" else "secondary")):
+        _go("prev_refs")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
 
 
     # with nav1:
