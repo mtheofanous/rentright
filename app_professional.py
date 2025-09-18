@@ -5987,25 +5987,33 @@ def tenant_dashboard():
 
     current_page = st.session_state.get("tenant_page", "my_contacts")
     
-    st.markdown('<div class="nav-icons">', unsafe_allow_html=True)
+        # Create 4 equal columns
+    col1, col2, col3, col4 = st.columns(4, gap="small")
 
-    if st.button("👥", key="btn_my_contacts", help=tr("My Contacts"),
-                type=("primary" if current_page == "my_contacts" else "secondary")):
-        _go("my_contacts")
+    with col1:
+        if st.button("👥", key="btn_my_contacts",
+                    type=("primary" if current_page == "my_contacts" else "secondary"),
+                    help=tr("My Contacts")):
+            _go("my_contacts")
 
-    if st.button("🔍", key="btn_find_landlords", help=tr("Search"),
-                type=("primary" if current_page == "find_landlords" else "secondary")):
-        _go("find_landlords")
+    with col2:
+        if st.button("🔍", key="btn_find_landlords",
+                    type=("primary" if current_page == "find_landlords" else "secondary"),
+                    help=tr("Search")):
+            _go("find_landlords")
 
-    if st.button("👤", key="btn_open_to_rent", help=tr("Profile"),
-                type=("primary" if current_page == "open_to_rent" else "secondary")):
-        _go("open_to_rent")
+    with col3:
+        if st.button("👤", key="btn_open_to_rent",
+                    type=("primary" if current_page == "open_to_rent" else "secondary"),
+                    help=tr("Profile")):
+            _go("open_to_rent")
 
-    if st.button("📄", key="btn_prev_refs", help=tr("My References"),
-                type=("primary" if current_page == "prev_refs" else "secondary")):
-        _go("prev_refs")
+    with col4:
+        if st.button("📄", key="btn_prev_refs",
+                    type=("primary" if current_page == "prev_refs" else "secondary"),
+                    help=tr("My References")):
+            _go("prev_refs")
 
-    st.markdown('</div>', unsafe_allow_html=True)
 
 
 
