@@ -63,33 +63,15 @@ section.main > div {
 
 st.markdown("""
 <style>
-.icon-btn > button {
-    width:40px;
-    height:40px;
-    padding:0;
-    font-size:22px;
-    line-height:1;
-    text-align:center;
+button[kind="secondary"], button[kind="primary"] {
+    width:35px !important;
+    height:35px !important;
+    padding:0 !important;
+    font-size:22px !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("""
-<style>
-.nav-icons {
-    display: flex;
-    justify-content: space-evenly;
-    gap: 8px;
-    flex-wrap: nowrap;     /* no wrapping to new line */
-}
-.nav-icons button {
-    width:40px;
-    height:40px;
-    font-size:22px;
-    padding:0;
-}
-</style>
-""", unsafe_allow_html=True)
 
 
 
