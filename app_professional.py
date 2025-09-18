@@ -41,22 +41,17 @@ st.set_page_config(page_title="RentRight", page_icon="🏠", layout="centered")
 
 st.markdown("""
 <style>
-/* Make the whole app slightly smaller */
-html, body, [class^="st"] {
-    zoom: 0.99;          /* 0.85–0.95 is usually good */
-    -moz-transform: scale(0.9);       /* Firefox fallback */
-    -moz-transform-origin: top left;
-}
+
 
 /* Reduce font sizes a bit */
 body, div, label, span, p, button, input, textarea, select {
-    font-size: 0.92rem !important;
+    font-size: 0.82rem !important;
 }
 
-/* Optional: narrower content width */
-section.main > div {
-    max-width: 950px;   /* default ~ 1200px */
-}
+# /* Optional: narrower content width */
+# section.main > div {
+#     max-width: 950px;   /* default ~ 1200px */
+# }
 </style>
 """, unsafe_allow_html=True)
 
@@ -64,10 +59,10 @@ section.main > div {
 st.markdown("""
 <style>
 button[kind="secondary"], button[kind="primary"] {
-    width:35px !important;
-    height:35px !important;
+    width:70px !important;
+    height:70px !important;
     padding:0 !important;
-    font-size:22px !important;
+    font-size:10px !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -5969,63 +5964,34 @@ def tenant_dashboard():
 
     current_page = st.session_state.get("tenant_page", "my_contacts")
     
-        # Create 4 equal columns
-    col1, col2, col3, col4 = st.columns(4, gap="small")
 
-    with col1:
-        if st.button("👥", key="btn_my_contacts",
-                    type=("primary" if current_page == "my_contacts" else "secondary"),
-                    help=tr("My Contacts")):
+    with nav1:
+        is_active = current_page == "my_contacts"
+        if st.button(tr("My Contacts"), key="btn_my_contacts",
+                    use_container_width=True,
+                    type=("primary" if is_active else "secondary")):
             _go("my_contacts")
 
-    with col2:
-        if st.button("🔍", key="btn_find_landlords",
-                    type=("primary" if current_page == "find_landlords" else "secondary"),
-                    help=tr("Search")):
+    with nav2:
+        is_active = current_page == "find_landlords"
+        if st.button(tr("Search"), key="btn_find_landlords",
+                    use_container_width=True,
+                    type=("primary" if is_active else "secondary")):
             _go("find_landlords")
 
-    with col3:
-        if st.button("👤", key="btn_open_to_rent",
-                    type=("primary" if current_page == "open_to_rent" else "secondary"),
-                    help=tr("Profile")):
+    with nav3:
+        is_active = current_page == "open_to_rent"
+        if st.button(tr("Profile"), key="btn_open_to_rent",
+                    use_container_width=True,
+                    type=("primary" if is_active else "secondary")):
             _go("open_to_rent")
 
-    with col4:
-        if st.button("📄", key="btn_prev_refs",
-                    type=("primary" if current_page == "prev_refs" else "secondary"),
-                    help=tr("My References")):
+    with nav4:
+        is_active = current_page == "prev_refs"
+        if st.button(tr("My References"), key="btn_prev_refs",
+                    use_container_width=True,
+                    type=("primary" if is_active else "secondary")):
             _go("prev_refs")
-
-
-
-
-    # with nav1:
-    #     is_active = current_page == "my_contacts"
-    #     if st.button(tr("My Contacts"), key="btn_my_contacts",
-    #                 use_container_width=True,
-    #                 type=("primary" if is_active else "secondary")):
-    #         _go("my_contacts")
-
-    # with nav2:
-    #     is_active = current_page == "find_landlords"
-    #     if st.button(tr("Search"), key="btn_find_landlords",
-    #                 use_container_width=True,
-    #                 type=("primary" if is_active else "secondary")):
-    #         _go("find_landlords")
-
-    # with nav3:
-    #     is_active = current_page == "open_to_rent"
-    #     if st.button(tr("Profile"), key="btn_open_to_rent",
-    #                 use_container_width=True,
-    #                 type=("primary" if is_active else "secondary")):
-    #         _go("open_to_rent")
-
-    # with nav4:
-    #     is_active = current_page == "prev_refs"
-    #     if st.button(tr("My References"), key="btn_prev_refs",
-    #                 use_container_width=True,
-    #                 type=("primary" if is_active else "secondary")):
-    #         _go("prev_refs")
 
     page = st.session_state.tenant_page
     if page == "my_contacts":
