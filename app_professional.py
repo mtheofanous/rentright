@@ -38,6 +38,28 @@ except Exception as e:
 
 # ⚠️ set_page_config must be the first Streamlit command
 st.set_page_config(page_title="RentRight", page_icon="🏠", layout="centered")
+
+st.markdown("""
+<style>
+/* Make the whole app slightly smaller */
+html, body, [class^="st"] {
+    zoom: 0.99;          /* 0.85–0.95 is usually good */
+    -moz-transform: scale(0.9);       /* Firefox fallback */
+    -moz-transform-origin: top left;
+}
+
+/* Reduce font sizes a bit */
+body, div, label, span, p, button, input, textarea, select {
+    font-size: 0.92rem !important;
+}
+
+/* Optional: narrower content width */
+section.main > div {
+    max-width: 950px;   /* default ~ 1200px */
+}
+</style>
+""", unsafe_allow_html=True)
+
 # === Language selector & translation ===
 if "lang" not in st.session_state:
     st.session_state["lang"] = "Ελληνικά" 
