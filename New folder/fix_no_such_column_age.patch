@@ -1,0 +1,63 @@
+*** a/app_professional.py
+--- b/app_professional.py
+@@
+ import sqlite3
+@@
+ from datetime import datetime, timezone
+@@
+ import shutil
+@@
+ from PIL import Image, ImageDraw, ImageFont
+ 
+@@
+ @st.cache_resource
+ def get_conn():
+@@
+     conn.execute("PRAGMA busy_timeout=5000;")  # wait up to 5s if locked
+     return conn
+ 
++
++# ---- Schema helpers & safe migrations ----------------------------------------
++def _table_has_column(conn: sqlite3.Connection, table: str, col: str) -> bool:
++    try:
++        cur = conn.execute(f\"PRAGMA table_info({table})\")
++        return any(r[1] == col for r in cur.fetchall())
++    except Exception:
++        return False
++
++def ensure_tenant_profile_schema():
++    \"\"\"Add missing columns used by profile UI to tenant_profiles.\n
++    Fixes OperationalError: no such column: age when older DBs are used.\n
++    Columns ensured:\n
++      age INTEGER, monthly_salary INTEGER, marital_status TEXT,\n
++      job_position TEXT, contract_type TEXT, pets INTEGER,\n
++      num_tenants INTEGER, about TEXT\n
++    \"\"\"
++    c = get_conn()
++    cols = {r[1] for r in c.execute(\"PRAGMA table_info(tenant_profiles)\").fetchall()}
++    # (name, ddl)
++    alters = []
++    if \"age\" not in cols:              alters.append(\"ALTER TABLE tenant_profiles ADD COLUMN age INTEGER\")
++    if \"monthly_salary\" not in cols:   alters.append(\"ALTER TABLE tenant_profiles ADD COLUMN monthly_salary INTEGER\")
++    if \"marital_status\" not in cols:   alters.append(\"ALTER TABLE tenant_profiles ADD COLUMN marital_status TEXT\")
++    if \"job_position\" not in cols:     alters.append(\"ALTER TABLE tenant_profiles ADD COLUMN job_position TEXT\")
++    if \"contract_type\" not in cols:    alters.append(\"ALTER TABLE tenant_profiles ADD COLUMN contract_type TEXT\")
++    if \"pets\" not in cols:             alters.append(\"ALTER TABLE tenant_profiles ADD COLUMN pets INTEGER DEFAULT 0\")
++    if \"num_tenants\" not in cols:      alters.append(\"ALTER TABLE tenant_profiles ADD COLUMN num_tenants INTEGER DEFAULT 1\")
++    if \"about\" not in cols:            alters.append(\"ALTER TABLE tenant_profiles ADD COLUMN about TEXT\")
++    for ddl in alters:
++        try:
++            c.execute(ddl)
++        except sqlite3.OperationalError:
++            # ignore if already exists / other benign race
++            pass
++    if alters:
++        c.commit()
++
++# Run the migration early at import time so downstream code is safe
++try:
++    ensure_tenant_profile_schema()
++except Exception:
++    # non-fatal
++    pass
+*** End Patch

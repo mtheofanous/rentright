@@ -1,0 +1,221 @@
+--- a/app_professional.py
++++ b/app_professional.py
+@@ -161,6 +161,14 @@
+     "Invitation sent successfully.": "Η πρόσκληση στάλθηκε με επιτυχία.",
+     "Invited": "Προσκεκλημένος",
+     "Landlord": "Ιδιοκτήτης",
++    "Agent": "Μεσίτης",
++    "Agent Dashboard": "Πίνακας Μεσίτη",
++    "Agency / Business name": "Επωνυμία Μεσιτικού",
++    "AFM (9 digits)": "ΑΦΜ (9 ψηφία)",
++    "AMK / Registry (optional)": "ΑΜΚ / Μητρώο (προαιρετικό)",
++    "Please enter your agency / business name.": "Παρακαλώ εισάγετε την επωνυμία του μεσιτικού.",
++    "Please enter a valid AFM (9 digits).": "Παρακαλώ εισάγετε έγκυρο ΑΦΜ (9 ψηφία).",
++    "Real Estate Agent verification": "Επαλήθευση Μεσίτη",
+     "Landlord Dashboard": "Πίνακας Ιδιοκτήτη",
+     "Landlord email": "Email ιδιοκτήτη",
+     "Landlord name": "Όνομα ιδιοκτήτη",
+@@ -1176,9 +1184,9 @@
+         params.extend([like, like])
+ 
+     sql = f"""
+-        SELECT id, COALESCE(name, ''), email
++        SELECT id, COALESCE(name, '') AS name, email, role
+         FROM users
+-        WHERE role='landlord' AND {" AND ".join(conds)}
++        WHERE role IN ('landlord','agent') AND {" AND ".join(conds)}
+         ORDER BY (CASE WHEN COALESCE(name,'')='' THEN 1 ELSE 0 END),
+                  LOWER(COALESCE(name,email))
+         LIMIT ?
+@@ -1195,10 +1203,7 @@
+ 
+ 
+ # ----- Φόρτωμα & ευρετήρια από ellada.json -----
+-# --- Greece location pickers (Region → Regional Unit → Municipality) ---
+-
+-@st.cache_resource
+-def load_ellada():
++# --- Greece location pickers (Region → Regional Unit → Municipality) ---ad_ellada():
+     """
+     Return structure:
+     {
+@@ -1459,7 +1464,48 @@
+         existing = {row[1] for row in c.fetchall()}
+         if colname not in existing:
+             c.execute(f"ALTER TABLE {table} ADD COLUMN {column_def}")
+-            _conn.commit()
++            _
++    # --- Role CHECK migration to include 'agent' (SQLite workaround) ---
++    try:
++        row = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").fetchone()
++        ddl = (row[0] or "") if row else ""
++        if '"agent"' not in ddl and "'agent'" not in ddl:
++            conn.execute("PRAGMA foreign_keys=off;")
++            conn.execute("""
++                CREATE TABLE users_new (
++                    id INTEGER PRIMARY KEY AUTOINCREMENT,
++                    email TEXT UNIQUE NOT NULL,
++                    name TEXT NOT NULL,
++                    password_hash TEXT NOT NULL,
++                    role TEXT CHECK(role IN ("tenant","landlord","admin","agent")) NOT NULL,
++                    created_at TEXT NOT NULL,
++                    phone TEXT,
++                    phone_visible INTEGER NOT NULL DEFAULT 0
++                )
++            """)
++            conn.execute("""
++                INSERT INTO users_new(id,email,name,password_hash,role,created_at,phone,phone_visible)
++                SELECT id,email,name,password_hash,role,created_at,phone,phone_visible FROM users
++            """)
++            conn.execute("DROP TABLE users;")
++            conn.execute("ALTER TABLE users_new RENAME TO users;")
++            conn.execute("PRAGMA foreign_keys=on;")
++    except Exception:
++        pass
++
++    # Ensure agent_profiles exists (idempotent)
++    cur.execute("""
++        CREATE TABLE IF NOT EXISTS agent_profiles (
++            user_id INTEGER UNIQUE NOT NULL,
++            agency_name TEXT NOT NULL,
++            afm TEXT NOT NULL,
++            amk TEXT,
++            verified INTEGER NOT NULL DEFAULT 0,
++            created_at TEXT NOT NULL,
++            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
++        )
++    """)
++conn.commit()
+ 
+     add_col = globals().get("add_column_if_missing", _add_column_if_missing)
+ 
+@@ -1560,7 +1606,7 @@
+             email TEXT UNIQUE NOT NULL,
+             name TEXT NOT NULL,
+             password_hash TEXT NOT NULL,
+-            role TEXT CHECK(role IN ("tenant","landlord","admin")) NOT NULL,
++            role TEXT CHECK(role IN ("tenant","landlord","admin","agent")) NOT NULL,
+             created_at TEXT NOT NULL,
+             phone TEXT,
+             phone_visible INTEGER NOT NULL DEFAULT 0
+@@ -1574,6 +1620,18 @@
+             updated_at TEXT NOT NULL,
+             FOREIGN KEY (tenant_id) REFERENCES users(id) ON DELETE CASCADE
+         )
++    """)
++    cur.execute("""
++        CREATE TABLE IF NOT EXISTS agent_profiles (
++            user_id INTEGER UNIQUE NOT NULL,
++            agency_name TEXT NOT NULL,
++            afm TEXT NOT NULL,
++            amk TEXT,
++            verified INTEGER NOT NULL DEFAULT 0,
++            created_at TEXT NOT NULL,
++            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
++        )
++    """)
+     """)
+     cur.execute("""
+         CREATE TABLE IF NOT EXISTS previous_landlords (
+@@ -1952,7 +2010,7 @@
+         landlord_id = st.session_state.get("chat_with_landlord_id")
+         if landlord_id:
+             partner_user = get_user_by_id(landlord_id)
+-    elif role == "landlord":
++    elif role in ("landlord","agent"):
+         landlord_id = me["id"]
+         tenant_id = st.session_state.get("chat_with_tenant_id")
+         if tenant_id:
+@@ -2632,6 +2690,14 @@
+ def is_valid_afm(s: str) -> bool:
+     return bool(re.fullmatch(r"\d{9}", (s or "").strip()))
+ 
++
++def role_icon(role: str) -> str:
++    if role == "agent":
++        return "🏢"
++    if role == "landlord":
++        return "🏠"
++    return ""
++
+ # ---------- Auth UI ----------
+ 
+ def login_form():
+@@ -2662,7 +2728,14 @@
+         email = st.text_input(tr('Email'))
+         phone = st.text_input(tr('Phone (optional)'), placeholder="+3069XXXXXXXX")
+         phone_visible = st.checkbox(tr('Show phone to others?'), value=False)
+-        role = st.selectbox(tr('Role'), ["tenant","landlord"], format_func=lambda x: x.capitalize())
++        role = st.selectbox(tr('Role'), ["tenant","landlord","agent"], format_func=lambda x: x.capitalize())
++        # Extra fields for Agent verification (Greek market)
++        agency_name = afm = amk = None
++        if role == "agent":
++            st.markdown(f"### {tr('Real Estate Agent verification')}")
++            agency_name = st.text_input(tr("Agency / Business name"))
++            afm = st.text_input(tr("AFM (9 digits)"))
++            amk = st.text_input(tr("AMK / Registry (optional)"), placeholder="π.χ. ΑΜΚ / Μητρώο")
+         password = st.text_input(tr('Password'), type="password")
+         password2 = st.text_input(tr('Confirm password'), type="password")
+         submitted = st.form_submit_button(tr('Create Account'))
+@@ -2683,7 +2756,28 @@
+         if get_user_by_email(email):
+             st.error(tr('This email is already registered.'))
+             return
+-        create_user(email, name, password, role, phone=phone.strip() or None, phone_visible=1 if phone_visible else 0)
++                # Agent-specific validation
++        if role == "agent":
++            try:
++                conn = get_conn()
++                u = get_user_by_email(email)
++                if u:
++                    conn.execute(
++                        "INSERT OR REPLACE INTO agent_profiles(user_id, agency_name, afm, amk, verified, created_at) VALUES (?,?,?,?,0,?)",
++                        (u["id"], (agency_name or "").strip(), (afm or "").strip(), (amk or "").strip(), datetime.utcnow().isoformat())
++                    )
++                    conn.commit()
++            except Exception:
++                st.warning("Agent profile saved with limited details.")
++
++        if role == "agent":
++            if not (agency_name or "").strip():
++                st.error(tr('Please enter your agency / business name.'))
++                return
++            if not is_valid_afm(afm):
++                st.error(tr('Please enter a valid AFM (9 digits).'))
++                return
++create_user(email, name, password, role, phone=phone.strip() or None, phone_visible=1 if phone_visible else 0)
+         st.success(tr('Your account has been created. Please sign in to continue.'))
+         # 🔁 redirect back to landing/login
+         st.session_state.signup_done = True
+@@ -4883,7 +4977,12 @@
+                 if not results:
+                     st.caption(tr("No matches."))
+                 else:
+-                    for (ll_id, ll_name, ll_email) in results:
++                    for row in results:
++                    if len(row) == 4:
++                        ll_id, ll_name, ll_email, ll_role = row
++                    else:
++                        ll_id, ll_name, ll_email = row
++                        ll_role = 'landlord'
+                         # relation/contacts state
+                         try:
+                             rel_status = flc_get_status(ll_id, tenant_id)  # 'connected' | 'rejected' | None
+@@ -4905,6 +5004,8 @@
+ 
+                             # Left: avatar + identity (same look as Contacts)
+                             display_title = (ll_name or ll_email or f"Landlord #{ll_id}").strip()
++                            icon = role_icon(ll_role)
++                            display_title = f"{icon} {display_title}"
+                             initials = _initials(ll_name, ll_email)
+                             colL.markdown(
+                                 f"""
+@@ -6082,7 +6183,7 @@
+     # --- Header ---
+     col_h1, col_h2, col_h3 = st.columns([4, 1, 2])
+     with col_h1:
+-        st.header(tr("Landlord Dashboard"))
++        st.header(tr("Agent Dashboard") if st.session_state.user.get("role")=="agent" else tr("Landlord Dashboard"))
+     with col_h2:
+         if st.button("🔄", key="landlord_refresh"):
+             st.rerun()
