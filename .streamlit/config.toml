@@ -1,0 +1,17 @@
+[theme]
+# --- Core brand colors ---
+# primaryColor = "#0A66C2"            # LinkedIn blue: buttons, links, accents
+# backgroundColor = "#F5F7FA"         # very light gray for soft background
+# secondaryBackgroundColor = "#FFFFFF" # card/panel backgrounds
+# textColor = "#1C1C1C"               # deep charcoal for easy reading
+
+# --- Typography ---
+# font = "sans serif"                 # (uses system stack; see note below)
+
+# --- Optional dark mode override (if you later support it) ---
+# [theme.dark]
+# primaryColor = "#0A66C2"
+# backgroundColor = "#121212"
+# secondaryBackgroundColor = "#1E1E1E"
+# textColor = "#F3F3F3"
+

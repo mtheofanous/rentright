@@ -1,0 +1,119 @@
+[
+  {
+    "name": "size_m2",
+    "column": "size_m2",
+    "sql_type": "INTEGER",
+    "default": null,
+    "active": true,
+    "form": {"type": "number", "label": "Size (m²)", "min": 10, "max": 500, "step": 5},
+    "o2r_filter": {
+      "mode": "range",
+      "label_min": "Min size (m²)",
+      "label_max": "Max size (m²)",
+      "col_min": "size_min",
+      "col_max": "size_max"
+    }
+  },
+  {
+    "name": "rooms",
+    "column": "rooms",
+    "sql_type": "INTEGER",
+    "default": null,
+    "active": true,
+    "form": {"type": "number", "label": "Rooms", "min": 1, "max": 12, "step": 1},
+    "o2r_filter": {
+      "mode": "range",
+      "label_min": "Min rooms",
+      "label_max": "Max rooms",
+      "col_min": "rooms_min",
+      "col_max": "rooms_max"
+    }
+  },
+  {
+    "name": "floor",
+    "column": "floor",
+    "sql_type": "INTEGER",
+    "default": null,
+    "active": true,
+    "form": {"type": "number", "label": "Floor", "min": -2, "max": 30, "step": 1},
+    "o2r_filter": {
+      "mode": "range",
+      "label_min": "Min floor",
+      "label_max": "Max floor",
+      "col_min": "floor_min",
+      "col_max": "floor_max"
+    }
+  },
+  {
+    "name": "price",
+    "column": "price",
+    "sql_type": "INTEGER",
+    "default": null,
+    "active": true,
+    "form": {"type": "number", "label": "Price (€)", "min": 200, "max": 5000, "step": 50},
+    "o2r_filter": {
+      "mode": "range",
+      "label_min": "Min price (€)",
+      "label_max": "Max price (€)",
+      "col_min": "price_min",
+      "col_max": "price_max"
+    }
+  },
+  {
+    "name": "bathrooms",
+    "column": "bathrooms",
+    "sql_type": "INTEGER",
+    "default": null,
+    "active": true,
+    "form": {"type": "number", "label": "Bathrooms", "min": 0, "max": 20, "step": 1},
+    "o2r_filter": {
+      "mode": "range",
+      "label_min": "Bathrooms min",
+      "label_max": "Bathrooms max",
+      "col_min": "bathrooms_min",
+      "col_max": "bathrooms_max"
+    }
+  },
+  {
+    "name": "year_built",
+    "column": "year_built",
+    "sql_type": "INTEGER",
+    "default": null,
+    "active": true,
+    "form": {"type": "year", "label": "Year built", "min": 1990, "max": 2025},
+    "o2r_filter": {
+      "mode": "range",
+      "label_min": "Year built min",
+      "label_max": "Year built max",
+      "col_min": "year_built_min",
+      "col_max": "year_built_max"
+    }
+  },
+  {
+    "name": "furnished",
+    "column": "furnished",
+    "sql_type": "INTEGER",
+    "default": 0,
+    "active": true,
+    "form": {"type": "checkbox", "label": "Furnished"},
+    "o2r_filter": {
+      "mode": "bool",
+      "label": "Furnished",
+      "col": "want_furnished"
+    }
+  },
+  {
+    "name": "pets",
+    "column": "pets",
+    "sql_type": "INTEGER",
+    "default": 0,
+    "active": true,
+    "form": {"type": "checkbox", "label": "Pets"},
+    "o2r_filter": {
+      "mode": "bool",
+      "label": "Pets allowed",
+      "col": "want_pets"
+    }
+  }
+]
+

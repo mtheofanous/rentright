@@ -19,6 +19,7 @@ import json
 import io
 import shutil
 from PIL import Image, ImageDraw, ImageFont
+from typing import Any, Callable, Dict
 import time
 
 # Safe import: utils_vault may rely on missing secrets (KeyError)
@@ -1614,9 +1615,6 @@ def get_conn():
 #==================================================================================
 # ========== Dynamic Property Fields: single source of truth ==========
 
-from typing import Any, Callable
-
-
 # Put the registry in a definitely writable folder next to your SQLite DB
 # (change WRITABLE_BASE if you already have one; otherwise we create ./data)
 try:
@@ -1628,16 +1626,61 @@ WRITABLE_BASE.mkdir(parents=True, exist_ok=True)
 PROPERTY_FIELDS_STORE = (WRITABLE_BASE / "property_fields.json").resolve()
 
 # ---- Default registry (ships with the app) ----
+# ---- Default registry (ships with the app) ----
 PROPERTY_FIELDS: list[dict] = [
-    {"name":"bathrooms","column":"bathrooms","sql_type":"INTEGER","default":None,"active":True,
-     "form":{"type":"number","label":"Bathrooms","min":0,"max":20,"step":1}},
-    {"name":"year_built","column":"year_built","sql_type":"INTEGER","default":None,"active":True,
-     "form":{"type":"year","label":"Year built","min":1700,"max":2200}},
-    {"name":"year_renovated","column":"year_renovated","sql_type":"INTEGER","default":None,"active":True,
-     "form":{"type":"year","label":"Year renovated","min":1700,"max":2200}},
-    {"name":"furnished","column":"furnished","sql_type":"INTEGER","default":0,"active":True,
-     "form":{"type":"checkbox","label":"Furnished"}},
+    {
+        "name": "bathrooms", "column": "bathrooms", "sql_type": "INTEGER",
+        "default": None, "active": True,
+        "form": {"type": "number", "label": "Bathrooms", "min": 0, "max": 20, "step": 1},
+        # 🔥 enable as RANGE filter in OTR
+        "o2r_filter": {"mode": "range", "label_min": "Bathrooms min", "label_max": "Bathrooms max",
+                       "col_min": "bathrooms_min", "col_max": "bathrooms_max"}
+    },
+    {
+        "name": "year_built", "column": "year_built", "sql_type": "INTEGER",
+        "default": None, "active": True,
+        "form": {"type": "year", "label": "Year built", "min": 1900, "max": 2200},
+        "o2r_filter": {"mode": "range", "label_min": "Year built min", "label_max": "Year built max",
+                       "col_min": "year_built_min", "col_max": "year_built_max"}
+    },
+    {
+        "name": "year_renovated", "column": "year_renovated", "sql_type": "INTEGER",
+        "default": None, "active": True,
+        "form": {"type": "year", "label": "Year renovated", "min": 1900, "max": 2200},
+        "o2r_filter": {"mode": "range", "label_min": "Year renovated min", "label_max": "Year renovated max",
+                       "col_min": "year_renovated_min", "col_max": "year_renovated_max"}
+    },
+    {
+        "name": "furnished", "column": "furnished", "sql_type": "INTEGER",
+        "default": 0, "active": True,
+        "form": {"type": "checkbox", "label": "Furnished"},
+        # 🔥 enable as BOOL filter in OTR (tenant_profiles column will be created)
+        "o2r_filter": {"mode": "bool", "label": "Furnished", "col": "want_furnished"}
+    },
+    {
+        "name": "pets", "column": "pets", "sql_type": "INTEGER",
+        "default": 0, "active": True,
+        "form": {"type": "checkbox", "label": "Pets"},
+        "o2r_filter": {"mode": "bool", "label": "Pets allowed", "col": "want_pets"}
+    },
 ]
+
+def _num_hints_for_field(field_name: str, default_min: int, default_max: int, default_step: int = 1):
+    """
+    Look up min/max/step for a field from PROPERTY_FIELDS.form,
+    fallback to the provided defaults.
+    """
+    try:
+        for f in (PROPERTY_FIELDS or []):
+            if f.get("name") == field_name:
+                frm = (f.get("form") or {})
+                mn   = int(frm.get("min", default_min))
+                mx   = int(frm.get("max", default_max))
+                step = int(frm.get("step", default_step))
+                return mn, mx, step
+    except Exception:
+        pass
+    return default_min, default_max, default_step
 
 def _sanitize_filename(p: Path|str) -> Path:
     p = Path(p)
@@ -1734,25 +1777,27 @@ def ensure_dynamic_fields_schema():
 
 def ensure_registry_loaded_once() -> None:
     """
-    Load the registry from disk once and ensure DB schema matches it.
-    Merges disk with defaults by 'name' to avoid losing fields.
+    Load the registry from disk and ensure DB schema matches it.
+    Always merges disk with defaults by 'name' (idempotent).
     """
-    if st.session_state.get("_dyn_fields_loaded_once"):
-        return
     global PROPERTY_FIELDS
     disk = load_property_fields_from_disk()
     if isinstance(disk, list) and disk:
         by_name = {f["name"]: f for f in disk if isinstance(f, dict) and "name" in f}
         merged: list[dict] = []
+        # keep defaults, overridden by disk
         for f in PROPERTY_FIELDS:
             merged.append(by_name.get(f["name"], f))
-        # keep extra custom fields not in defaults
+        # add custom fields that aren't in defaults
+        default_names = {d["name"] for d in merged}
         for nm, f in by_name.items():
-            if nm not in {d["name"] for d in merged}:
+            if nm not in default_names:
                 merged.append(f)
         PROPERTY_FIELDS = merged
-    ensure_dynamic_fields_schema()
+
+    ensure_dynamic_fields_schema()  # adds missing cols in both tables
     st.session_state["_dyn_fields_loaded_once"] = True
+
 
 def sync_and_migrate_after_change() -> bool:
     """Persist to disk and ensure DB schema has the new/changed columns."""
@@ -1789,8 +1834,8 @@ def render_property_extra_inputs(prefix: str) -> dict[str, Any]:
             vals[f["column"]] = 1 if st.checkbox(label, value=bool(f.get("default")), key=key) else 0
         elif typ == "year":
             vals[f["column"]] = st.number_input(
-                label, value=f.get("default") or 1800,
-                min_value=form.get("min", 1700), max_value=form.get("max", 2200),
+                label, value=f.get("default") or 2025,
+                min_value=form.get("min", 1900), max_value=form.get("max", 2200),
                 step=1, key=key
             ) or None
         elif typ == "select":
@@ -1894,25 +1939,63 @@ def property_chips_from_row(row: dict) -> list[str]:
     return chips
 
 # ---------- OTR filters (optional) ----------
-def render_o2r_extra_filters(prefix="otr") -> dict[str, Any]:
+
+
+def render_o2r_extra_filters(prefix: str = "otr"):
     out: dict[str, Any] = {}
-    for f in (PROPERTY_FIELDS or []):
-        cfg = f.get("o2r_filter")
-        if not cfg: 
-            continue
-        mode = cfg.get("mode")
+    fields = (PROPERTY_FIELDS or [])
+    active = [f for f in fields if f.get("active", True) and f.get("o2r_filter")]
+
+    if not active:
+        st.caption("No active characteristics configured for filtering.")
+        return out
+
+    cols = st.columns(2)
+    ci = 0
+
+    for f in active:
+        cfg  = f["o2r_filter"]
+        mode = (cfg.get("mode") or "").lower()
+        label = cfg.get("label") or (f.get("form", {}) or {}).get("label") or f.get("name", "").replace("_", " ").title()
+
         if mode == "range":
-            c1, c2 = st.columns(2)
-            out[cfg["col_min"]] = c1.number_input(cfg.get("label_min", f"{f['name']} min"),
-                                                  0, 1_000_000, 0, step=1,
-                                                  key=f"{prefix}:{f['name']}:min") or None
-            out[cfg["col_max"]] = c2.number_input(cfg.get("label_max", f"{f['name']} max"),
-                                                  0, 1_000_000, 0, step=1,
-                                                  key=f"{prefix}:{f['name']}:max") or None
+            cmin = cfg.get("col_min")
+            cmax = cfg.get("col_max")
+            if not cmin or not cmax:
+                continue
+
+            # 👇 pull numeric UI hints from the field's form
+            mn, mx, step = _num_hints_for_field(f["name"], default_min=0, default_max=1_000_000, default_step=1)
+
+            c1, c2 = cols[ci % 2].columns(2)
+            lo = c1.number_input(cfg.get("label_min", f"{label} min"), mn, mx, mn, step=step, key=f"{prefix}:{f['name']}:min")
+            hi = c2.number_input(cfg.get("label_max", f"{label} max"), mn, mx, mn, step=step, key=f"{prefix}:{f['name']}:max")
+
+            out[cmin] = None if (lo == mn == 0) else int(lo)
+            out[cmax] = None if (hi == mn == 0) else int(hi)
+            ci += 1
+
         elif mode == "bool":
-            val = st.selectbox(cfg.get("label", f["name"]), ["Any", "Yes", "No"], key=f"{prefix}:{f['name']}:bool")
-            out[cfg["col"]] = None if val == "Any" else (1 if val == "Yes" else 0)
+            col = cfg.get("col")
+            if not col:
+                continue
+            choice = cols[ci % 2].selectbox(label, ["Any", "Yes", "No"], index=0, key=f"{prefix}:{f['name']}:bool")
+            out[col] = None if choice == "Any" else (1 if choice == "Yes" else 0)
+            ci += 1
+
+        elif mode == "enum":
+            col = cfg.get("col")
+            if not col:
+                continue
+            opts = (f.get("form", {}) or {}).get("options") or []
+            sel = cols[ci % 2].selectbox(label, ["Any"] + list(opts), index=0, key=f"{prefix}:{f['name']}:enum")
+            out[col] = "" if sel == "Any" else str(sel)
+            ci += 1
+
+ 
     return out
+
+
 
 def o2r_sql_clauses_for_fields(filters: dict[str, Any]) -> tuple[list[str], list[Any]]:
     """
@@ -2228,7 +2311,7 @@ def _rerun():
       ...
     }
     """
-    import json, os
+   
     # Adjust this path if your file lives elsewhere
     candidate_paths = [
         "ellada.json",
@@ -2319,7 +2402,7 @@ def greece_location_pickers(prefix: str = "otr", only: str | None = None,
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
-def load_ellada_index(json_path: str | None = None):
+def load_ellada_index(json_path: str | None = None, show_uploader = True):
     """
     Load Region -> Peripheral Unit -> Municipalities from ellada.json.
     Tries common repo paths, handles BOM, validates structure,
@@ -2368,8 +2451,8 @@ def load_ellada_index(json_path: str | None = None):
                 continue
 
     # Uploader fallback if not found / not parsed
-    if data is None:
-        uploaded = st.file_uploader("Ανεβάστε το ellada.json", type=["json"], key="ellada_upload")
+    if data is None and show_uploader:
+        uploaded = st.file_uploader("Ανεβάστε το ellada.json", type=["json"], key="ellada_upload",label_visibility="collapsed")
         if not uploaded:
             msg = "Δεν βρέθηκε/διαβάστηκε το ellada.json."
             if last_error:
@@ -2488,7 +2571,7 @@ def run_migrations(conn):
         run_tenant_docs_migration(conn)
     except Exception as e:
         try:
-            import streamlit as st
+         
             st.warning(f"DB migration warning (tenant docs): {e}")
         except Exception:
             print(f"DB migration warning (tenant docs): {e}")
@@ -2655,8 +2738,7 @@ def run_migrations(conn):
         ensure_dynamic_fields_schema()
     except Exception as e:
         st.warning(f"Property characteristic warning: {e}")
-
-
+        
 
     return True
 
@@ -7511,7 +7593,7 @@ def render_tenant_documents_ui(current_user):
                         label="",  # remove label bar
                         type=["pdf","png","jpg","jpeg","webp"],
                         key=f"up_{dtype}",
-                        label_visibility="hidden",
+                        label_visibility="collapsed",
                         accept_multiple_files=True,
                     )
                     submitted = st.form_submit_button("💾 " + tr("Save"))
@@ -7911,101 +7993,119 @@ def search_open_to_rent_tenants(
     region: str | None = None,
     city: str | None = None,
     district: str | None = None,
-    size_min: int | None = None, size_max: int | None = None,
-    rooms_min: int | None = None, rooms_max: int | None = None,
-    floor_min: int | None = None, floor_max: int | None = None,
-    price_min: int | None = None, price_max: int | None = None,
-    limit: int = 100
+    size_min: int | None = None,
+    size_max: int | None = None,
+    rooms_min: int | None = None,
+    rooms_max: int | None = None,
+    floor_min: int | None = None,
+    floor_max: int | None = None,
+    price_min: int | None = None,
+    price_max: int | None = None,
+    limit: int = 100,
+    extras: dict | None = None,
 ):
     """
-    Return tenants with open_to_rent=1 matching free-text (name/email)
-    and optional filters (city/district + range overlaps for size/rooms/floor/price).
+    Returns a list of tenants who are open to rent, matching the specified
+    search filters. Includes both base filters and dynamic property
+    characteristics (via `extras` dict from render_o2r_extra_filters()).
     """
-    cur = conn.cursor()
+
+    c = get_conn()
+    cur = c.cursor()
 
     clauses = ["tp.open_to_rent = 1"]
     params = {}
-    
+
+    # Get tenant_profiles table columns (for safety)
     cols = {r[1] for r in cur.execute("PRAGMA table_info(tenant_profiles)").fetchall()}
-    # Free-text on users.name / users.email
+
+    # --- Basic filters (location + query) ---
     if q:
         clauses.append("(LOWER(u.name) LIKE LOWER(:q) OR LOWER(u.email) LIKE LOWER(:q))")
         params["q"] = f"%{q.strip()}%"
 
-    if "search_region" in cols and region:
+    if region:
         clauses.append("LOWER(tp.search_region) = LOWER(:region)")
         params["region"] = region.strip()
 
     if city:
         clauses.append("LOWER(tp.search_city) = LOWER(:city)")
         params["city"] = city.strip()
+
     if district:
         clauses.append("LOWER(tp.search_district) = LOWER(:district)")
         params["district"] = district.strip()
 
-
-    # Range-overlap logic:
-    # For each dimension, show a tenant if their preferred range overlaps the landlord's filter range.
+    # --- Helper for range-overlap logic ---
     def add_range_overlap(field_min: str, field_max: str, f_min_val, f_max_val):
-        # Only add a WHERE if at least one bound provided
+        """Adds SQL overlap condition for tenant range preferences."""
         if f_min_val is None and f_max_val is None:
             return
-        # NULLs in tenant prefs mean "no bound" → use huge defaults via COALESCE
-        # Overlap condition: (tenant_max >= filter_min) AND (tenant_min <= filter_max)
         cmin = f"COALESCE(tp.{field_min}, -9999999)"
         cmax = f"COALESCE(tp.{field_max},  9999999)"
-
         if f_min_val is not None:
-            clauses.append(f"{cmax} >= :{field_min}_needs_at_least")
-            params[f"{field_min}_needs_at_least"] = int(f_min_val)
+            clauses.append(f"{cmax} >= :{field_min}_atleast")
+            params[f"{field_min}_atleast"] = int(f_min_val)
         if f_max_val is not None:
-            clauses.append(f"{cmin} <= :{field_max}_needs_at_most")
-            params[f"{field_max}_needs_at_most"] = int(f_max_val)
+            clauses.append(f"{cmin} <= :{field_max}_atmost")
+            params[f"{field_max}_atmost"] = int(f_max_val)
 
-    add_range_overlap("size_min",  "size_max",  size_min,  size_max)
+    # --- Apply range filters for standard fields ---
+    add_range_overlap("size_min", "size_max", size_min, size_max)
     add_range_overlap("rooms_min", "rooms_max", rooms_min, rooms_max)
     add_range_overlap("floor_min", "floor_max", floor_min, floor_max)
     add_range_overlap("price_min", "price_max", price_min, price_max)
-    
-    # === 5) DYNAMIC OTR FILTERS (if registry/helpers are present) ===
-    try:
-        # If you implemented a registry + helper that maps extra fields to SQL:
-        # o2r_sql_clauses_for_fields should return (extra_clauses, extra_params)
-        if 'o2r_sql_clauses_for_fields' in globals():
-            extra_clauses, extra_params = o2r_sql_clauses_for_fields(prefix="findten")  # prefix used by the UI widgets
-            if extra_clauses:
-                clauses.extend(extra_clauses)
-            if extra_params:
-                params.update(extra_params)
-    except Exception:
-        # don’t break the base search if extras fail
-        pass
-    # === /DYNAMIC OTR FILTERS ===
 
+    # --- Apply dynamic extras from PROPERTY_FIELDS ---
+    if extras:
+        for k, v in extras.items():
+            if v is None:
+                continue
 
-    where_sql = " AND ".join(clauses) if clauses else "1=1"
+            # RANGE filters (min/max pairs)
+            if k.endswith("_min"):
+                # match rows where property’s max >= given min
+                col_min = k
+                col_max = k[:-4] + "max"
+                if col_max in cols:
+                    clauses.append(f"COALESCE(tp.{col_max}, 9999999) >= :{k}")
+                    params[k] = int(v)
 
+            elif k.endswith("_max"):
+                # match rows where property’s min <= given max
+                col_max = k
+                col_min = k[:-4] + "min"
+                if col_min in cols:
+                    clauses.append(f"COALESCE(tp.{col_min}, -9999999) <= :{k}")
+                    params[k] = int(v)
+
+            else:
+                # Boolean filters (1 or 0)
+                if k in cols:
+                    clauses.append(f"COALESCE(tp.{k}, 0) = :{k}")
+                    params[k] = int(v)
+
+    # --- Final SQL ---
     sql = f"""
-        SELECT
-            u.id            AS tenant_id,
-            u.name          AS tenant_name,
-            u.email         AS tenant_email,
-            tp.updated_at   AS prefs_updated_at,
-
-            tp.search_city, tp.search_district,
-            tp.size_min, tp.size_max,
-            tp.rooms_min, tp.rooms_max,
-            tp.floor_min, tp.floor_max,
-            tp.price_min, tp.price_max
+        SELECT DISTINCT u.id AS tenant_id,
+                        u.name,
+                        u.email,
+                        tp.search_region,
+                        tp.search_city,
+                        tp.search_district,
+                        tp.updated_at
         FROM tenant_profiles tp
         JOIN users u ON u.id = tp.tenant_id
-        WHERE {where_sql}
+        WHERE {' AND '.join(clauses)}
         ORDER BY tp.updated_at DESC
         LIMIT :limit
     """
+
     params["limit"] = int(limit)
     cur.execute(sql, params)
-    return cur.fetchall()
+    rows = cur.fetchall()
+
+    return [dict(r) for r in rows]
 
 def quick_reference_summary(tenant_id: int):
     """
@@ -8270,9 +8370,10 @@ def admin_characteristics_page():
                 ok = sync_and_migrate_after_change()  # saves JSON + ensures schema
                 path = str(PROPERTY_FIELDS_STORE)
                 if ok:
-                    st.success(tr("Added. Schema updated if needed.") + f"  \n`{path}`")
+                    st.success(tr("Added. Schema updated if needed."))
                 else:
-                    st.warning(tr("Added, but could not persist to disk; check file permissions.") + f"  \n`{path}`")
+                    st.warning(tr("Added, but could not persist to disk; check file permissions."))
+                st.session_state["_dyn_fields_loaded_once"] = False
                 st.rerun()
 
     st.divider()
@@ -8332,37 +8433,52 @@ def admin_characteristics_page():
                         st.rerun()
 
     # ================== Export / Import ==================
+    # ================== Export / Import ==================
     st.divider()
     st.markdown("### " + tr("Export / Import"))
     cE, cI = st.columns(2)
+
+    # --- EXPORT ---
     with cE:
         if st.button(tr("Export registry to JSON")):
             ok = save_property_fields_to_disk(PROPERTY_FIELDS)
-            path = str(PROPERTY_FIELDS_STORE)
+            # path = str(PROPERTY_FIELDS_STORE)
             if ok:
-                st.success(tr("Saved to") + f" `{path}`")
+                st.success(tr("Saved to"))
             else:
-                st.error(tr("Could not save file.") + f" `{path}`")
+                st.error(tr("Could not save file."))
+
+    # --- IMPORT (wrapped in a form to avoid infinite reruns) ---
     with cI:
-        uploaded = st.file_uploader(tr("Import registry (JSON)"), type=["json"], accept_multiple_files=False)
-        if uploaded is not None:
-            try:
-                data = json.load(uploaded)
-                if isinstance(data, list):
-                    for x in data:
-                        if not isinstance(x, dict) or "name" not in x or "column" not in x:
-                            raise ValueError("Bad item in registry.")
-                    PROPERTY_FIELDS[:] = data
-                    ok = sync_and_migrate_after_change()
-                    if ok:
-                        st.success(tr("Imported and applied."))
-                        st.rerun()
+        with st.form("adm:import_form", clear_on_submit=True):
+            uploaded = st.file_uploader(
+                tr("Import registry (JSON)"),
+                type=["json"],
+                accept_multiple_files=False,
+                label_visibility="collapsed"
+            )
+            do_import = st.form_submit_button(tr("Import"))
+
+            if do_import and uploaded is not None:
+                try:
+                    data = json.load(uploaded)
+                    if isinstance(data, list):
+                        for x in data:
+                            if not isinstance(x, dict) or "name" not in x or "column" not in x:
+                                raise ValueError("Bad item in registry.")
+                        PROPERTY_FIELDS[:] = data
+                        ok = sync_and_migrate_after_change()
+                        if ok:
+                            st.success(tr("Imported and applied."))
+                            st.session_state["_dyn_fields_loaded_once"] = False
+                            st.rerun()
+                        else:
+                            st.warning(tr("Imported, but could not persist to disk."))
                     else:
-                        st.warning(tr("Imported, but could not persist to disk."))
-                else:
-                    st.error(tr("Invalid JSON format (expected a list)."))
-            except Exception as e:
-                st.error(f"{tr('Import failed')}: {e}")
+                        st.error(tr("Invalid JSON format (expected a list)."))
+                except Exception as e:
+                    st.error(f"{tr('Import failed')}: {e}")
+
 
 
 
@@ -8585,6 +8701,10 @@ def admin_dashboard():
         """,
         unsafe_allow_html=True,
     )
+    if st.button(tr("Sign out")):
+        st.session_state.clear()
+        st.query_params.clear()
+        st.rerun()
 
     # --- 3) Main admin tabs (clean UX) ---
     tab_overview, tab_docs, tab_chars, tab_settings, tab_maint, tab_refs = st.tabs([
@@ -8863,8 +8983,19 @@ def tenant_dashboard():
 
     # keep any legacy "page" readers in sync (optional but safe)
     st.session_state["page"] = st.session_state["tenant_page"]
-
+    
     def tenant_open_to_rent_section():
+        # --- tiny local helper to read min/max/step hints from PROPERTY_FIELDS ----
+        def _hints(field_name: str, dmin: int, dmax: int, dstep: int = 1):
+            try:
+                for f in (PROPERTY_FIELDS or []):
+                    if f.get("name") == field_name:
+                        frm = (f.get("form") or {})
+                        return int(frm.get("min", dmin)), int(frm.get("max", dmax)), int(frm.get("step", dstep))
+            except Exception:
+                pass
+            return dmin, dmax, dstep
+
         # Header + compact help
         c1, c2 = st.columns([6, 0.6])
         with c1:
@@ -8875,13 +9006,12 @@ def tenant_dashboard():
         tid = st.session_state.user["id"]
         prefs = load_open_to_rent_prefs(tid)
 
-        # If reset asked, we force defaults (zeros/False) instead of loading prefs.
+        # If reset asked, force defaults (zeros/False) instead of loading prefs.
         force_defaults = st.session_state.pop("otr_force_defaults", False)
 
         # Initialize numeric & flag fields (once or when forced)
         if ("otr_keys_inited" not in st.session_state) or force_defaults:
             if force_defaults:
-                # Defaults
                 st.session_state["otr_open_flag"]  = False
                 st.session_state["otr_size_min"]   = 0
                 st.session_state["otr_size_max"]   = 0
@@ -8892,7 +9022,6 @@ def tenant_dashboard():
                 st.session_state["otr_price_min"]  = 0
                 st.session_state["otr_price_max"]  = 0
             else:
-                # From saved prefs
                 st.session_state["otr_open_flag"]  = bool(prefs.get("open_to_rent"))
                 st.session_state["otr_size_min"]   = int(prefs.get("size_min")  or 0)
                 st.session_state["otr_size_max"]   = int(prefs.get("size_max")  or 0)
@@ -8902,7 +9031,6 @@ def tenant_dashboard():
                 st.session_state["otr_floor_max"]  = int(prefs.get("floor_max") or 0)
                 st.session_state["otr_price_min"]  = int(prefs.get("price_min") or 0)
                 st.session_state["otr_price_max"]  = int(prefs.get("price_max") or 0)
-
             st.session_state["otr_keys_inited"] = True
 
         # --- UI container ---------------------------------------------------------
@@ -8930,7 +9058,6 @@ def tenant_dashboard():
             # --- Correct seeding for the 3-level location pickers -----------------
             prefix = "otr"
             ANY = tr("Any")
-            # Seed the exact keys used by the pickers/render_tenant_filters:
             if reset_preselect or (f"{prefix}_region" not in st.session_state):
                 st.session_state[f"{prefix}_region"] = pre_region or ANY
             if reset_preselect or (f"{prefix}_ru" not in st.session_state):
@@ -8938,54 +9065,91 @@ def tenant_dashboard():
             if reset_preselect or (f"{prefix}_mun" not in st.session_state):
                 st.session_state[f"{prefix}_mun"] = saved_city or ANY
 
-            # --- Active / Inactive toggle (kept as-is) ----------------------------
+            # --- Active / Inactive toggle -----------------------------------------
             cb1, cb2 = st.columns([1, 0.08])
             with cb1:
                 open_flag = st.checkbox(tr("I’m looking for a place"), key="otr_open_flag")
             with cb2:
-                help_icon(
-                    tr("Turn on to appear in landlord searches. You can hide this anytime."),
-                    key="help_otr_toggle"
-                )
+                help_icon(tr("Turn on to appear in landlord searches. You can hide this anytime."), key="help_otr_toggle")
 
             # --- Sticky expander + Form to avoid auto-reruns while editing --------
             st.session_state.setdefault("otr_prop_expanded", True)
 
-            with st.expander(tr("Property characteristics"),
-                             expanded=st.session_state["otr_prop_expanded"]):
-
-                # ⬇️ NEW: render the 3 linked pickers OUTSIDE the form
-                prefix = "otr"
+            with st.expander(tr("Property characteristics"), expanded=st.session_state["otr_prop_expanded"]):
+                # Linked pickers OUTSIDE the form
                 region_sel, ru_sel, mun_sel = greece_location_pickers(prefix=prefix)
 
+                # Pull numeric UI hints from registry (editable via JSON)
+                size_min,  size_max,  size_step  = _hints("size_m2", 0, 10000, 5)
+                rooms_min, rooms_max, rooms_step = _hints("rooms",   0, 50,    1)
+                floor_min, floor_max, floor_step = _hints("floor",  -5, 100,   1)
+                price_min, price_max, price_step = _hints("price",   0, 1_000_000, 50)
+
+                # Form batches widget changes; rerun only on submit
                 # Form batches widget changes; rerun only on submit
                 with st.form("otr_prefs_form", clear_on_submit=False):
-                    # RANGES ONLY (location already chosen above)
+                    # BASE RANGES (location is picked above)
                     c1, c2 = st.columns(2)
-                    size_min_val = c1.number_input(tr("Min size (m²)"), 0, 10000, step=5, key=f"{prefix}_size_min")
-                    size_max_val = c2.number_input(tr("Max size (m²)"), 0, 10000, step=5, key=f"{prefix}_size_max")
+                    size_min_val = c1.number_input(
+                        tr("Min size (m²)"),
+                        min_value=size_min, max_value=size_max, step=size_step,
+                        key=f"{prefix}_size_min"
+                    )
+                    size_max_val = c2.number_input(
+                        tr("Max size (m²)"),
+                        min_value=size_min, max_value=size_max, step=size_step,
+                        key=f"{prefix}_size_max"
+                    )
 
                     r1, r2 = st.columns(2)
-                    rooms_min_val = r1.number_input(tr("Min rooms"), 0, 50, step=1, key=f"{prefix}_rooms_min")
-                    rooms_max_val = r2.number_input(tr("Max rooms"), 0, 50, step=1, key=f"{prefix}_rooms_max")
+                    rooms_min_val = r1.number_input(
+                        tr("Min rooms"),
+                        min_value=rooms_min, max_value=rooms_max, step=rooms_step,
+                        key=f"{prefix}_rooms_min"
+                    )
+                    rooms_max_val = r2.number_input(
+                        tr("Max rooms"),
+                        min_value=rooms_min, max_value=rooms_max, step=rooms_step,
+                        key=f"{prefix}_rooms_max"
+                    )
 
                     f1, f2 = st.columns(2)
-                    floor_min_val = f1.number_input(tr("Min floor"), -5, 100, step=1, key=f"{prefix}_floor_min")
-                    floor_max_val = f2.number_input(tr("Max floor"), -5, 100, step=1, key=f"{prefix}_floor_max")
+                    floor_min_val = f1.number_input(
+                        tr("Min floor"),
+                        min_value=floor_min, max_value=floor_max, step=floor_step,
+                        key=f"{prefix}_floor_min"
+                    )
+                    floor_max_val = f2.number_input(
+                        tr("Max floor"),
+                        min_value=floor_min, max_value=floor_max, step=floor_step,
+                        key=f"{prefix}_floor_max"
+                    )
 
                     p1, p2 = st.columns(2)
-                    price_min_val = p1.number_input(tr("Min price (€)"), 0, 1_000_000, step=50, key=f"{prefix}_price_min")
-                    price_max_val = p2.number_input(tr("Max price (€)"), 0, 1_000_000, step=50, key=f"{prefix}_price_max")
+                    price_min_val = p1.number_input(
+                        tr("Min price (€)"),
+                        min_value=price_min, max_value=price_max, step=price_step,
+                        key=f"{prefix}_price_min"
+                    )
+                    price_max_val = p2.number_input(
+                        tr("Max price (€)"),
+                        min_value=price_min, max_value=price_max, step=price_step,
+                        key=f"{prefix}_price_max"
+                    )
+
+
+                    # DYNAMIC EXTRAS — same helper as Find Tenants
+                    try:
+                        extras = render_o2r_extra_filters(prefix=prefix) if 'render_o2r_extra_filters' in globals() else {}
+                    except Exception:
+                        extras = {}
 
                     def _none_if_zero(v):
-                        try:
-                            return None if int(v) == 0 else int(v)
-                        except Exception:
-                            return None
+                        try: return None if int(v) == 0 else int(v)
+                        except Exception: return None
 
                     def _norm_any(v):
-                        if v is None:
-                            return ""
+                        if v is None: return ""
                         s = str(v).strip().lower()
                         return "" if s in {"", "any", "—", "-", "— any —"} else str(v)
 
@@ -9007,9 +9171,7 @@ def tenant_dashboard():
                     save_clicked  = col_save.form_submit_button(tr("Save preferences"))
                     reset_clicked = col_reset.form_submit_button(tr("Reset"))
 
-                def _i(x):
-                    """None -> 0, else int"""
-                    return 0 if x is None else int(x)
+                def _i(x): return 0 if x is None else int(x)  # None -> 0, else int
 
                 # --- Handle actions after the form (runs only when submitted) -----
                 if save_clicked:
@@ -9033,7 +9195,7 @@ def tenant_dashboard():
                                 region=region_clean,
                             )
                         except TypeError:
-                            # Fallback for older function signature without OSM/region args
+                            # Older signature without OSM/region
                             save_open_to_rent_prefs(
                                 tid, bool(st.session_state["otr_open_flag"]),
                                 city_clean, district_clean,
@@ -9042,10 +9204,25 @@ def tenant_dashboard():
                                 _i(filt.get("floor_min")), _i(filt.get("floor_max")),
                                 _i(filt.get("price_min")), _i(filt.get("price_max")),
                             )
+
+                        # Save dynamic extras into tenant_profiles
                         try:
-                            st.cache_data.clear()
+                            extras_to_save = {k: v for k, v in (extras or {}).items() if v not in (None, "")}
+                            if extras_to_save:
+                                c = get_conn()
+                                id_col = "tenant_id"
+                                cols = {r[1] for r in c.execute("PRAGMA table_info(tenant_profiles)").fetchall()}
+                                if id_col not in cols and "user_id" in cols:
+                                    id_col = "user_id"
+                                set_cols = [f"{col}=?" for col in extras_to_save.keys()]
+                                params = list(extras_to_save.values()) + [tid]
+                                c.execute(f"UPDATE tenant_profiles SET {', '.join(set_cols)}, updated_at=datetime('now') WHERE {id_col}=?", tuple(params))
+                                c.commit()
                         except Exception:
                             pass
+
+                        try: st.cache_data.clear()
+                        except Exception: pass
                         st.success(tr("Preferences saved."))
                         st.session_state["otr_prop_expanded"] = True  # keep it open on the next run
 
@@ -9060,51 +9237,41 @@ def tenant_dashboard():
                         "otr_open_flag", "otr_keys_inited"
                     ):
                         st.session_state.pop(k, None)
-
                     st.session_state["otr_force_defaults"]  = True
                     st.session_state["otr_reset_preselect"] = True
-                    st.session_state["otr_prop_expanded"]   = True  # keep open after reset
+                    st.session_state["otr_prop_expanded"]   = True
                     st.rerun()
 
-        # --- Profile details (own Edit/Save flow) -------------------------------------
+        # --- Profile details (Pets removed) --------------------------------------
         tid = st.session_state.user["id"]
         _prof = load_profile_details(tid)
 
-        # one-time default for edit mode
         if "profile_editing" not in st.session_state:
             st.session_state["profile_editing"] = False
 
         _ensure_pt_css()
 
         with st.expander(tr("Profile details"), expanded=False):
-            # Header row with Edit / Save / Cancel
             b1, _ = st.columns([3, 9])
 
             if not st.session_state["profile_editing"]:
-                # Read-only summary chips
                 p = _prof or {}
                 def _val(x, dash="—"): return (str(x).strip() if (x not in (None, "", 0)) else dash)
-                _pets = tr("Yes") if p.get("pets") in (1, True) else tr("No") if p.get("pets") in (0, False) else "—"
                 chips = []
-                if p.get("age"):              chips.append(f'<span class="pill">{tr("Age")}: {int(p["age"])}</span>')
-                if p.get("marital_status"):   chips.append(f'<span class="pill">{tr("Marital status")}: {p["marital_status"]}</span>')
-                if p.get("contract_type"):    chips.append(f'<span class="pill">{tr("Contract type")}: {p["contract_type"]}</span>')
+                if p.get("age"):            chips.append(f'<span class="pill">{tr("Age")}: {int(p["age"])}</span>')
+                if p.get("marital_status"): chips.append(f'<span class="pill">{tr("Marital status")}: {p["marital_status"]}</span>')
+                if p.get("contract_type"):  chips.append(f'<span class="pill">{tr("Contract type")}: {p["contract_type"]}</span>')
                 if p.get("monthly_salary") is not None:
                     chips.append(f'<span class="pill">{tr("Monthly salary (€)")}: {int(p["monthly_salary"]):,}</span>')
-                chips.append(f'<span class="pill">{tr("Pets")}: {_pets}</span>')
-                if p.get("num_tenants"):      chips.append(f'<span class="pill">{tr("Number of occupants")}: {int(p["num_tenants"])}</span>')
+                if p.get("num_tenants"):    chips.append(f'<span class="pill">{tr("Number of occupants")}: {int(p["num_tenants"])}</span>')
 
-                about_html = ""
-                if _val(p.get("about"), None):
-                    from html import escape
-                    about_html = f"<div class='ref-comments'>{escape(p.get('about'))}</div>"
+                from html import escape
+                about_html = f"<div class='ref-comments'>{escape(p.get('about'))}</div>" if _val(p.get("about"), None) else ""
 
                 st.markdown(
                     f"""
                     <div class="ref-card">
-                    <div class="ref-header">
-                        <div class="ref-title">{tr("Profile details")}</div>
-                    </div>
+                    <div class="ref-header"><div class="ref-title">{tr("Profile details")}</div></div>
                     <div class="ref-row">{' '.join(chips) or '—'}</div>
                     {about_html}
                     </div>
@@ -9117,96 +9284,78 @@ def tenant_dashboard():
                     st.rerun()
 
             else:
-                # ✅ Actual form (submit button MUST be inside this context)
                 with st.form("profile_details_form", clear_on_submit=True):
                     c1, c2 = st.columns(2)
                     with c1:
-                        age = st.number_input(
-                            tr("Age"), min_value=18, max_value=100, step=1,
-                            value=int((_prof or {}).get("age") or 18),
-                            key="profile_age"
-                        )
-                        monthly_salary = st.number_input(
-                            tr("Monthly salary (€)"), min_value=0, max_value=1_000_000, step=100,
-                            value=int((_prof or {}).get("monthly_salary") or 0),
-                            key="profile_salary"
-                        )
+                        age = st.number_input(tr("Age"), min_value=18, max_value=100, step=1,
+                                            value=int((_prof or {}).get("age") or 18), key="profile_age")
+                        monthly_salary = st.number_input(tr("Monthly salary (€)"),
+                                                        min_value=0, max_value=1_000_000, step=100,
+                                                        value=int((_prof or {}).get("monthly_salary") or 0),
+                                                        key="profile_salary")
                         marital_status_opts = ["Single","Married","Divorced","Widowed"]
-                        marital_status_idx = (
-                            marital_status_opts.index(((_prof or {}).get("marital_status") or "Single"))
-                            if ((_prof or {}).get("marital_status") in marital_status_opts) else 0
-                        )
-                        marital_status = st.selectbox(
-                            tr("Marital status"),
-                            [tr(x) for x in marital_status_opts],
-                            index=marital_status_idx,
-                            key="profile_marital"
-                        )
-                        pets = st.radio(
-                            tr("Pets"), [tr("Yes"), tr("No")], horizontal=True,
-                            index=(0 if ((_prof or {}).get("pets") in (1, True)) else 1),
-                            key="profile_pets"
-                        )
-                        num_tenants = st.number_input(
-                            tr("Number of occupants"), min_value=1, max_value=10, step=1,
-                            value=int((_prof or {}).get("num_tenants") or 1),
-                            key="profile_num_tenants"
-                        )
+                        marital_status_idx = (marital_status_opts.index(((_prof or {}).get("marital_status") or "Single"))
+                                            if ((_prof or {}).get("marital_status") in marital_status_opts) else 0)
+                        marital_status = st.selectbox(tr("Marital status"),
+                                                    [tr(x) for x in marital_status_opts],
+                                                    index=marital_status_idx, key="profile_marital")
+                        num_tenants = st.number_input(tr("Number of occupants"),
+                                                    min_value=1, max_value=10, step=1,
+                                                    value=int((_prof or {}).get("num_tenants") or 1),
+                                                    key="profile_num_tenants")
                     with c2:
-                        job_position = st.text_input(
-                            tr("Job position"), value=(_prof or {}).get("job_position") or "",
-                            key="profile_job_position"
-                        )
+                        job_position = st.text_input(tr("Job position"), value=(_prof or {}).get("job_position") or "",
+                                                    key="profile_job_position")
                         contract_type_opts = ["Permanent","Temporary","Freelancer","Other"]
-                        contract_type_idx = (
-                            contract_type_opts.index(((_prof or {}).get("contract_type") or "Permanent"))
-                            if ((_prof or {}).get("contract_type") in contract_type_opts) else 0
-                        )
-                        contract_type = st.selectbox(
-                            tr("Contract type"),
-                            [tr(x) for x in contract_type_opts],
-                            index=contract_type_idx,
-                            key="profile_contract"
-                        )
-                    about = st.text_area(
-                        tr("A few words about yourself"),
-                        value=(_prof or {}).get("about") or "",
-                        key="profile_about"
-                    )
+                        contract_type_idx = (contract_type_opts.index(((_prof or {}).get("contract_type") or "Permanent"))
+                                            if ((_prof or {}).get("contract_type") in contract_type_opts) else 0)
+                        contract_type = st.selectbox(tr("Contract type"),
+                                                    [tr(x) for x in contract_type_opts],
+                                                    index=contract_type_idx, key="profile_contract")
+                    about = st.text_area(tr("A few words about yourself"),
+                                        value=(_prof or {}).get("about") or "", key="profile_about")
 
-                    # 🔘 This is the button Streamlit needs INSIDE the form
                     save_clicked = st.form_submit_button(tr("Save profile details"))
 
                 if save_clicked:
-                    marital_map = {
-                        tr("Single"): "Single", tr("Married"): "Married",
-                        tr("Divorced"): "Divorced", tr("Widowed"): "Widowed",
-                    }
-                    contract_map = {
-                        tr("Permanent"): "Permanent", tr("Temporary"): "Temporary",
-                        tr("Freelancer"): "Freelancer", tr("Other"): "Other",
-                    }
-
-                    save_profile_details(
-                        tid,
-                        age=int(st.session_state["profile_age"]),
-                        monthly_salary=int(st.session_state["profile_salary"]),
-                        marital_status=marital_map.get(st.session_state["profile_marital"], "Single"),
-                        job_position=st.session_state["profile_job_position"].strip(),
-                        contract_type=contract_map.get(st.session_state["profile_contract"], "Permanent"),
-                        pets=(1 if st.session_state["profile_pets"] == tr("Yes") else 0),
-                        num_tenants=int(st.session_state["profile_num_tenants"]),
-                        about=st.session_state["profile_about"].strip(),
-                    )
+                    marital_map = {tr("Single"): "Single", tr("Married"): "Married",
+                                tr("Divorced"): "Divorced", tr("Widowed"): "Widowed"}
+                    contract_map = {tr("Permanent"): "Permanent", tr("Temporary"): "Temporary",
+                                    tr("Freelancer"): "Freelancer", tr("Other"): "Other"}
+                    try:
+                        # keep previous pets silently if your fn requires it
+                        prev_pets = (_prof or {}).get("pets")
+                        save_profile_details(
+                            tid,
+                            age=int(st.session_state["profile_age"]),
+                            monthly_salary=int(st.session_state["profile_salary"]),
+                            marital_status=marital_map.get(st.session_state["profile_marital"], "Single"),
+                            job_position=st.session_state["profile_job_position"].strip(),
+                            contract_type=contract_map.get(st.session_state["profile_contract"], "Permanent"),
+                            pets=prev_pets,
+                            num_tenants=int(st.session_state["profile_num_tenants"]),
+                            about=st.session_state["profile_about"].strip(),
+                        )
+                    except TypeError:
+                        # signature without pets
+                        save_profile_details(
+                            tid,
+                            age=int(st.session_state["profile_age"]),
+                            monthly_salary=int(st.session_state["profile_salary"]),
+                            marital_status=marital_map.get(st.session_state["profile_marital"], "Single"),
+                            job_position=st.session_state["profile_job_position"].strip(),
+                            contract_type=contract_map.get(st.session_state["profile_contract"], "Permanent"),
+                            num_tenants=int(st.session_state["profile_num_tenants"]),
+                            about=st.session_state["profile_about"].strip(),
+                        )
                     try: st.cache_data.clear()
                     except Exception: pass
                     st.success(tr("Changes saved."))
                     st.session_state["profile_editing"] = False
                     st.rerun()
 
-        # --- Location for compact summary (pull from pickers; fallback to saved prefs)
+        # --- Compact summary ------------------------------------------------------
         ANY = tr("Any")
-
         raw_region   = st.session_state.get("otr_region") or (prefs.get("region") or "")
         raw_district = st.session_state.get("otr_ru")     or (prefs.get("search_district") or "")
         raw_city     = st.session_state.get("otr_mun")    or (prefs.get("search_city") or "")
@@ -9219,7 +9368,6 @@ def tenant_dashboard():
         district = _clean_loc(raw_district)
         city     = _clean_loc(raw_city)
 
-        # --- Compact summary (uses current widget values) ---------------------------
         def _fmt_range(lo, hi, suffix=""):
             has_lo = lo not in (None, 0, "0", "")
             has_hi = hi not in (None, 0, "0", "")
@@ -9256,49 +9404,887 @@ def tenant_dashboard():
             st.caption(f"{tr('Status:')} {state_label} · {details_txt}")
         else:
             st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {tr('Anywhere')}")
+
+    
+    # def tenant_open_to_rent_section():
+    #     # Header + compact help
+    #     c1, c2 = st.columns([6, 0.6])
+    #     with c1:
+    #         st.subheader(f"**{tr('Open to rent')}**")
+    #     with c2:
+    #         help_icon(tr("Let landlords know what you’re looking and share your criteria."), key="help_otr_header")
+
+    #     tid = st.session_state.user["id"]
+    #     prefs = load_open_to_rent_prefs(tid)
+
+    #     # If reset asked, we force defaults (zeros/False) instead of loading prefs.
+    #     force_defaults = st.session_state.pop("otr_force_defaults", False)
+
+    #     # Initialize numeric & flag fields (once or when forced)
+    #     if ("otr_keys_inited" not in st.session_state) or force_defaults:
+    #         if force_defaults:
+    #             # Defaults
+    #             st.session_state["otr_open_flag"]  = False
+    #             st.session_state["otr_size_min"]   = 0
+    #             st.session_state["otr_size_max"]   = 0
+    #             st.session_state["otr_rooms_min"]  = 0
+    #             st.session_state["otr_rooms_max"]  = 0
+    #             st.session_state["otr_floor_min"]  = 0
+    #             st.session_state["otr_floor_max"]  = 0
+    #             st.session_state["otr_price_min"]  = 0
+    #             st.session_state["otr_price_max"]  = 0
+    #         else:
+    #             # From saved prefs
+    #             st.session_state["otr_open_flag"]  = bool(prefs.get("open_to_rent"))
+    #             st.session_state["otr_size_min"]   = int(prefs.get("size_min")  or 0)
+    #             st.session_state["otr_size_max"]   = int(prefs.get("size_max")  or 0)
+    #             st.session_state["otr_rooms_min"]  = int(prefs.get("rooms_min") or 0)
+    #             st.session_state["otr_rooms_max"]  = int(prefs.get("rooms_max") or 0)
+    #             st.session_state["otr_floor_min"]  = int(prefs.get("floor_min") or 0)
+    #             st.session_state["otr_floor_max"]  = int(prefs.get("floor_max") or 0)
+    #             st.session_state["otr_price_min"]  = int(prefs.get("price_min") or 0)
+    #             st.session_state["otr_price_max"]  = int(prefs.get("price_max") or 0)
+
+    #         st.session_state["otr_keys_inited"] = True
+
+    #     # --- UI container ---------------------------------------------------------
+    #     with st.container(border=True):
+    #         data, regions, muni_idx = load_ellada_index("ellada.json")
+
+    #         # If we just pressed Reset, skip preselect from saved prefs this run
+    #         reset_preselect = st.session_state.pop("otr_reset_preselect", False)
+
+    #         saved_city = "" if reset_preselect else (prefs.get("search_city") or "").strip()
+    #         saved_dist = "" if reset_preselect else (prefs.get("search_district") or "").strip()
+
+    #         # Try to infer Region/Unit from saved values
+    #         pre_region, pre_unit = (None, None)
+    #         if saved_city and saved_city in muni_idx:
+    #             pre_region, pre_unit = muni_idx[saved_city]
+    #         elif saved_dist:
+    #             for reg in data.get("Περιφέρειες", []):
+    #                 units = (reg.get("Περιφερειακές Ενότητες") or {})
+    #                 if saved_dist in units:
+    #                     pre_region = reg.get("όνομα")
+    #                     pre_unit = saved_dist
+    #                     break
+
+    #         # --- Correct seeding for the 3-level location pickers -----------------
+    #         prefix = "otr"
+    #         ANY = tr("Any")
+    #         # Seed the exact keys used by the pickers/render_tenant_filters:
+    #         if reset_preselect or (f"{prefix}_region" not in st.session_state):
+    #             st.session_state[f"{prefix}_region"] = pre_region or ANY
+    #         if reset_preselect or (f"{prefix}_ru" not in st.session_state):
+    #             st.session_state[f"{prefix}_ru"] = pre_unit or ANY
+    #         if reset_preselect or (f"{prefix}_mun" not in st.session_state):
+    #             st.session_state[f"{prefix}_mun"] = saved_city or ANY
+
+    #         # --- Active / Inactive toggle (kept as-is) ----------------------------
+    #         cb1, cb2 = st.columns([1, 0.08])
+    #         with cb1:
+    #             open_flag = st.checkbox(tr("I’m looking for a place"), key="otr_open_flag")
+    #         with cb2:
+    #             help_icon(
+    #                 tr("Turn on to appear in landlord searches. You can hide this anytime."),
+    #                 key="help_otr_toggle"
+    #             )
+
+    #         # --- Sticky expander + Form to avoid auto-reruns while editing --------
+    #         st.session_state.setdefault("otr_prop_expanded", True)
+
+    #         with st.expander(tr("Property characteristics"),
+    #                         expanded=st.session_state["otr_prop_expanded"]):
+
+    #             # Linked pickers OUTSIDE the form
+    #             prefix = "otr"
+    #             region_sel, ru_sel, mun_sel = greece_location_pickers(prefix=prefix)
+
+    #             # Form batches widget changes; rerun only on submit
+    #             with st.form("otr_prefs_form", clear_on_submit=False):
+    #                 # BASE RANGES (location is picked above)
+    #                 c1, c2 = st.columns(2)
+    #                 size_min_val = c1.number_input(tr("Min size (m²)"), 0, 10000, step=5, key=f"{prefix}_size_min")
+    #                 size_max_val = c2.number_input(tr("Max size (m²)"), 0, 10000, step=5, key=f"{prefix}_size_max")
+
+    #                 r1, r2 = st.columns(2)
+    #                 rooms_min_val = r1.number_input(tr("Min rooms"), 0, 50, step=1, key=f"{prefix}_rooms_min")
+    #                 rooms_max_val = r2.number_input(tr("Max rooms"), 0, 50, step=1, key=f"{prefix}_rooms_max")
+
+    #                 f1, f2 = st.columns(2)
+    #                 floor_min_val = f1.number_input(tr("Min floor"), -5, 100, step=1, key=f"{prefix}_floor_min")
+    #                 floor_max_val = f2.number_input(tr("Max floor"), -5, 100, step=1, key=f"{prefix}_floor_max")
+
+    #                 p1, p2 = st.columns(2)
+    #                 price_min_val = p1.number_input(tr("Min price (€)"), 0, 1_000_000, step=50, key=f"{prefix}_price_min")
+    #                 price_max_val = p2.number_input(tr("Max price (€)"), 0, 1_000_000, step=50, key=f"{prefix}_price_max")
+
+    #                 # ⬇️ DYNAMIC EXTRAS — same helper as Find Tenants
+    #                 try:
+    #                     extras = render_o2r_extra_filters(prefix=prefix) if 'render_o2r_extra_filters' in globals() else {}
+    #                 except Exception:
+    #                     extras = {}
+
+    #                 def _none_if_zero(v):
+    #                     try:
+    #                         return None if int(v) == 0 else int(v)
+    #                     except Exception:
+    #                         return None
+
+    #                 def _norm_any(v):
+    #                     if v is None:
+    #                         return ""
+    #                     s = str(v).strip().lower()
+    #                     return "" if s in {"", "any", "—", "-", "— any —"} else str(v)
+
+    #                 filt = {
+    #                     "region":   _norm_any(st.session_state.get(f"{prefix}_region")),
+    #                     "district": _norm_any(st.session_state.get(f"{prefix}_ru")),
+    #                     "city":     _norm_any(st.session_state.get(f"{prefix}_mun")),
+    #                     "size_min":  _none_if_zero(size_min_val),
+    #                     "size_max":  _none_if_zero(size_max_val),
+    #                     "rooms_min": _none_if_zero(rooms_min_val),
+    #                     "rooms_max": _none_if_zero(rooms_max_val),
+    #                     "floor_min": (None if floor_min_val == 0 else floor_min_val),
+    #                     "floor_max": (None if floor_max_val == 0 else floor_max_val),
+    #                     "price_min": _none_if_zero(price_min_val),
+    #                     "price_max": _none_if_zero(price_max_val),
+    #                 }
+
+    #                 col_save, col_reset = st.columns([1, 1])
+    #                 save_clicked  = col_save.form_submit_button(tr("Save preferences"))
+    #                 reset_clicked = col_reset.form_submit_button(tr("Reset"))
+
+    #             def _i(x):
+    #                 """None -> 0, else int"""
+    #                 return 0 if x is None else int(x)
+
+    #             # --- Handle actions after the form (runs only when submitted) -----
+    #             if save_clicked:
+    #                 region_clean   = (filt.get("region")   or "").strip()
+    #                 city_clean     = (filt.get("city")     or "").strip()
+    #                 district_clean = (filt.get("district") or "").strip()
+
+    #                 if not city_clean and not district_clean:
+    #                     st.warning(tr("Enter at least a city or a district."))
+    #                 else:
+    #                     try:
+    #                         save_open_to_rent_prefs(
+    #                             tid, bool(st.session_state["otr_open_flag"]),
+    #                             city_clean, district_clean,
+    #                             _i(filt.get("size_min")),  _i(filt.get("size_max")),
+    #                             _i(filt.get("rooms_min")), _i(filt.get("rooms_max")),
+    #                             _i(filt.get("floor_min")), _i(filt.get("floor_max")),
+    #                             _i(filt.get("price_min")), _i(filt.get("price_max")),
+    #                             city_osm_id=None, city_osm_type=None,
+    #                             district_osm_id=None, district_osm_type=None,
+    #                             region=region_clean,
+    #                         )
+    #                     except TypeError:
+    #                         # Fallback for older function signature without OSM/region args
+    #                         save_open_to_rent_prefs(
+    #                             tid, bool(st.session_state["otr_open_flag"]),
+    #                             city_clean, district_clean,
+    #                             _i(filt.get("size_min")),  _i(filt.get("size_max")),
+    #                             _i(filt.get("rooms_min")), _i(filt.get("rooms_max")),
+    #                             _i(filt.get("floor_min")), _i(filt.get("floor_max")),
+    #                             _i(filt.get("price_min")), _i(filt.get("price_max")),
+    #                         )
+
+    #                     # 🔥 Save dynamic extras into tenant_profiles
+    #                     try:
+    #                         extras_to_save = {k: v for k, v in (extras or {}).items() if v not in (None, "")}
+    #                         if extras_to_save:
+    #                             c = get_conn()
+    #                             # decide id column
+    #                             id_col = "tenant_id"
+    #                             cols = {r[1] for r in c.execute("PRAGMA table_info(tenant_profiles)").fetchall()}
+    #                             if id_col not in cols and "user_id" in cols:
+    #                                 id_col = "user_id"
+    #                             set_cols = [f"{col}=?" for col in extras_to_save.keys()]
+    #                             params = list(extras_to_save.values()) + [tid]
+    #                             c.execute(f"UPDATE tenant_profiles SET {', '.join(set_cols)}, updated_at=datetime('now') WHERE {id_col}=?", tuple(params))
+    #                             c.commit()
+    #                     except Exception:
+    #                         pass
+
+    #                     try: st.cache_data.clear()
+    #                     except Exception: pass
+    #                     st.success(tr("Preferences saved."))
+    #                     st.session_state["otr_prop_expanded"] = True  # keep it open on the next run
+
+    #             if reset_clicked:
+    #                 # Clear the exact keys used by pickers and numeric fields
+    #                 for k in (
+    #                     f"{prefix}_region", f"{prefix}_ru", f"{prefix}_mun",
+    #                     f"{prefix}_size_min", f"{prefix}_size_max",
+    #                     f"{prefix}_rooms_min", f"{prefix}_rooms_max",
+    #                     f"{prefix}_floor_min", f"{prefix}_floor_max",
+    #                     f"{prefix}_price_min", f"{prefix}_price_max",
+    #                     "otr_open_flag", "otr_keys_inited"
+    #                 ):
+    #                     st.session_state.pop(k, None)
+
+    #                 st.session_state["otr_force_defaults"]  = True
+    #                 st.session_state["otr_reset_preselect"] = True
+    #                 st.session_state["otr_prop_expanded"]   = True  # keep open after reset
+    #                 st.rerun()
+
+    #     # --- Profile details (own Edit/Save flow) -------------------------------------
+    #     tid = st.session_state.user["id"]
+    #     _prof = load_profile_details(tid)
+
+    #     # one-time default for edit mode
+    #     if "profile_editing" not in st.session_state:
+    #         st.session_state["profile_editing"] = False
+
+    #     _ensure_pt_css()
+
+    #     with st.expander(tr("Profile details"), expanded=False):
+    #         # Header row with Edit / Save / Cancel
+    #         b1, _ = st.columns([3, 9])
+
+    #         if not st.session_state["profile_editing"]:
+    #             # Read-only summary chips (🐾 Pets removed)
+    #             p = _prof or {}
+    #             def _val(x, dash="—"): return (str(x).strip() if (x not in (None, "", 0)) else dash)
+    #             chips = []
+    #             if p.get("age"):              chips.append(f'<span class="pill">{tr("Age")}: {int(p["age"])}</span>')
+    #             if p.get("marital_status"):   chips.append(f'<span class="pill">{tr("Marital status")}: {p["marital_status"]}</span>')
+    #             if p.get("contract_type"):    chips.append(f'<span class="pill">{tr("Contract type")}: {p["contract_type"]}</span>')
+    #             if p.get("monthly_salary") is not None:
+    #                 chips.append(f'<span class="pill">{tr("Monthly salary (€)")}: {int(p["monthly_salary"]):,}</span>')
+    #             if p.get("num_tenants"):      chips.append(f'<span class="pill">{tr("Number of occupants")}: {int(p["num_tenants"])}</span>')
+
+    #             about_html = ""
+    #             if _val(p.get("about"), None):
+    #                 from html import escape
+    #                 about_html = f"<div class='ref-comments'>{escape(p.get('about'))}</div>"
+
+    #             st.markdown(
+    #                 f"""
+    #                 <div class="ref-card">
+    #                 <div class="ref-header">
+    #                     <div class="ref-title">{tr("Profile details")}</div>
+    #                 </div>
+    #                 <div class="ref-row">{' '.join(chips) or '—'}</div>
+    #                 {about_html}
+    #                 </div>
+    #                 """,
+    #                 unsafe_allow_html=True
+    #             )
+
+    #             if b1.button(tr("Edit"), key="btn_profile_edit"):
+    #                 st.session_state["profile_editing"] = True
+    #                 st.rerun()
+
+    #         else:
+    #             # ✅ Actual form (🐾 Pets input removed)
+    #             with st.form("profile_details_form", clear_on_submit=True):
+    #                 c1, c2 = st.columns(2)
+    #                 with c1:
+    #                     age = st.number_input(
+    #                         tr("Age"), min_value=18, max_value=100, step=1,
+    #                         value=int((_prof or {}).get("age") or 18),
+    #                         key="profile_age"
+    #                     )
+    #                     monthly_salary = st.number_input(
+    #                         tr("Monthly salary (€)"), min_value=0, max_value=1_000_000, step=100,
+    #                         value=int((_prof or {}).get("monthly_salary") or 0),
+    #                         key="profile_salary"
+    #                     )
+    #                     marital_status_opts = ["Single","Married","Divorced","Widowed"]
+    #                     marital_status_idx = (
+    #                         marital_status_opts.index(((_prof or {}).get("marital_status") or "Single"))
+    #                         if ((_prof or {}).get("marital_status") in marital_status_opts) else 0
+    #                     )
+    #                     marital_status = st.selectbox(
+    #                         tr("Marital status"),
+    #                         [tr(x) for x in marital_status_opts],
+    #                         index=marital_status_idx,
+    #                         key="profile_marital"
+    #                     )
+    #                     num_tenants = st.number_input(
+    #                         tr("Number of occupants"), min_value=1, max_value=10, step=1,
+    #                         value=int((_prof or {}).get("num_tenants") or 1),
+    #                         key="profile_num_tenants"
+    #                     )
+    #                 with c2:
+    #                     job_position = st.text_input(
+    #                         tr("Job position"), value=(_prof or {}).get("job_position") or "",
+    #                         key="profile_job_position"
+    #                     )
+    #                     contract_type_opts = ["Permanent","Temporary","Freelancer","Other"]
+    #                     contract_type_idx = (
+    #                         contract_type_opts.index(((_prof or {}).get("contract_type") or "Permanent"))
+    #                         if ((_prof or {}).get("contract_type") in contract_type_opts) else 0
+    #                     )
+    #                     contract_type = st.selectbox(
+    #                         tr("Contract type"),
+    #                         [tr(x) for x in contract_type_opts],
+    #                         index=contract_type_idx,
+    #                         key="profile_contract"
+    #                     )
+    #                 about = st.text_area(
+    #                     tr("A few words about yourself"),
+    #                     value=(_prof or {}).get("about") or "",
+    #                     key="profile_about"
+    #                 )
+
+    #                 # 🔘 Button inside the form
+    #                 save_clicked = st.form_submit_button(tr("Save profile details"))
+
+    #             if save_clicked:
+    #                 marital_map = {
+    #                     tr("Single"): "Single", tr("Married"): "Married",
+    #                     tr("Divorced"): "Divorced", tr("Widowed"): "Widowed",
+    #                 }
+    #                 contract_map = {
+    #                     tr("Permanent"): "Permanent", tr("Temporary"): "Temporary",
+    #                     tr("Freelancer"): "Freelancer", tr("Other"): "Other",
+    #                 }
+
+    #                 # 🐾 Pets removed: keep previous value (if your save requires it)
+    #                 prev_pets = (_prof or {}).get("pets")
+    #                 try:
+    #                     save_profile_details(
+    #                         tid,
+    #                         age=int(st.session_state["profile_age"]),
+    #                         monthly_salary=int(st.session_state["profile_salary"]),
+    #                         marital_status=marital_map.get(st.session_state["profile_marital"], "Single"),
+    #                         job_position=st.session_state["profile_job_position"].strip(),
+    #                         contract_type=contract_map.get(st.session_state["profile_contract"], "Permanent"),
+    #                         pets=prev_pets,  # keep existing value silently
+    #                         num_tenants=int(st.session_state["profile_num_tenants"]),
+    #                         about=st.session_state["profile_about"].strip(),
+    #                     )
+    #                 except TypeError:
+    #                     # If the function signature doesn't require 'pets', call without it
+    #                     save_profile_details(
+    #                         tid,
+    #                         age=int(st.session_state["profile_age"]),
+    #                         monthly_salary=int(st.session_state["profile_salary"]),
+    #                         marital_status=marital_map.get(st.session_state["profile_marital"], "Single"),
+    #                         job_position=st.session_state["profile_job_position"].strip(),
+    #                         contract_type=contract_map.get(st.session_state["profile_contract"], "Permanent"),
+    #                         num_tenants=int(st.session_state["profile_num_tenants"]),
+    #                         about=st.session_state["profile_about"].strip(),
+    #                     )
+    #                 try: st.cache_data.clear()
+    #                 except Exception: pass
+    #                 st.success(tr("Changes saved."))
+    #                 st.session_state["profile_editing"] = False
+    #                 st.rerun()
+
+    #     # --- Location for compact summary (pull from pickers; fallback to saved prefs)
+    #     ANY = tr("Any")
+
+    #     raw_region   = st.session_state.get("otr_region") or (prefs.get("region") or "")
+    #     raw_district = st.session_state.get("otr_ru")     or (prefs.get("search_district") or "")
+    #     raw_city     = st.session_state.get("otr_mun")    or (prefs.get("search_city") or "")
+
+    #     def _clean_loc(x: str) -> str:
+    #         s = (x or "").strip()
+    #         return "" if s in {"", "—", ANY} else s
+
+    #     region   = _clean_loc(raw_region)
+    #     district = _clean_loc(raw_district)
+    #     city     = _clean_loc(raw_city)
+
+    #     # --- Compact summary (uses current widget values) ---------------------------
+    #     def _fmt_range(lo, hi, suffix=""):
+    #         has_lo = lo not in (None, 0, "0", "")
+    #         has_hi = hi not in (None, 0, "0", "")
+    #         if not has_lo and not has_hi:
+    #             return None
+    #         lo_txt = f"{int(lo):,}" if has_lo else "—"
+    #         hi_txt = f"{int(hi):,}" if has_hi else "—"
+    #         return f"{lo_txt}–{hi_txt}{suffix}"
+
+    #     latest_region = region if (region and region != "—") else ""
+    #     latest_district = district if (district and district != "—") else ""
+    #     latest_city = city if (city and city != "—") else ""
+    #     loc_txt = " — ".join([x.strip() for x in [latest_region, latest_district, latest_city] if x])
+
+    #     size_txt  = _fmt_range(st.session_state["otr_size_min"],  st.session_state["otr_size_max"],  " m²")
+    #     rooms_txt = _fmt_range(st.session_state["otr_rooms_min"], st.session_state["otr_rooms_max"], f" {tr('rooms')}")
+    #     floor_txt = _fmt_range(st.session_state["otr_floor_min"], st.session_state["otr_floor_max"])
+    #     price_txt = _fmt_range(st.session_state["otr_price_min"], st.session_state["otr_price_max"])
+
+    #     bits = []
+    #     if size_txt:  bits.append(size_txt)
+    #     if rooms_txt: bits.append(rooms_txt)
+    #     if floor_txt: bits.append(tr("Floor") + " " + floor_txt)
+    #     if price_txt: bits.append("€" + price_txt.replace("–", "–€"))
+
+    #     details_txt = " · ".join(bits)
+    #     state_label = tr("Active") if st.session_state["otr_open_flag"] else tr("Inactive")
+
+    #     if loc_txt and details_txt:
+    #         st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {loc_txt} · {details_txt}")
+    #     elif loc_txt:
+    #         st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {loc_txt}")
+    #     elif details_txt:
+    #         st.caption(f"{tr('Status:')} {state_label} · {details_txt}")
+    #     else:
+    #         st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {tr('Anywhere')}")
+
+
+    # def tenant_open_to_rent_section():
+    #     # Header + compact help
+    #     c1, c2 = st.columns([6, 0.6])
+    #     with c1:
+    #         st.subheader(f"**{tr('Open to rent')}**")
+    #     with c2:
+    #         help_icon(tr("Let landlords know what you’re looking and share your criteria."), key="help_otr_header")
+
+    #     tid = st.session_state.user["id"]
+    #     prefs = load_open_to_rent_prefs(tid)
+
+    #     # If reset asked, we force defaults (zeros/False) instead of loading prefs.
+    #     force_defaults = st.session_state.pop("otr_force_defaults", False)
+
+    #     # Initialize numeric & flag fields (once or when forced)
+    #     if ("otr_keys_inited" not in st.session_state) or force_defaults:
+    #         if force_defaults:
+    #             # Defaults
+    #             st.session_state["otr_open_flag"]  = False
+    #             st.session_state["otr_size_min"]   = 0
+    #             st.session_state["otr_size_max"]   = 0
+    #             st.session_state["otr_rooms_min"]  = 0
+    #             st.session_state["otr_rooms_max"]  = 0
+    #             st.session_state["otr_floor_min"]  = 0
+    #             st.session_state["otr_floor_max"]  = 0
+    #             st.session_state["otr_price_min"]  = 0
+    #             st.session_state["otr_price_max"]  = 0
+    #         else:
+    #             # From saved prefs
+    #             st.session_state["otr_open_flag"]  = bool(prefs.get("open_to_rent"))
+    #             st.session_state["otr_size_min"]   = int(prefs.get("size_min")  or 0)
+    #             st.session_state["otr_size_max"]   = int(prefs.get("size_max")  or 0)
+    #             st.session_state["otr_rooms_min"]  = int(prefs.get("rooms_min") or 0)
+    #             st.session_state["otr_rooms_max"]  = int(prefs.get("rooms_max") or 0)
+    #             st.session_state["otr_floor_min"]  = int(prefs.get("floor_min") or 0)
+    #             st.session_state["otr_floor_max"]  = int(prefs.get("floor_max") or 0)
+    #             st.session_state["otr_price_min"]  = int(prefs.get("price_min") or 0)
+    #             st.session_state["otr_price_max"]  = int(prefs.get("price_max") or 0)
+
+    #         st.session_state["otr_keys_inited"] = True
+
+    #     # --- UI container ---------------------------------------------------------
+    #     with st.container(border=True):
+    #         data, regions, muni_idx = load_ellada_index("ellada.json")
+
+    #         # If we just pressed Reset, skip preselect from saved prefs this run
+    #         reset_preselect = st.session_state.pop("otr_reset_preselect", False)
+
+    #         saved_city = "" if reset_preselect else (prefs.get("search_city") or "").strip()
+    #         saved_dist = "" if reset_preselect else (prefs.get("search_district") or "").strip()
+
+    #         # Try to infer Region/Unit from saved values
+    #         pre_region, pre_unit = (None, None)
+    #         if saved_city and saved_city in muni_idx:
+    #             pre_region, pre_unit = muni_idx[saved_city]
+    #         elif saved_dist:
+    #             for reg in data.get("Περιφέρειες", []):
+    #                 units = (reg.get("Περιφερειακές Ενότητες") or {})
+    #                 if saved_dist in units:
+    #                     pre_region = reg.get("όνομα")
+    #                     pre_unit = saved_dist
+    #                     break
+
+    #         # --- Correct seeding for the 3-level location pickers -----------------
+    #         prefix = "otr"
+    #         ANY = tr("Any")
+    #         # Seed the exact keys used by the pickers/render_tenant_filters:
+    #         if reset_preselect or (f"{prefix}_region" not in st.session_state):
+    #             st.session_state[f"{prefix}_region"] = pre_region or ANY
+    #         if reset_preselect or (f"{prefix}_ru" not in st.session_state):
+    #             st.session_state[f"{prefix}_ru"] = pre_unit or ANY
+    #         if reset_preselect or (f"{prefix}_mun" not in st.session_state):
+    #             st.session_state[f"{prefix}_mun"] = saved_city or ANY
+
+    #         # --- Active / Inactive toggle (kept as-is) ----------------------------
+    #         cb1, cb2 = st.columns([1, 0.08])
+    #         with cb1:
+    #             open_flag = st.checkbox(tr("I’m looking for a place"), key="otr_open_flag")
+    #         with cb2:
+    #             help_icon(
+    #                 tr("Turn on to appear in landlord searches. You can hide this anytime."),
+    #                 key="help_otr_toggle"
+    #             )
+
+    #         # --- Sticky expander + Form to avoid auto-reruns while editing --------
+    #         st.session_state.setdefault("otr_prop_expanded", True)
+
+    #         with st.expander(tr("Property characteristics"),
+    #                          expanded=st.session_state["otr_prop_expanded"]):
+
+    #             # ⬇️ NEW: render the 3 linked pickers OUTSIDE the form
+    #             prefix = "otr"
+    #             region_sel, ru_sel, mun_sel = greece_location_pickers(prefix=prefix)
+
+    #             # Form batches widget changes; rerun only on submit
+    #             with st.form("otr_prefs_form", clear_on_submit=False):
+    #                 # RANGES ONLY (location already chosen above)
+    #                 c1, c2 = st.columns(2)
+    #                 size_min_val = c1.number_input(tr("Min size (m²)"), 0, 10000, step=5, key=f"{prefix}_size_min")
+    #                 size_max_val = c2.number_input(tr("Max size (m²)"), 0, 10000, step=5, key=f"{prefix}_size_max")
+
+    #                 r1, r2 = st.columns(2)
+    #                 rooms_min_val = r1.number_input(tr("Min rooms"), 0, 50, step=1, key=f"{prefix}_rooms_min")
+    #                 rooms_max_val = r2.number_input(tr("Max rooms"), 0, 50, step=1, key=f"{prefix}_rooms_max")
+
+    #                 f1, f2 = st.columns(2)
+    #                 floor_min_val = f1.number_input(tr("Min floor"), -5, 100, step=1, key=f"{prefix}_floor_min")
+    #                 floor_max_val = f2.number_input(tr("Max floor"), -5, 100, step=1, key=f"{prefix}_floor_max")
+
+    #                 p1, p2 = st.columns(2)
+    #                 price_min_val = p1.number_input(tr("Min price (€)"), 0, 1_000_000, step=50, key=f"{prefix}_price_min")
+    #                 price_max_val = p2.number_input(tr("Max price (€)"), 0, 1_000_000, step=50, key=f"{prefix}_price_max")
+
+    #                 def _none_if_zero(v):
+    #                     try:
+    #                         return None if int(v) == 0 else int(v)
+    #                     except Exception:
+    #                         return None
+
+    #                 def _norm_any(v):
+    #                     if v is None:
+    #                         return ""
+    #                     s = str(v).strip().lower()
+    #                     return "" if s in {"", "any", "—", "-", "— any —"} else str(v)
+
+    #                 filt = {
+    #                     "region":   _norm_any(st.session_state.get(f"{prefix}_region")),
+    #                     "district": _norm_any(st.session_state.get(f"{prefix}_ru")),
+    #                     "city":     _norm_any(st.session_state.get(f"{prefix}_mun")),
+    #                     "size_min":  _none_if_zero(size_min_val),
+    #                     "size_max":  _none_if_zero(size_max_val),
+    #                     "rooms_min": _none_if_zero(rooms_min_val),
+    #                     "rooms_max": _none_if_zero(rooms_max_val),
+    #                     "floor_min": (None if floor_min_val == 0 else floor_min_val),
+    #                     "floor_max": (None if floor_max_val == 0 else floor_max_val),
+    #                     "price_min": _none_if_zero(price_min_val),
+    #                     "price_max": _none_if_zero(price_max_val),
+    #                 }
+
+    #                 col_save, col_reset = st.columns([1, 1])
+    #                 save_clicked  = col_save.form_submit_button(tr("Save preferences"))
+    #                 reset_clicked = col_reset.form_submit_button(tr("Reset"))
+
+    #             def _i(x):
+    #                 """None -> 0, else int"""
+    #                 return 0 if x is None else int(x)
+
+    #             # --- Handle actions after the form (runs only when submitted) -----
+    #             if save_clicked:
+    #                 region_clean   = (filt.get("region")   or "").strip()
+    #                 city_clean     = (filt.get("city")     or "").strip()
+    #                 district_clean = (filt.get("district") or "").strip()
+
+    #                 if not city_clean and not district_clean:
+    #                     st.warning(tr("Enter at least a city or a district."))
+    #                 else:
+    #                     try:
+    #                         save_open_to_rent_prefs(
+    #                             tid, bool(st.session_state["otr_open_flag"]),
+    #                             city_clean, district_clean,
+    #                             _i(filt.get("size_min")),  _i(filt.get("size_max")),
+    #                             _i(filt.get("rooms_min")), _i(filt.get("rooms_max")),
+    #                             _i(filt.get("floor_min")), _i(filt.get("floor_max")),
+    #                             _i(filt.get("price_min")), _i(filt.get("price_max")),
+    #                             city_osm_id=None, city_osm_type=None,
+    #                             district_osm_id=None, district_osm_type=None,
+    #                             region=region_clean,
+    #                         )
+    #                     except TypeError:
+    #                         # Fallback for older function signature without OSM/region args
+    #                         save_open_to_rent_prefs(
+    #                             tid, bool(st.session_state["otr_open_flag"]),
+    #                             city_clean, district_clean,
+    #                             _i(filt.get("size_min")),  _i(filt.get("size_max")),
+    #                             _i(filt.get("rooms_min")), _i(filt.get("rooms_max")),
+    #                             _i(filt.get("floor_min")), _i(filt.get("floor_max")),
+    #                             _i(filt.get("price_min")), _i(filt.get("price_max")),
+    #                         )
+    #                     try:
+    #                         st.cache_data.clear()
+    #                     except Exception:
+    #                         pass
+    #                     st.success(tr("Preferences saved."))
+    #                     st.session_state["otr_prop_expanded"] = True  # keep it open on the next run
+
+    #             if reset_clicked:
+    #                 # Clear the exact keys used by pickers and numeric fields
+    #                 for k in (
+    #                     f"{prefix}_region", f"{prefix}_ru", f"{prefix}_mun",
+    #                     f"{prefix}_size_min", f"{prefix}_size_max",
+    #                     f"{prefix}_rooms_min", f"{prefix}_rooms_max",
+    #                     f"{prefix}_floor_min", f"{prefix}_floor_max",
+    #                     f"{prefix}_price_min", f"{prefix}_price_max",
+    #                     "otr_open_flag", "otr_keys_inited"
+    #                 ):
+    #                     st.session_state.pop(k, None)
+
+    #                 st.session_state["otr_force_defaults"]  = True
+    #                 st.session_state["otr_reset_preselect"] = True
+    #                 st.session_state["otr_prop_expanded"]   = True  # keep open after reset
+    #                 st.rerun()
+
+    #     # --- Profile details (own Edit/Save flow) -------------------------------------
+    #     tid = st.session_state.user["id"]
+    #     _prof = load_profile_details(tid)
+
+    #     # one-time default for edit mode
+    #     if "profile_editing" not in st.session_state:
+    #         st.session_state["profile_editing"] = False
+
+    #     _ensure_pt_css()
+
+    #     with st.expander(tr("Profile details"), expanded=False):
+    #         # Header row with Edit / Save / Cancel
+    #         b1, _ = st.columns([3, 9])
+
+    #         if not st.session_state["profile_editing"]:
+    #             # Read-only summary chips
+    #             p = _prof or {}
+    #             def _val(x, dash="—"): return (str(x).strip() if (x not in (None, "", 0)) else dash)
+    #             _pets = tr("Yes") if p.get("pets") in (1, True) else tr("No") if p.get("pets") in (0, False) else "—"
+    #             chips = []
+    #             if p.get("age"):              chips.append(f'<span class="pill">{tr("Age")}: {int(p["age"])}</span>')
+    #             if p.get("marital_status"):   chips.append(f'<span class="pill">{tr("Marital status")}: {p["marital_status"]}</span>')
+    #             if p.get("contract_type"):    chips.append(f'<span class="pill">{tr("Contract type")}: {p["contract_type"]}</span>')
+    #             if p.get("monthly_salary") is not None:
+    #                 chips.append(f'<span class="pill">{tr("Monthly salary (€)")}: {int(p["monthly_salary"]):,}</span>')
+    #             chips.append(f'<span class="pill">{tr("Pets")}: {_pets}</span>')
+    #             if p.get("num_tenants"):      chips.append(f'<span class="pill">{tr("Number of occupants")}: {int(p["num_tenants"])}</span>')
+
+    #             about_html = ""
+    #             if _val(p.get("about"), None):
+    #                 from html import escape
+    #                 about_html = f"<div class='ref-comments'>{escape(p.get('about'))}</div>"
+
+    #             st.markdown(
+    #                 f"""
+    #                 <div class="ref-card">
+    #                 <div class="ref-header">
+    #                     <div class="ref-title">{tr("Profile details")}</div>
+    #                 </div>
+    #                 <div class="ref-row">{' '.join(chips) or '—'}</div>
+    #                 {about_html}
+    #                 </div>
+    #                 """,
+    #                 unsafe_allow_html=True
+    #             )
+
+    #             if b1.button(tr("Edit"), key="btn_profile_edit"):
+    #                 st.session_state["profile_editing"] = True
+    #                 st.rerun()
+
+    #         else:
+    #             # ✅ Actual form (submit button MUST be inside this context)
+    #             with st.form("profile_details_form", clear_on_submit=True):
+    #                 c1, c2 = st.columns(2)
+    #                 with c1:
+    #                     age = st.number_input(
+    #                         tr("Age"), min_value=18, max_value=100, step=1,
+    #                         value=int((_prof or {}).get("age") or 18),
+    #                         key="profile_age"
+    #                     )
+    #                     monthly_salary = st.number_input(
+    #                         tr("Monthly salary (€)"), min_value=0, max_value=1_000_000, step=100,
+    #                         value=int((_prof or {}).get("monthly_salary") or 0),
+    #                         key="profile_salary"
+    #                     )
+    #                     marital_status_opts = ["Single","Married","Divorced","Widowed"]
+    #                     marital_status_idx = (
+    #                         marital_status_opts.index(((_prof or {}).get("marital_status") or "Single"))
+    #                         if ((_prof or {}).get("marital_status") in marital_status_opts) else 0
+    #                     )
+    #                     marital_status = st.selectbox(
+    #                         tr("Marital status"),
+    #                         [tr(x) for x in marital_status_opts],
+    #                         index=marital_status_idx,
+    #                         key="profile_marital"
+    #                     )
+    #                     pets = st.radio(
+    #                         tr("Pets"), [tr("Yes"), tr("No")], horizontal=True,
+    #                         index=(0 if ((_prof or {}).get("pets") in (1, True)) else 1),
+    #                         key="profile_pets"
+    #                     )
+    #                     num_tenants = st.number_input(
+    #                         tr("Number of occupants"), min_value=1, max_value=10, step=1,
+    #                         value=int((_prof or {}).get("num_tenants") or 1),
+    #                         key="profile_num_tenants"
+    #                     )
+    #                 with c2:
+    #                     job_position = st.text_input(
+    #                         tr("Job position"), value=(_prof or {}).get("job_position") or "",
+    #                         key="profile_job_position"
+    #                     )
+    #                     contract_type_opts = ["Permanent","Temporary","Freelancer","Other"]
+    #                     contract_type_idx = (
+    #                         contract_type_opts.index(((_prof or {}).get("contract_type") or "Permanent"))
+    #                         if ((_prof or {}).get("contract_type") in contract_type_opts) else 0
+    #                     )
+    #                     contract_type = st.selectbox(
+    #                         tr("Contract type"),
+    #                         [tr(x) for x in contract_type_opts],
+    #                         index=contract_type_idx,
+    #                         key="profile_contract"
+    #                     )
+    #                 about = st.text_area(
+    #                     tr("A few words about yourself"),
+    #                     value=(_prof or {}).get("about") or "",
+    #                     key="profile_about"
+    #                 )
+
+    #                 # 🔘 This is the button Streamlit needs INSIDE the form
+    #                 save_clicked = st.form_submit_button(tr("Save profile details"))
+
+    #             if save_clicked:
+    #                 marital_map = {
+    #                     tr("Single"): "Single", tr("Married"): "Married",
+    #                     tr("Divorced"): "Divorced", tr("Widowed"): "Widowed",
+    #                 }
+    #                 contract_map = {
+    #                     tr("Permanent"): "Permanent", tr("Temporary"): "Temporary",
+    #                     tr("Freelancer"): "Freelancer", tr("Other"): "Other",
+    #                 }
+
+    #                 save_profile_details(
+    #                     tid,
+    #                     age=int(st.session_state["profile_age"]),
+    #                     monthly_salary=int(st.session_state["profile_salary"]),
+    #                     marital_status=marital_map.get(st.session_state["profile_marital"], "Single"),
+    #                     job_position=st.session_state["profile_job_position"].strip(),
+    #                     contract_type=contract_map.get(st.session_state["profile_contract"], "Permanent"),
+    #                     pets=(1 if st.session_state["profile_pets"] == tr("Yes") else 0),
+    #                     num_tenants=int(st.session_state["profile_num_tenants"]),
+    #                     about=st.session_state["profile_about"].strip(),
+    #                 )
+    #                 try: st.cache_data.clear()
+    #                 except Exception: pass
+    #                 st.success(tr("Changes saved."))
+    #                 st.session_state["profile_editing"] = False
+    #                 st.rerun()
+
+    #     # --- Location for compact summary (pull from pickers; fallback to saved prefs)
+    #     ANY = tr("Any")
+
+    #     raw_region   = st.session_state.get("otr_region") or (prefs.get("region") or "")
+    #     raw_district = st.session_state.get("otr_ru")     or (prefs.get("search_district") or "")
+    #     raw_city     = st.session_state.get("otr_mun")    or (prefs.get("search_city") or "")
+
+    #     def _clean_loc(x: str) -> str:
+    #         s = (x or "").strip()
+    #         return "" if s in {"", "—", ANY} else s
+
+    #     region   = _clean_loc(raw_region)
+    #     district = _clean_loc(raw_district)
+    #     city     = _clean_loc(raw_city)
+
+    #     # --- Compact summary (uses current widget values) ---------------------------
+    #     def _fmt_range(lo, hi, suffix=""):
+    #         has_lo = lo not in (None, 0, "0", "")
+    #         has_hi = hi not in (None, 0, "0", "")
+    #         if not has_lo and not has_hi:
+    #             return None
+    #         lo_txt = f"{int(lo):,}" if has_lo else "—"
+    #         hi_txt = f"{int(hi):,}" if has_hi else "—"
+    #         return f"{lo_txt}–{hi_txt}{suffix}"
+
+    #     latest_region = region if (region and region != "—") else ""
+    #     latest_district = district if (district and district != "—") else ""
+    #     latest_city = city if (city and city != "—") else ""
+    #     loc_txt = " — ".join([x.strip() for x in [latest_region, latest_district, latest_city] if x])
+
+    #     size_txt  = _fmt_range(st.session_state["otr_size_min"],  st.session_state["otr_size_max"],  " m²")
+    #     rooms_txt = _fmt_range(st.session_state["otr_rooms_min"], st.session_state["otr_rooms_max"], f" {tr('rooms')}")
+    #     floor_txt = _fmt_range(st.session_state["otr_floor_min"], st.session_state["otr_floor_max"])
+    #     price_txt = _fmt_range(st.session_state["otr_price_min"], st.session_state["otr_price_max"])
+
+    #     bits = []
+    #     if size_txt:  bits.append(size_txt)
+    #     if rooms_txt: bits.append(rooms_txt)
+    #     if floor_txt: bits.append(tr("Floor") + " " + floor_txt)
+    #     if price_txt: bits.append("€" + price_txt.replace("–", "–€"))
+
+    #     details_txt = " · ".join(bits)
+    #     state_label = tr("Active") if st.session_state["otr_open_flag"] else tr("Inactive")
+
+    #     if loc_txt and details_txt:
+    #         st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {loc_txt} · {details_txt}")
+    #     elif loc_txt:
+    #         st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {loc_txt}")
+    #     elif details_txt:
+    #         st.caption(f"{tr('Status:')} {state_label} · {details_txt}")
+    #     else:
+    #         st.caption(f"{tr('Status:')} {state_label} · {tr('Looking in')}: {tr('Anywhere')}")
             
     #===========SEARCH PROPERTIES=================================================================
     
     #===========SEARCH PROPERTIES=================================================================
 
     # from html import escape  # <-- you were using escape() below; import it once.
-
     def search_properties():
         me = st.session_state.user
         me_id = int(me["id"])
 
         st.subheader(tr("Browse properties"))
 
-        # --- Filters (static) ---
-        c1, c2, c3, c4, c5 = st.columns([2, 2, 2, 2, 2])
-        with c1: region    = st.text_input(tr("Region")).strip()
-        with c2: district  = st.text_input(tr("District")).strip()
-        with c3: city      = st.text_input(tr("City")).strip()
-        with c4: min_rooms = st.number_input(tr("Min rooms"), 0, 20, 0, step=1)
-        with c5: max_price = st.number_input(tr("Max price (€)"), 0, 1_000_000, 0, step=50)
+        # --- Base filters (exactly like Find Tenants) -----------------------------
+        # Renders location pickers + size/rooms/floor/price ranges
+        try:
+            base = render_tenant_filters(prefix="browse")  # stores values in session; returns nothing in your version
+        except Exception as e:
+            st.warning(f"{tr('Could not render base filters')}: {e}")
 
-        # --- Filters (dynamic, optional) ---
-        # If you have the dynamic registry + widgets, this will render any extra fields (bathrooms, furnished, years, etc.)
+        # Pull normalized values from session_state (same keys as Find Tenants)
+        ss = st.session_state
+        region   = (ss.get("browse_region") or "").strip()
+        district = (ss.get("browse_regional_unit") or ss.get("browse_district") or "").strip()
+        city     = (ss.get("browse_municipality") or ss.get("browse_city") or "").strip()
+
+        size_min  = ss.get("browse_size_min") or 0
+        size_max  = ss.get("browse_size_max") or 0
+        rooms_min = ss.get("browse_rooms_min") or 0
+        rooms_max = ss.get("browse_rooms_max") or 0
+        floor_min = ss.get("browse_floor_min") or 0
+        floor_max = ss.get("browse_floor_max") or 0
+        price_min = ss.get("browse_price_min") or 0
+        price_max = ss.get("browse_price_max") or 0
+
+        # --- Dynamic OTR characteristics (same helper as Find Tenants) -----------
         try:
             dyn_filters = render_o2r_extra_filters(prefix="browse")
         except Exception:
             dyn_filters = {}
 
-        # --- Build SQL ---
+        # --- Build SQL exactly the same way --------------------------------------
         c = get_conn()
         clauses, vals = ["visible_to_tenants=1"], []
+
+        # Location (case-insensitive exact-ish; use LIKE to allow partials)
         if region:
             clauses.append("LOWER(COALESCE(region,'')) LIKE ?");   vals.append(f"%{region.lower()}%")
         if district:
             clauses.append("LOWER(COALESCE(district,'')) LIKE ?"); vals.append(f"%{district.lower()}%")
         if city:
             clauses.append("LOWER(COALESCE(city,'')) LIKE ?");     vals.append(f"%{city.lower()}%")
-        if min_rooms:
-            clauses.append("COALESCE(rooms,0) >= ?");               vals.append(int(min_rooms))
-        if max_price:
-            clauses.append("COALESCE(price,0) <= ?");               vals.append(int(max_price))
 
-        # Inject dynamic WHERE clauses built from PROPERTY_FIELDS (if available)
+        # Ranges (mirrors the Find Tenants range logic but applied to property columns)
+        if size_min:  clauses.append("COALESCE(size_m2, 0) >= ?");  vals.append(int(size_min))
+        if size_max:  clauses.append("COALESCE(size_m2, 999999) <= ?"); vals.append(int(size_max))
+        if rooms_min: clauses.append("COALESCE(rooms, 0) >= ?");    vals.append(int(rooms_min))
+        if rooms_max: clauses.append("COALESCE(rooms, 999) <= ?");  vals.append(int(rooms_max))
+        if floor_min: clauses.append("COALESCE(floor, -999) >= ?"); vals.append(int(floor_min))
+        if floor_max: clauses.append("COALESCE(floor,  999) <= ?"); vals.append(int(floor_max))
+        if price_min: clauses.append("COALESCE(price, 0) >= ?");    vals.append(int(price_min))
+        if price_max: clauses.append("COALESCE(price, 999999999) <= ?"); vals.append(int(price_max))
+
+        # Dynamic WHEREs from PROPERTY_FIELDS (same path you already use)
         try:
             extra_clauses, extra_params = o2r_sql_clauses_for_fields(dyn_filters)
             if extra_clauses: clauses.extend(extra_clauses)
@@ -9308,7 +10294,7 @@ def tenant_dashboard():
 
         where_sql = " AND ".join(clauses)
 
-        # --- Dynamic SELECT list (pull all active dynamic columns so cards can show them) ---
+        # --- Dynamic SELECT list so cards can display extra fields ----------------
         try:
             active_dyn_cols = [f["column"] for f in PROPERTY_FIELDS if f.get("active", True)]
         except Exception:
@@ -9342,7 +10328,6 @@ def tenant_dashboard():
                 "price": r["price"],
                 "updated_at": r["updated_at"],
             }
-            # attach dynamic fields if any
             for col in active_dyn_cols:
                 try:
                     it[col] = r[col]
@@ -9354,358 +10339,492 @@ def tenant_dashboard():
             st.info(tr("No properties found with these filters."))
             return
 
-        # Order preference
+        # --- Order & scoring (unchanged) -----------------------------------------
         order_by = st.radio(tr("Order by"), [tr("Best fit"), tr("Most recent")], horizontal=True)
 
-        # Precompute tenant-strength (used as pills)
         ref_info  = _tenant_reference_summary(me_id)
         has_ref   = (ref_info.get("completed", 0) > 0)
         has_docs  = (_tenant_verified_docs_count(me_id) > 0)
 
-        # Precompute Fit + thumbnail BYTES (robust)
         for it in rows_dict:
             it["thumb_bytes"] = _get_listing_thumbnail(it["listing_url"]) if it["listing_url"] else None
             it["fit_score"], it["fit_reasons"] = _compute_property_fit(it, me_id)
 
         if order_by == tr("Best fit"):
             rows_dict.sort(key=lambda x: (-x["fit_score"], x["price"] or 10**9))
-        else:
-            # keep SQL ordering by updated_at DESC
-            pass
 
-        # --- CSS (safe to call repeatedly) ---
+        # --- CSS & Cards (unchanged) ---------------------------------------------
         try:
             _ensure_tfl_css()
         except Exception:
             pass
-        st.markdown("""
-        <style>
-        .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#f1f5f9;color:#334155;
-            font-size:.8rem;margin-right:6px;margin-bottom:4px;border:1px solid #e2e8f0}
-        .pill-ok{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
-        .prop-card{border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;margin-bottom:10px;background:#fff;position:relative}
-        .prop-title{font-weight:600;margin-bottom:2px}
-        .prop-sub{color:#475569;font-size:.9rem;margin:4px 0 6px}
-        .prop-foot{color:#64748b;font-size:.85rem}
-        .divider{height:1px;background:#f0f0f0;margin:8px 0 6px}
-        </style>
-        """, unsafe_allow_html=True)
 
-        # --- Precompute interested property ids (tenant) ---
-        try:
-            interested_pids = set(list_interested_properties_for_tenant(me_id) or [])
-        except Exception:
-            interested_pids = set()
-
-        # --- Cache contacts once (emails) for FLC actions ---
-        try:
-            rows_contacts = list_future_landlord_contacts(me_id) or []
-            contact_emails = {(r[1] or "").strip().lower() for r in rows_contacts}
-        except Exception:
-            contact_emails = set()
-
-        # --- Results ---
         for it in rows_dict:
-            pid   = it["id"]
-            addr  = it["address"]
-            url   = it["listing_url"]
-            reg   = it["region"]
-            dis   = it["district"]
-            cit   = it["city"]
-            size  = it["size_m2"]
-            rooms = it["rooms"]
-            floor = it["floor"]
-            price = it["price"]
-            upd   = it["updated_at"]
-            fit_score   = it["fit_score"]
-            fit_reasons = it["fit_reasons"]
-            thumb       = it["thumb_bytes"]  # bytes, not URL
-
-            where = " — ".join([x for x in [reg, dis, cit] if x])
-
-            # Chips (location + specs + price)
-            chips = []
-            if where:                 chips.append(f'<span class="pill">{escape(where)}</span>')
-            if size:                  chips.append(f'<span class="pill">{int(size):,} m²</span>')
-            if rooms:                 chips.append(f'<span class="pill">{int(rooms)} {tr("rooms")}</span>')
-            if floor not in (None,0): chips.append(f'<span class="pill">{tr("Floor")} {int(floor)}</span>')
-            if price:                 chips.append(f'<span class="pill">€{int(price):,}</span>')
-            # Tenant strength pills
-            chips.append(f"<span class='pill {'pill-ok' if has_ref else ''}'>Ref: {'Yes' if has_ref else 'No'}</span>")
-            if has_docs:
-                chips.append(f"<span class='pill pill-ok'>{tr('Verified')}</span>")
-
-            # === 4) EXTRA CHIPS (dynamic characteristics) ===
-            try:
-                if 'property_extra_chips' in globals():
-                    chips.extend(property_extra_chips(it))
-                else:
-                    extras = []
-                    if (it.get("bathrooms") not in (None, 0)): extras.append(f'{int(it["bathrooms"])} {tr("bathrooms")}')
-                    if it.get("year_built"):                  extras.append(f'{tr("Built")} {int(it["year_built"])}')
-                    if it.get("year_renovated"):              extras.append(f'{tr("Renovated")} {int(it["year_renovated"])}')
-                    if it.get("furnished") is not None:       extras.append(tr("Furnished") if it["furnished"] else tr("Unfurnished"))
-                    for label in extras:
-                        chips.append(f'<span class="pill">{escape(label)}</span>')
-            except Exception:
-                pass
-            # === /EXTRA CHIPS ===
-
-            chips_html = " ".join(chips)
-
-            # Link domain
-            try:
-                domain = url.split('://', 1)[-1].split('/', 1)[0] if url else None
-            except Exception:
-                domain = url
-            link_html = f' 🔗 <a href="{escape(url)}">{escape(domain) if domain else tr("Open listing")}</a>' if url else ""
-
-            # Interested pill
-            already_interested = pid in interested_pids
-
-            # Layout
+            chips = property_chips_from_row(it)
             with st.container(border=True):
-                hdr_left, hdr_right = st.columns([10, 1], vertical_alignment="center")
-                with hdr_left:
-                    safe_addr = escape(addr or (str(cit) if cit else tr("Property")))
-                    parts = []
-                    if already_interested:
-                        parts.append(f'<span class="tfl-badge tfl-badge--ok">{escape(tr("Interested"))}</span>')
-                    parts.append(f"<strong>{safe_addr}</strong>")
-                    st.markdown(" ".join(parts), unsafe_allow_html=True)
+                c1, c2 = st.columns([7, 5])
+                with c1:
+                    st.markdown(f"**{it['address'] or tr('Property')}**  "
+                                + (" · " + " ".join(chips) if chips else ""),
+                                unsafe_allow_html=True)
+                    if it["listing_url"]:
+                        st.caption(_og_title(it["listing_url"]) or it["listing_url"])
+                    # Fit badges for tenant
+                    pills = []
+                    if has_ref:  pills.append(tr("Reference verified"))
+                    if has_docs: pills.append(tr("Docs verified"))
+                    if pills:
+                        st.write(" · ".join(f"🪪 {p}" for p in pills))
+                with c2:
+                    if it["thumb_bytes"]:
+                        st.image(it["thumb_bytes"], use_container_width=True)
+                # Actions row (e.g., express interest) stays as you had it
+                _tenant_property_actions(it["id"], me_id)
 
-                with hdr_right:
-                    with st.popover("⋯", use_container_width=False):
-                        with st.expander(tr("Why this fit?")):
-                            st.write(" · ".join(fit_reasons))
-                        if already_interested:
-                            if st.button(tr("Cancel interest"), key=f"pi_cancel:{pid}"):
-                                linked_users = list_users_linked_to_property(pid)
-                                for owner_id in linked_users:
-                                    u = get_user_by_id(owner_id) or {}
-                                    em = (u.get("email") or "").strip().lower()
-                                    if em:
-                                        try:
-                                            flc_cancel_invite(me_id, em)
-                                        except Exception:
-                                            pass
-                                _remove_interest_for_property(me_id, pid)
-                                try:
-                                    st.cache_data.clear()
-                                except Exception:
-                                    pass
-                                st.success(tr("Interest cancelled"))
-                                st.rerun()
 
-                L, R = st.columns([3, 9], vertical_alignment="top")
+    # def search_properties():
+    #     me = st.session_state.user
+    #     me_id = int(me["id"])
 
-                with L:
-                    if thumb:
-                        st.image(thumb, use_column_width=True)
-                    else:
-                        st.markdown(
-                            '<div style="width:100%;aspect-ratio:4/3;background:#eef1f4;border:1px solid #dde3ea;'
-                            'border-radius:8px;display:flex;align-items:center;justify-content:center;">'
-                            '<span style="opacity:.6;">No photo</span>'
-                            '</div>',
-                            unsafe_allow_html=True
-                        )
+    #     st.subheader(tr("Browse properties"))
 
-                with R:
-                    st.markdown(
-                        "<div class='pill' style='background:#eefbf2;border:1px solid #b8e6c5;'>"
-                        f"Fit: {fit_score}%</div>",
-                        unsafe_allow_html=True
-                    )
-                    st.progress(max(0.0, min(1.0, (fit_score or 0)/100.0)))
+    #     # --- Filters (static) ---
+    #     c1, c2, c3, c4, c5 = st.columns([2, 2, 2, 2, 2])
+    #     with c1: region    = st.text_input(tr("Region")).strip()
+    #     with c2: district  = st.text_input(tr("District")).strip()
+    #     with c3: city      = st.text_input(tr("City")).strip()
+    #     with c4: min_rooms = st.number_input(tr("Min rooms"), 0, 20, 0, step=1)
+    #     with c5: max_price = st.number_input(tr("Max price (€)"), 0, 1_000_000, 0, step=50)
 
-                    st.markdown(f'<div class="prop-sub">{chips_html}</div>', unsafe_allow_html=True)
-                    st.markdown(f'<div class="prop-foot">{tr("Updated")}: {format_dt(upd)}</div>', unsafe_allow_html=True)
+    #     # --- Filters (dynamic, optional) ---
+    #     # If you have the dynamic registry + widgets, this will render any extra fields (bathrooms, furnished, years, etc.)
+    #     try:
+    #         dyn_filters = render_o2r_extra_filters(prefix="browse")
+    #     except Exception:
+    #         dyn_filters = {}
 
-                    # Multiple links support
-                    extra_links = []
-                    urls_raw = (url or "").replace(";", ",").split(",")
-                    urls_clean = [u.strip() for u in urls_raw if u.strip()]
-                    if len(urls_clean) > 1:
-                        for u in urls_clean:
-                            try:
-                                domain = u.split("://", 1)[-1].split("/", 1)[0]
-                            except Exception:
-                                domain = u
-                            extra_links.append(f'🔗 <a href="{escape(u)}" target="_blank" rel="noopener noreferrer">{escape(domain)}</a>')
-                        links_html = " · ".join(extra_links)
-                        st.markdown(f'<div class="prop-foot">{tr("For more details")}: {links_html}</div>', unsafe_allow_html=True)
-                    elif urls_clean:
-                        try:
-                            domain = urls_clean[0].split("://", 1)[-1].split("/", 1)[0]
-                        except Exception:
-                            domain = urls_clean[0]
-                        st.markdown(
-                            f'<div class="prop-foot">{tr("For more details")}: '
-                            f'🔗 <a href="{escape(urls_clean[0])}" target="_blank" rel="noopener noreferrer">{escape(domain)}</a></div>',
-                            unsafe_allow_html=True,
-                        )
-                    else:
-                        st.markdown(f'<div class="prop-foot">{tr("For more details")}: {tr("No links available")}</div>', unsafe_allow_html=True)
+    #     # --- Build SQL ---
+    #     c = get_conn()
+    #     clauses, vals = ["visible_to_tenants=1"], []
+    #     if region:
+    #         clauses.append("LOWER(COALESCE(region,'')) LIKE ?");   vals.append(f"%{region.lower()}%")
+    #     if district:
+    #         clauses.append("LOWER(COALESCE(district,'')) LIKE ?"); vals.append(f"%{district.lower()}%")
+    #     if city:
+    #         clauses.append("LOWER(COALESCE(city,'')) LIKE ?");     vals.append(f"%{city.lower()}%")
+    #     if min_rooms:
+    #         clauses.append("COALESCE(rooms,0) >= ?");               vals.append(int(min_rooms))
+    #     if max_price:
+    #         clauses.append("COALESCE(price,0) <= ?");               vals.append(int(max_price))
+
+    #     # Inject dynamic WHERE clauses built from PROPERTY_FIELDS (if available)
+    #     try:
+    #         extra_clauses, extra_params = o2r_sql_clauses_for_fields(dyn_filters)
+    #         if extra_clauses: clauses.extend(extra_clauses)
+    #         if extra_params:  vals.extend(extra_params)
+    #     except Exception:
+    #         pass  # keep base search working even if extras fail
+
+    #     where_sql = " AND ".join(clauses)
+
+    #     # --- Dynamic SELECT list (pull all active dynamic columns so cards can show them) ---
+    #     try:
+    #         active_dyn_cols = [f["column"] for f in PROPERTY_FIELDS if f.get("active", True)]
+    #     except Exception:
+    #         active_dyn_cols = []
+    #     dyn_select_sql = (", " + ", ".join(active_dyn_cols)) if active_dyn_cols else ""
+
+    #     rows = c.execute(f"""
+    #         SELECT id, landlord_id, address, listing_url, region, district, city,
+    #             size_m2, rooms, floor, price, updated_at
+    #             {dyn_select_sql}
+    #         FROM landlord_properties
+    #         WHERE {where_sql}
+    #         ORDER BY updated_at DESC, id DESC
+    #         LIMIT 200
+    #     """, tuple(vals)).fetchall()
+
+    #     # Convert to dicts (include dynamic columns)
+    #     rows_dict = []
+    #     for r in rows:
+    #         it = {
+    #             "id": r["id"],
+    #             "landlord_id": r["landlord_id"],
+    #             "address": r["address"],
+    #             "listing_url": _norm_url(r["listing_url"]),
+    #             "region": r["region"],
+    #             "district": r["district"],
+    #             "city": r["city"],
+    #             "size_m2": r["size_m2"],
+    #             "rooms": r["rooms"],
+    #             "floor": r["floor"],
+    #             "price": r["price"],
+    #             "updated_at": r["updated_at"],
+    #         }
+    #         # attach dynamic fields if any
+    #         for col in active_dyn_cols:
+    #             try:
+    #                 it[col] = r[col]
+    #             except Exception:
+    #                 it[col] = None
+    #         rows_dict.append(it)
+
+    #     if not rows_dict:
+    #         st.info(tr("No properties found with these filters."))
+    #         return
+
+    #     # Order preference
+    #     order_by = st.radio(tr("Order by"), [tr("Best fit"), tr("Most recent")], horizontal=True)
+
+    #     # Precompute tenant-strength (used as pills)
+    #     ref_info  = _tenant_reference_summary(me_id)
+    #     has_ref   = (ref_info.get("completed", 0) > 0)
+    #     has_docs  = (_tenant_verified_docs_count(me_id) > 0)
+
+    #     # Precompute Fit + thumbnail BYTES (robust)
+    #     for it in rows_dict:
+    #         it["thumb_bytes"] = _get_listing_thumbnail(it["listing_url"]) if it["listing_url"] else None
+    #         it["fit_score"], it["fit_reasons"] = _compute_property_fit(it, me_id)
+
+    #     if order_by == tr("Best fit"):
+    #         rows_dict.sort(key=lambda x: (-x["fit_score"], x["price"] or 10**9))
+    #     else:
+    #         # keep SQL ordering by updated_at DESC
+    #         pass
+
+    #     # --- CSS (safe to call repeatedly) ---
+    #     try:
+    #         _ensure_tfl_css()
+    #     except Exception:
+    #         pass
+    #     st.markdown("""
+    #     <style>
+    #     .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#f1f5f9;color:#334155;
+    #         font-size:.8rem;margin-right:6px;margin-bottom:4px;border:1px solid #e2e8f0}
+    #     .pill-ok{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
+    #     .prop-card{border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;margin-bottom:10px;background:#fff;position:relative}
+    #     .prop-title{font-weight:600;margin-bottom:2px}
+    #     .prop-sub{color:#475569;font-size:.9rem;margin:4px 0 6px}
+    #     .prop-foot{color:#64748b;font-size:.85rem}
+    #     .divider{height:1px;background:#f0f0f0;margin:8px 0 6px}
+    #     </style>
+    #     """, unsafe_allow_html=True)
+
+    #     # --- Precompute interested property ids (tenant) ---
+    #     try:
+    #         interested_pids = set(list_interested_properties_for_tenant(me_id) or [])
+    #     except Exception:
+    #         interested_pids = set()
+
+    #     # --- Cache contacts once (emails) for FLC actions ---
+    #     try:
+    #         rows_contacts = list_future_landlord_contacts(me_id) or []
+    #         contact_emails = {(r[1] or "").strip().lower() for r in rows_contacts}
+    #     except Exception:
+    #         contact_emails = set()
+
+    #     # --- Results ---
+    #     for it in rows_dict:
+    #         pid   = it["id"]
+    #         addr  = it["address"]
+    #         url   = it["listing_url"]
+    #         reg   = it["region"]
+    #         dis   = it["district"]
+    #         cit   = it["city"]
+    #         size  = it["size_m2"]
+    #         rooms = it["rooms"]
+    #         floor = it["floor"]
+    #         price = it["price"]
+    #         upd   = it["updated_at"]
+    #         fit_score   = it["fit_score"]
+    #         fit_reasons = it["fit_reasons"]
+    #         thumb       = it["thumb_bytes"]  # bytes, not URL
+
+    #         where = " — ".join([x for x in [reg, dis, cit] if x])
+
+    #         # Chips (location + specs + price)
+    #         chips = []
+    #         if where:                 chips.append(f'<span class="pill">{escape(where)}</span>')
+    #         if size:                  chips.append(f'<span class="pill">{int(size):,} m²</span>')
+    #         if rooms:                 chips.append(f'<span class="pill">{int(rooms)} {tr("rooms")}</span>')
+    #         if floor not in (None,0): chips.append(f'<span class="pill">{tr("Floor")} {int(floor)}</span>')
+    #         if price:                 chips.append(f'<span class="pill">€{int(price):,}</span>')
+    #         # Tenant strength pills
+    #         chips.append(f"<span class='pill {'pill-ok' if has_ref else ''}'>Ref: {'Yes' if has_ref else 'No'}</span>")
+    #         if has_docs:
+    #             chips.append(f"<span class='pill pill-ok'>{tr('Verified')}</span>")
+
+    #         # === 4) EXTRA CHIPS (dynamic characteristics) ===
+    #         try:
+    #             if 'property_extra_chips' in globals():
+    #                 chips.extend(property_extra_chips(it))
+    #             else:
+    #                 extras = []
+    #                 if (it.get("bathrooms") not in (None, 0)): extras.append(f'{int(it["bathrooms"])} {tr("bathrooms")}')
+    #                 if it.get("year_built"):                  extras.append(f'{tr("Built")} {int(it["year_built"])}')
+    #                 if it.get("year_renovated"):              extras.append(f'{tr("Renovated")} {int(it["year_renovated"])}')
+    #                 if it.get("furnished") is not None:       extras.append(tr("Furnished") if it["furnished"] else tr("Unfurnished"))
+    #                 for label in extras:
+    #                     chips.append(f'<span class="pill">{escape(label)}</span>')
+    #         except Exception:
+    #             pass
+    #         # === /EXTRA CHIPS ===
+
+    #         chips_html = " ".join(chips)
+
+    #         # Link domain
+    #         try:
+    #             domain = url.split('://', 1)[-1].split('/', 1)[0] if url else None
+    #         except Exception:
+    #             domain = url
+    #         link_html = f' 🔗 <a href="{escape(url)}">{escape(domain) if domain else tr("Open listing")}</a>' if url else ""
+
+    #         # Interested pill
+    #         already_interested = pid in interested_pids
+
+    #         # Layout
+    #         with st.container(border=True):
+    #             hdr_left, hdr_right = st.columns([10, 1], vertical_alignment="center")
+    #             with hdr_left:
+    #                 safe_addr = escape(addr or (str(cit) if cit else tr("Property")))
+    #                 parts = []
+    #                 if already_interested:
+    #                     parts.append(f'<span class="tfl-badge tfl-badge--ok">{escape(tr("Interested"))}</span>')
+    #                 parts.append(f"<strong>{safe_addr}</strong>")
+    #                 st.markdown(" ".join(parts), unsafe_allow_html=True)
+
+    #             with hdr_right:
+    #                 with st.popover("⋯", use_container_width=False):
+    #                     with st.expander(tr("Why this fit?")):
+    #                         st.write(" · ".join(fit_reasons))
+    #                     if already_interested:
+    #                         if st.button(tr("Cancel interest"), key=f"pi_cancel:{pid}"):
+    #                             linked_users = list_users_linked_to_property(pid)
+    #                             for owner_id in linked_users:
+    #                                 u = get_user_by_id(owner_id) or {}
+    #                                 em = (u.get("email") or "").strip().lower()
+    #                                 if em:
+    #                                     try:
+    #                                         flc_cancel_invite(me_id, em)
+    #                                     except Exception:
+    #                                         pass
+    #                             _remove_interest_for_property(me_id, pid)
+    #                             try:
+    #                                 st.cache_data.clear()
+    #                             except Exception:
+    #                                 pass
+    #                             st.success(tr("Interest cancelled"))
+    #                             st.rerun()
+
+    #             L, R = st.columns([3, 9], vertical_alignment="top")
+
+    #             with L:
+    #                 if thumb:
+    #                     st.image(thumb, use_column_width=True)
+    #                 else:
+    #                     st.markdown(
+    #                         '<div style="width:100%;aspect-ratio:4/3;background:#eef1f4;border:1px solid #dde3ea;'
+    #                         'border-radius:8px;display:flex;align-items:center;justify-content:center;">'
+    #                         '<span style="opacity:.6;">No photo</span>'
+    #                         '</div>',
+    #                         unsafe_allow_html=True
+    #                     )
+
+    #             with R:
+    #                 st.markdown(
+    #                     "<div class='pill' style='background:#eefbf2;border:1px solid #b8e6c5;'>"
+    #                     f"Fit: {fit_score}%</div>",
+    #                     unsafe_allow_html=True
+    #                 )
+    #                 st.progress(max(0.0, min(1.0, (fit_score or 0)/100.0)))
+
+    #                 st.markdown(f'<div class="prop-sub">{chips_html}</div>', unsafe_allow_html=True)
+    #                 st.markdown(f'<div class="prop-foot">{tr("Updated")}: {format_dt(upd)}</div>', unsafe_allow_html=True)
+
+    #                 # Multiple links support
+    #                 extra_links = []
+    #                 urls_raw = (url or "").replace(";", ",").split(",")
+    #                 urls_clean = [u.strip() for u in urls_raw if u.strip()]
+    #                 if len(urls_clean) > 1:
+    #                     for u in urls_clean:
+    #                         try:
+    #                             domain = u.split("://", 1)[-1].split("/", 1)[0]
+    #                         except Exception:
+    #                             domain = u
+    #                         extra_links.append(f'🔗 <a href="{escape(u)}" target="_blank" rel="noopener noreferrer">{escape(domain)}</a>')
+    #                     links_html = " · ".join(extra_links)
+    #                     st.markdown(f'<div class="prop-foot">{tr("For more details")}: {links_html}</div>', unsafe_allow_html=True)
+    #                 elif urls_clean:
+    #                     try:
+    #                         domain = urls_clean[0].split("://", 1)[-1].split("/", 1)[0]
+    #                     except Exception:
+    #                         domain = urls_clean[0]
+    #                     st.markdown(
+    #                         f'<div class="prop-foot">{tr("For more details")}: '
+    #                         f'🔗 <a href="{escape(urls_clean[0])}" target="_blank" rel="noopener noreferrer">{escape(domain)}</a></div>',
+    #                         unsafe_allow_html=True,
+    #                     )
+    #                 else:
+    #                     st.markdown(f'<div class="prop-foot">{tr("For more details")}: {tr("No links available")}</div>', unsafe_allow_html=True)
 
 
 
 
     
-                # ---- Interest micro-flow under the card (left column area) ----
-                # ---- Interest micro-flow under the card (left column area) ----
+    #             # ---- Interest micro-flow under the card (left column area) ----
+    #             # ---- Interest micro-flow under the card (left column area) ----
 
-                st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+    #             st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
-                if not already_interested:
-                    with st.popover(tr("I’m interested"), use_container_width=True):
+    #             if not already_interested:
+    #                 with st.popover(tr("I’m interested"), use_container_width=True):
 
-                        from html import escape as _esc  # ensure we have an escaper
+    #                     from html import escape as _esc  # ensure we have an escaper
 
-                        st.caption(tr("Contacts for this property"))
-                        uploaders = list_property_uploaders(pid)  # [(name, email, display_role)]
-                        selected_key = f"selected_contacts_{pid}"
-                        if selected_key not in st.session_state:
-                            st.session_state[selected_key] = []
+    #                     st.caption(tr("Contacts for this property"))
+    #                     uploaders = list_property_uploaders(pid)  # [(name, email, display_role)]
+    #                     selected_key = f"selected_contacts_{pid}"
+    #                     if selected_key not in st.session_state:
+    #                         st.session_state[selected_key] = []
 
-                        if not uploaders:
-                            st.write(tr("No landlords/agents linked"))
-                        else:
-                            multiple = len(uploaders) > 1
+    #                     if not uploaders:
+    #                         st.write(tr("No landlords/agents linked"))
+    #                     else:
+    #                         multiple = len(uploaders) > 1
 
-                            # Keep session selections in sync with current list of uploaders (if list changed)
-                            if multiple and st.session_state[selected_key]:
-                                present = {em for _, em, _ in uploaders}
-                                st.session_state[selected_key] = [
-                                    em for em in st.session_state[selected_key] if em in present
-                                ]
+    #                         # Keep session selections in sync with current list of uploaders (if list changed)
+    #                         if multiple and st.session_state[selected_key]:
+    #                             present = {em for _, em, _ in uploaders}
+    #                             st.session_state[selected_key] = [
+    #                                 em for em in st.session_state[selected_key] if em in present
+    #                             ]
 
-                            for idx_u, (up_name, up_email, link_role) in enumerate(uploaders):
-                                role_norm    = (link_role or "").strip().lower()
-                                display_role = "agent" if role_norm == "agent" else "landlord"
-                                icon = role_icon(display_role) or ""
-                                disp = (up_name or "").strip() or (up_email or "").split("@")[0] or tr("Unknown")
-                                initials = _initials(disp, up_email) if '_initials' in globals() else (disp[:2] or "?").upper()
-                                role_pill = tr("Landlord") if display_role == "landlord" else tr("Agent")
+    #                         for idx_u, (up_name, up_email, link_role) in enumerate(uploaders):
+    #                             role_norm    = (link_role or "").strip().lower()
+    #                             display_role = "agent" if role_norm == "agent" else "landlord"
+    #                             icon = role_icon(display_role) or ""
+    #                             disp = (up_name or "").strip() or (up_email or "").split("@")[0] or tr("Unknown")
+    #                             initials = _initials(disp, up_email) if '_initials' in globals() else (disp[:2] or "?").upper()
+    #                             role_pill = tr("Landlord") if display_role == "landlord" else tr("Agent")
 
-                                cA, cB, cC = st.columns([1, 6, 1])
+    #                             cA, cB, cC = st.columns([1, 6, 1])
 
-                                with cA:
-                                    st.markdown(f'<div class="tfl-avatar">{_esc(initials)}</div>', unsafe_allow_html=True)
+    #                             with cA:
+    #                                 st.markdown(f'<div class="tfl-avatar">{_esc(initials)}</div>', unsafe_allow_html=True)
 
-                                with cB:
-                                    st.markdown(
-                                        (
-                                            f'<div class="tfl-name">{_esc(icon)} {_esc(disp)} '
-                                            f'<span class="pill">{_esc(role_pill)}</span></div>'
-                                            f'<div class="tfl-email"><a href="mailto:{_esc(up_email or "")}">{_esc(up_email or "")}</a></div>'
-                                        ),
-                                        unsafe_allow_html=True
-                                    )
-                                    # Status label (optional)
-                                    try:
-                                        urow = get_user_by_email(up_email) or {}
-                                        other_id = int(urow.get("id") or 0)
-                                    except Exception:
-                                        other_id = 0
-                                    if other_id:
-                                        rel = (flc_relation_status(other_id, me_id, landlord_email=up_email) or "disconnected").lower()
-                                        if rel == "connected":
-                                            st.markdown(f'<span class="tfl-badge tfl-badge--ok">{tr("Connected")}</span>', unsafe_allow_html=True)
-                                        elif rel.startswith("pending"):
-                                            st.markdown(f'<span class="tfl-badge tfl-badge--info">{tr("Pending")}</span>', unsafe_allow_html=True)
-                                    else:
-                                        st.caption(tr("User record not found"))
+    #                             with cB:
+    #                                 st.markdown(
+    #                                     (
+    #                                         f'<div class="tfl-name">{_esc(icon)} {_esc(disp)} '
+    #                                         f'<span class="pill">{_esc(role_pill)}</span></div>'
+    #                                         f'<div class="tfl-email"><a href="mailto:{_esc(up_email or "")}">{_esc(up_email or "")}</a></div>'
+    #                                     ),
+    #                                     unsafe_allow_html=True
+    #                                 )
+    #                                 # Status label (optional)
+    #                                 try:
+    #                                     urow = get_user_by_email(up_email) or {}
+    #                                     other_id = int(urow.get("id") or 0)
+    #                                 except Exception:
+    #                                     other_id = 0
+    #                                 if other_id:
+    #                                     rel = (flc_relation_status(other_id, me_id, landlord_email=up_email) or "disconnected").lower()
+    #                                     if rel == "connected":
+    #                                         st.markdown(f'<span class="tfl-badge tfl-badge--ok">{tr("Connected")}</span>', unsafe_allow_html=True)
+    #                                     elif rel.startswith("pending"):
+    #                                         st.markdown(f'<span class="tfl-badge tfl-badge--info">{tr("Pending")}</span>', unsafe_allow_html=True)
+    #                                 else:
+    #                                     st.caption(tr("User record not found"))
 
-                                with cC:
-                                    if multiple:
-                                        checked = st.checkbox(
-                                            "",
-                                            key=f"select_contact_{pid}_{idx_u}",
-                                            help=tr("Select to send interest to this contact"),
-                                            value=(up_email in st.session_state[selected_key]),
-                                        )
-                                        # keep session selections in sync
-                                        if checked and up_email not in st.session_state[selected_key]:
-                                            st.session_state[selected_key].append(up_email)
-                                        if not checked and up_email in st.session_state[selected_key]:
-                                            st.session_state[selected_key].remove(up_email)
+    #                             with cC:
+    #                                 if multiple:
+    #                                     checked = st.checkbox(
+    #                                         "",
+    #                                         key=f"select_contact_{pid}_{idx_u}",
+    #                                         help=tr("Select to send interest to this contact"),
+    #                                         value=(up_email in st.session_state[selected_key]),
+    #                                     )
+    #                                     # keep session selections in sync
+    #                                     if checked and up_email not in st.session_state[selected_key]:
+    #                                         st.session_state[selected_key].append(up_email)
+    #                                     if not checked and up_email in st.session_state[selected_key]:
+    #                                         st.session_state[selected_key].remove(up_email)
 
-                        st.caption(tr("Optional note to the owner/agent"))
-                        note = st.text_area(
-                            tr("Message"),
-                            key=f"pi_note:{pid}",
-                            height=90,
-                            placeholder=tr("e.g., Hi! I’d like to view this place. Tue after 18:00 works for me."),
-                        )
-                        chips = st.multiselect(
-                            tr("Availability"),
-                            options=[tr("Today"), tr("Weekdays after 18:00"), tr("Weekend mornings")],
-                            key=f"pi_avail:{pid}",
-                        )
+    #                     st.caption(tr("Optional note to the owner/agent"))
+    #                     note = st.text_area(
+    #                         tr("Message"),
+    #                         key=f"pi_note:{pid}",
+    #                         height=90,
+    #                         placeholder=tr("e.g., Hi! I’d like to view this place. Tue after 18:00 works for me."),
+    #                     )
+    #                     chips = st.multiselect(
+    #                         tr("Availability"),
+    #                         options=[tr("Today"), tr("Weekdays after 18:00"), tr("Weekend mornings")],
+    #                         key=f"pi_avail:{pid}",
+    #                     )
 
-                        if st.button(tr("Send interest"), key=f"pi_send:{pid}", use_container_width=True):
-                            final_note = note.strip()
-                            if chips:
-                                final_note = (final_note + ("\n\n" if final_note else "")) + tr("Availability") + ": " + ", ".join(chips)
-                            # Always append profile highlights
-                            final_note = (final_note + ("\n\n" if final_note else "")) + tr("Includes profile highlights")
+    #                     if st.button(tr("Send interest"), key=f"pi_send:{pid}", use_container_width=True):
+    #                         final_note = note.strip()
+    #                         if chips:
+    #                             final_note = (final_note + ("\n\n" if final_note else "")) + tr("Availability") + ": " + ", ".join(chips)
+    #                         # Always append profile highlights
+    #                         final_note = (final_note + ("\n\n" if final_note else "")) + tr("Includes profile highlights")
 
-                            # Decide recipients
-                            selected_emails = st.session_state.get(selected_key, [])
-                            contact_param = None
-                            if uploaders and len(uploaders) > 1:
-                                if not selected_emails:
-                                    st.warning(tr("Please select at least one contact."))
-                                    st.stop()
-                                contact_param = selected_emails  # send only to chosen contacts
+    #                         # Decide recipients
+    #                         selected_emails = st.session_state.get(selected_key, [])
+    #                         contact_param = None
+    #                         if uploaders and len(uploaders) > 1:
+    #                             if not selected_emails:
+    #                                 st.warning(tr("Please select at least one contact."))
+    #                                 st.stop()
+    #                             contact_param = selected_emails  # send only to chosen contacts
 
-                            try:
-                                # Call helper (newer signature with contact_emails if available)
-                                try:
-                                    touched = _send_interest_like_connect_for_property(
-                                        tenant_id=me_id,
-                                        property_id=pid,
-                                        note_text=final_note or None,
-                                        contact_emails=contact_param,
-                                    )
-                                except TypeError:
-                                    # Fallback: older signature without contact_emails
-                                    touched = _send_interest_like_connect_for_property(
-                                        tenant_id=me_id,
-                                        property_id=pid,
-                                        note_text=final_note or None,
-                                    )
+    #                         try:
+    #                             # Call helper (newer signature with contact_emails if available)
+    #                             try:
+    #                                 touched = _send_interest_like_connect_for_property(
+    #                                     tenant_id=me_id,
+    #                                     property_id=pid,
+    #                                     note_text=final_note or None,
+    #                                     contact_emails=contact_param,
+    #                                 )
+    #                             except TypeError:
+    #                                 # Fallback: older signature without contact_emails
+    #                                 touched = _send_interest_like_connect_for_property(
+    #                                     tenant_id=me_id,
+    #                                     property_id=pid,
+    #                                     note_text=final_note or None,
+    #                                 )
 
-                                # ---- NEW: set per-property interest status for each recipient ----
-                                # Determine whom we actually notified
-                                recipient_emails = contact_param if contact_param else [em for _, em, _ in uploaders]
-                                # Map emails -> user IDs and set status
-                                set_count = 0
-                                for em in recipient_emails:
-                                    try:
-                                        row = get_user_by_email(em) or {}
-                                        ll_id = int(row.get("id") or 0)
-                                    except Exception:
-                                        ll_id = 0
-                                    if ll_id:
-                                        try:
-                                            set_interest_status(ll_id, me_id, pid, "interested_tenant")
-                                            set_count += 1
-                                        except Exception as _e:
-                                            # don’t break the UX; just surface a soft warning
-                                            st.warning(tr("Saved interest but couldn’t tag status for {email}.").format(email=em))
+    #                             # ---- NEW: set per-property interest status for each recipient ----
+    #                             # Determine whom we actually notified
+    #                             recipient_emails = contact_param if contact_param else [em for _, em, _ in uploaders]
+    #                             # Map emails -> user IDs and set status
+    #                             set_count = 0
+    #                             for em in recipient_emails:
+    #                                 try:
+    #                                     row = get_user_by_email(em) or {}
+    #                                     ll_id = int(row.get("id") or 0)
+    #                                 except Exception:
+    #                                     ll_id = 0
+    #                                 if ll_id:
+    #                                     try:
+    #                                         set_interest_status(ll_id, me_id, pid, "interested_tenant")
+    #                                         set_count += 1
+    #                                     except Exception as _e:
+    #                                         # don’t break the UX; just surface a soft warning
+    #                                         st.warning(tr("Saved interest but couldn’t tag status for {email}.").format(email=em))
 
-                                st.success(tr("Interest sent to {n} contact(s)").format(n=(touched if isinstance(touched, int) else set_count or len(recipient_emails))))
+    #                             st.success(tr("Interest sent to {n} contact(s)").format(n=(touched if isinstance(touched, int) else set_count or len(recipient_emails))))
 
-                            except Exception as e:
-                                st.error(f"{tr('Couldn’t save your interest')}: {type(e).__name__}: {e}")
-                            finally:
-                                try:
-                                    st.cache_data.clear()
-                                except Exception:
-                                    pass
-                                st.rerun()
+    #                         except Exception as e:
+    #                             st.error(f"{tr('Couldn’t save your interest')}: {type(e).__name__}: {e}")
+    #                         finally:
+    #                             try:
+    #                                 st.cache_data.clear()
+    #                             except Exception:
+    #                                 pass
+    #                             st.rerun()
 
     
     
@@ -10190,6 +11309,7 @@ def tenant_dashboard():
                                 tr("Upload tenancy contract (PDF or image)"),
                                 type=["pdf", "png", "jpg", "jpeg", "webp"],
                                 key=f"up_{tok}",
+                                label_visibility="collapsed"
                             )
                             if uploaded is not None:
                                 ok, msg = save_contract_upload(tok, st.session_state.user["id"], uploaded)
@@ -10790,7 +11910,7 @@ def landlord_dashboard():
                                 extras_edit_values[col] = 1 if st.checkbox(label, value=bool(cur or False), key=key) else 0
                             elif typ == "year":
                                 extras_edit_values[col] = st.number_input(
-                                    label, value=int(cur or 0), min_value=1700, max_value=2200, step=1, key=key
+                                    label, value=int(cur or 0), min_value=1900, max_value=2200, step=1, key=key
                                 ) or None
                             elif typ == "select":
                                 opts = list(form.get("options") or [])
@@ -10876,29 +11996,48 @@ def landlord_dashboard():
     # =============================================================================
     # Find Tenants (Open to Rent) — with dynamic filters
     # =============================================================================
+    
+    # =============================================================================
+    # Find Tenants (Open to Rent) — with dynamic filters
+    # =============================================================================
     def find_tenants_page():
         st.subheader(tr("Find Tenants (Open to Rent)"))
 
-        # --- Filter widgets (standard set already in your codebase)
-        # This draws the usual "Open to Rent" filters: location, budget, rooms, pets, etc.
-        # It also fills st.session_state under the given prefix.
+        # Base filters
         try:
             render_tenant_filters(prefix="findten")
         except Exception as e:
             st.warning(f"{tr('Could not render base filters')}: {e}")
 
-        # --- EXTRA dynamic filters (this is the part you asked about)
-        # If you have defined the helper from our previous step, this will render
-        # ANY new OTR characteristics as additional widgets under the same prefix.
+        # Dynamic filters
         try:
-            if 'render_o2r_extra_filters' in globals():
-                render_o2r_extra_filters(prefix="findten")
+            extras = render_o2r_extra_filters(prefix="findten")
         except Exception as e:
+            extras = {}
             st.warning(f"{tr('Could not render extra filters')}: {e}")
 
-        # --- Run search using both base + dynamic filters bound to the same prefix
+        # Collect base values from session_state (keys set by render_tenant_filters)
+        ss = st.session_state
+        base = dict(
+            region=ss.get("findten_region") or None,
+            city=ss.get("findten_city") or None,
+            district=ss.get("findten_district") or None,
+            size_min=ss.get("findten_size_min"),
+            size_max=ss.get("findten_size_max"),
+            rooms_min=ss.get("findten_rooms_min"),
+            rooms_max=ss.get("findten_rooms_max"),
+            floor_min=ss.get("findten_floor_min"),
+            floor_max=ss.get("findten_floor_max"),
+            price_min=ss.get("findten_price_min"),
+            price_max=ss.get("findten_price_max"),
+        )
+
+        # Run search (prefers the version that accepts extras)
         try:
-            rows = search_open_to_rent_tenants(prefix="findten") or []
+            try:
+                rows = search_open_to_rent_tenants(extras=extras, **base) or []
+            except TypeError:
+                rows = search_open_to_rent_tenants(**base) or []
         except Exception as e:
             rows = []
             st.error(f"{tr('Search failed')}: {e}")
@@ -10907,7 +12046,7 @@ def landlord_dashboard():
             st.info(tr("No matching tenants found."))
             return
 
-        # --- Render tenant cards (landlord view actions are handled by tenant_profile)
+        # Cards
         try:
             _ensure_tfl_css()
         except Exception:
@@ -10915,10 +12054,9 @@ def landlord_dashboard():
 
         landlord_id = int(st.session_state.user["id"])
         for r in rows:
-            # Accept either 'tenant_id' or 'id' from the row
             tid = int((r.get("tenant_id") if isinstance(r, dict) else None)
-                      or (r.get("id") if isinstance(r, dict) else None)
-                      or r[0] if not isinstance(r, dict) else 0)
+                    or (r.get("id") if isinstance(r, dict) else None)
+                    or (r[0] if not isinstance(r, dict) and len(r) > 0 else 0))
             if not tid:
                 continue
             with st.container(border=True):
@@ -10927,6 +12065,59 @@ def landlord_dashboard():
                     landlord_id=landlord_id,
                     key_ns=f"findten:{landlord_id}:{tid}"
                 )
+
+
+    # def find_tenants_page():
+    #     st.subheader(tr("Find Tenants (Open to Rent)"))
+
+    #     # --- Filter widgets (standard set already in your codebase)
+    #     # This draws the usual "Open to Rent" filters: location, budget, rooms, pets, etc.
+    #     # It also fills st.session_state under the given prefix.
+    #     try:
+    #         render_tenant_filters(prefix="findten")
+    #     except Exception as e:
+    #         st.warning(f"{tr('Could not render base filters')}: {e}")
+
+    #     # --- EXTRA dynamic filters (this is the part you asked about)
+    #     # If you have defined the helper from our previous step, this will render
+    #     # ANY new OTR characteristics as additional widgets under the same prefix.
+    #     try:
+    #         if 'render_o2r_extra_filters' in globals():
+    #             render_o2r_extra_filters(prefix="findten")
+    #     except Exception as e:
+    #         st.warning(f"{tr('Could not render extra filters')}: {e}")
+
+    #     # --- Run search using both base + dynamic filters bound to the same prefix
+    #     try:
+    #         rows = search_open_to_rent_tenants(prefix="findten") or []
+    #     except Exception as e:
+    #         rows = []
+    #         st.error(f"{tr('Search failed')}: {e}")
+
+    #     if not rows:
+    #         st.info(tr("No matching tenants found."))
+    #         return
+
+    #     # --- Render tenant cards (landlord view actions are handled by tenant_profile)
+    #     try:
+    #         _ensure_tfl_css()
+    #     except Exception:
+    #         pass
+
+    #     landlord_id = int(st.session_state.user["id"])
+    #     for r in rows:
+    #         # Accept either 'tenant_id' or 'id' from the row
+    #         tid = int((r.get("tenant_id") if isinstance(r, dict) else None)
+    #                   or (r.get("id") if isinstance(r, dict) else None)
+    #                   or r[0] if not isinstance(r, dict) else 0)
+    #         if not tid:
+    #             continue
+    #         with st.container(border=True):
+    #             tenant_profile(
+    #                 tid=tid,
+    #                 landlord_id=landlord_id,
+    #                 key_ns=f"findten:{landlord_id}:{tid}"
+    #             )
 
    
         
@@ -11303,13 +12494,13 @@ def reference_cancelled_page():
     st.stop()
 
 # ---------- App ----------
+# ---------- App ----------
 def main():
-    try:
-        ensure_registry_loaded_once()
-    except Exception:
-        pass
+    conn = get_conn()              # make sure we have a connection
+    init_db()                      # create core tables if missing
+    run_migrations(conn)           # your migrations (indexes, extras, etc.)
+    ensure_registry_loaded_once()  # <-- NOW load JSON + add dynamic columns
 
-    
     load_smtp_defaults()
     params = st.query_params
 
@@ -11322,9 +12513,7 @@ def main():
     token = params.get("ref")
     if token:
         reference_portal(token); return
-        
 
-    # with col_left: st.title("🏠 RentRight")
     if st.button("🔄", key="refresh"):
         st.rerun()
 
@@ -11334,17 +12523,17 @@ def main():
         if role == "tenant":
             tenant_dashboard(); return
         elif role in ("landlord", "agent"):
-            landlord_dashboard(); return   # agent shares landlord UI
+            landlord_dashboard(); return
         elif role == "admin":
             admin_dashboard(); return
         else:
             st.error(f"Unknown role: {role}"); return
     else:
-        # Only show login/signup if NOT logged in
         auth_gate(); return
 
 
 if __name__ == "__main__":
     main()
+
 
 
